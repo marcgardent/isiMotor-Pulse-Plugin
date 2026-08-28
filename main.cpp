@@ -163,15 +163,10 @@ static double ParseRateHz(const char* str, double defaultRate = -1.0) {
         buf[i++] = c;
     }
 
-    if (std::strcmp(buf, "off") == 0 || std::strcmp(buf, "0") == 0 ||
-        std::strcmp(buf, "false") == 0 || std::strcmp(buf, "disabled") == 0 ||
-        std::strcmp(buf, "no") == 0) {
+    if (std::strcmp(buf, "off") == 0) {
         return 0.0;
     }
-    if (std::strcmp(buf, "unlimited") == 0 || std::strcmp(buf, "raw") == 0 ||
-        std::strcmp(buf, "max") == 0 || std::strcmp(buf, "-1") == 0 ||
-        std::strcmp(buf, "none") == 0 || std::strcmp(buf, "on") == 0 ||
-        std::strcmp(buf, "true") == 0 || std::strcmp(buf, "enabled") == 0) {
+    if (std::strcmp(buf, "unlimited") == 0) {
         return -1.0;
     }
 
@@ -181,6 +176,23 @@ static double ParseRateHz(const char* str, double defaultRate = -1.0) {
         return 0.0;
     }
     return val;
+}
+
+static bool ParseSystemEvents(const char* str, bool defaultVal = true) {
+    if (!str || str[0] == '\0') return defaultVal;
+    while (*str == ' ' || *str == '\t') ++str;
+    if (*str == '\0') return defaultVal;
+
+    char buf[64] = {0};
+    size_t i = 0;
+    while (*str && i < sizeof(buf) - 1) {
+        char c = *str++;
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);
+        buf[i++] = c;
+    }
+    if (std::strcmp(buf, "off") == 0) return false;
+    if (std::strcmp(buf, "on") == 0 || std::strcmp(buf, "unlimited") == 0) return true;
+    return defaultVal;
 }
 
 struct PluginConfig {
@@ -215,18 +227,18 @@ private:
     }
 
     void LoadConfiguration() {
-        // Apply hardcoded safe defaults
+        // Safe hardcoded defaults
         std::strncpy(config.targetIp, DEFAULT_UDP_HOST, sizeof(config.targetIp) - 1);
         config.targetIp[sizeof(config.targetIp) - 1] = '\0';
         config.targetPort = DEFAULT_UDP_PORT;
-        config.telemetryHz = -1.0; // unlimited by default
-        config.scoringHz = -1.0;   // unlimited by default
+        config.telemetryHz = -1.0; // unlimited
+        config.scoringHz = -1.0;   // unlimited
         config.enableSystemEvents = true;
 
         char iniPath[MAX_PATH] = {0};
         GetIniPath(iniPath, sizeof(iniPath));
 
-        // If INI does not exist, generate default template with comments
+        // If INI does not exist, generate default template
         DWORD attr = GetFileAttributesA(iniPath);
         if (attr == INVALID_FILE_ATTRIBUTES) {
             FILE* f = std::fopen(iniPath, "w");
@@ -243,15 +255,15 @@ private:
                     "TargetPort=5000\n"
                     "\n"
                     "[Streams]\n"
-                    "; Frequency limiters per channel: off | unlimited | <N>Hz (e.g. 100Hz, 60Hz, 30Hz, 5Hz)\n"
-                    "; -------------------------------------------------------------------------------------\n"
-                    "; Telemetry stream (1888 B): off | unlimited (raw ~90-100Hz) | 100Hz | 60Hz | 30Hz | 20Hz | 10Hz\n"
+                    "; Channel frequency limiter format: off | unlimited | <N>Hz\n"
+                    "; ------------------------------------------------------------------\n"
+                    "; Telemetry stream (1888 B): off | unlimited | 100Hz | 60Hz | 30Hz | 20Hz | 10Hz\n"
                     "Telemetry=unlimited\n"
                     "\n"
-                    "; Scoring & timing stream (168 B): off | unlimited (raw ~2-5Hz) | 5Hz | 2Hz | 1Hz\n"
+                    "; Scoring & timing stream (168 B): off | unlimited | 5Hz | 2Hz | 1Hz\n"
                     "Scoring=unlimited\n"
                     "\n"
-                    "; System events stream (6 B on session/realtime changes): on | off\n"
+                    "; System events stream (6 B): off | on\n"
                     "SystemEvents=on\n"
                 );
                 std::fclose(f);
@@ -262,38 +274,18 @@ private:
         GetPrivateProfileStringA("Network", "TargetIP", DEFAULT_UDP_HOST, config.targetIp, sizeof(config.targetIp), iniPath);
         config.targetPort = GetPrivateProfileIntA("Network", "TargetPort", DEFAULT_UDP_PORT, iniPath);
 
-        // Read stream frequency rate limiters (supports Telemetry=off|unlimited|100Hz or legacy EnableTelemetry=1|0)
+        // Read stream frequency limiters (Single unified syntax: off | unlimited | <N>Hz)
         char telemStr[64] = {0};
-        GetPrivateProfileStringA("Streams", "Telemetry", "", telemStr, sizeof(telemStr), iniPath);
-        if (telemStr[0] == '\0') {
-            GetPrivateProfileStringA("Streams", "TelemetryRate", "", telemStr, sizeof(telemStr), iniPath);
-        }
-        if (telemStr[0] != '\0') {
-            config.telemetryHz = ParseRateHz(telemStr, -1.0);
-        } else {
-            int legacy = GetPrivateProfileIntA("Streams", "EnableTelemetry", 1, iniPath);
-            config.telemetryHz = (legacy != 0) ? -1.0 : 0.0;
-        }
+        GetPrivateProfileStringA("Streams", "Telemetry", "unlimited", telemStr, sizeof(telemStr), iniPath);
+        config.telemetryHz = ParseRateHz(telemStr, -1.0);
 
         char scoringStr[64] = {0};
-        GetPrivateProfileStringA("Streams", "Scoring", "", scoringStr, sizeof(scoringStr), iniPath);
-        if (scoringStr[0] == '\0') {
-            GetPrivateProfileStringA("Streams", "ScoringRate", "", scoringStr, sizeof(scoringStr), iniPath);
-        }
-        if (scoringStr[0] != '\0') {
-            config.scoringHz = ParseRateHz(scoringStr, -1.0);
-        } else {
-            int legacy = GetPrivateProfileIntA("Streams", "EnableScoring", 1, iniPath);
-            config.scoringHz = (legacy != 0) ? -1.0 : 0.0;
-        }
+        GetPrivateProfileStringA("Streams", "Scoring", "unlimited", scoringStr, sizeof(scoringStr), iniPath);
+        config.scoringHz = ParseRateHz(scoringStr, -1.0);
 
         char eventStr[64] = {0};
-        GetPrivateProfileStringA("Streams", "SystemEvents", "", eventStr, sizeof(eventStr), iniPath);
-        if (eventStr[0] != '\0') {
-            config.enableSystemEvents = (ParseRateHz(eventStr, -1.0) != 0.0);
-        } else {
-            config.enableSystemEvents = (GetPrivateProfileIntA("Streams", "EnableSystemEvents", 1, iniPath) != 0);
-        }
+        GetPrivateProfileStringA("Streams", "SystemEvents", "on", eventStr, sizeof(eventStr), iniPath);
+        config.enableSystemEvents = ParseSystemEvents(eventStr, true);
 
         telemetryLimiter.SetRate(config.telemetryHz);
         scoringLimiter.SetRate(config.scoringHz);

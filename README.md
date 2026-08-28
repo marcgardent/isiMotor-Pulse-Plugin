@@ -147,6 +147,8 @@ When loaded by the game, the plugin automatically looks for an `isiMotor_RawUDP.
 ; Destination IP address (127.0.0.1 for local PC, or LAN IP for phone/tablet/rig)
 TargetIP=127.0.0.1
 ; Destination UDP Port (default: 5000)
+TargetPort=5000
+
 [Streams]
 ; Frequency limiters per channel: off | unlimited | <N>Hz (e.g. 100Hz, 60Hz, 30Hz, 5Hz)
 ; -------------------------------------------------------------------------------------
@@ -260,7 +262,7 @@ Direct native binary memory streaming over configurable UDP sockets.
   * **Zero allocations & Sub-microsecond latency:** Direct binary struct transfer in `< 0.001 ms` per tick with 0 heap allocations and 0 external dependencies.
   * **Universal Cross-Platform (Proton/Wine & Windows):** Single universal binary (`isiMotor_RawUDP.dll`) works out-of-the-box on both native Windows and Linux Proton without any helper bridge or background daemon.
   * **Fully Configurable Network Routing:** Stream to local loopback (`127.0.0.1`) or remote LAN devices (tablets, smartphones, secondary rigs) via `isiMotor_RawUDP.ini`.
-  * **Selective Streams:** Independent toggles for Telemetry, Scoring, and System Events to save bandwidth and CPU cycles when only timing is needed.
+  * **Frequency Limiters & Selective Streams:** Independent frequency rate limiters (`off`, `unlimited`, `100Hz`, `60Hz`, `30Hz`, `5Hz`) per channel via `isiMotor_RawUDP.ini` to save Wi-Fi airtime and CPU cycles.
   * **Turnkey Ecosystem:** Complete with the [`isimotor-rawudp-client`](isimotor-rawudp-client) Python library and the [`benchmark/`](benchmark) TUI dashboard.
 * **CONs:**
   * **Binary protocol:** Requires struct unpacking / memory mapping rather than parsing plain text (handled automatically by our Python client or a 1-line C struct cast).
