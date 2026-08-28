@@ -158,14 +158,16 @@ EnableScoring=1
 EnableSystemEvents=1
 ```
 
-### 💡 Common Configuration Scenarios
+### 💡 Network Scenarios & Topologies
 
-* **Local Machine (Default)**:
-  Leave `TargetIP=127.0.0.1` and `TargetPort=5000` to stream to SimPad or any local Python dashboard.
-* **Remote Dashboard / Smartphone / Tablet / Secondary Rig PC**:
-  Change `TargetIP` to the local LAN IP of your device (e.g. `TargetIP=192.168.1.42`) to stream telemetry wirelessly over your local Wi-Fi network without third-party forwarding software.
-* **Performance Optimization (Selective Streams)**:
-  If a client only needs scoring/timing data (e.g. pit-wall / live timing board), set `EnableTelemetry=0`. The game will immediately bypass the high-frequency physics telemetry callbacks, saving CPU cycles.
+| Mode | `TargetIP` in `ini` | Use Case & Performance |
+|---|---|---|
+| **Local Unicast (Default)** | `127.0.0.1` | Local dashboards (SimPad, Sniffer) running on the same game PC. |
+| **Wi-Fi / LAN Unicast** | `192.168.1.42` | **Recommended for Wi-Fi tablets/phones.** Full 802.11 speed with hardware ACKs. |
+| **LAN Multicast (1:N)** | `239.255.0.1` | Feeds multiple devices simultaneously (Motion rig + SimHub + Dashboard). |
+| **Remote Internet / 4G** | `100.64.1.25` | **Remote Pit-Wall / Coach.** Use **Tailscale/WireGuard** for zero-config encrypted routing. |
+
+> 📖 **Full Network Guide**: See [**`docs/NETWORK_GUIDE.md`**](docs/NETWORK_GUIDE.md) for complete details on Multicast group subscriptions (Python/C++ code), Wi-Fi IGMP Snooping optimization, and Public IP / WAN NAT port forwarding.
 
 ---
 

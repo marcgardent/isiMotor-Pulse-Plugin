@@ -6,8 +6,8 @@
  * Features:
  * - Zero third-party dependencies (no nlohmann/json, no Boost, native Winsock2 only).
  * - Zero dynamic memory allocations in the telemetry and scoring update loops.
- * - Direct binary memory dump of TelemInfoV01 (1904 bytes) over UDP.
- * - Compact binary scoring packet (SIMP Type 2, 176 bytes) for minimal overhead.
+ * - Direct binary memory dump of TelemInfoV01 (1888 bytes) over UDP.
+ * - Compact binary scoring packet (SIMP Type 2, 168 bytes) for minimal overhead.
  * - System event state notifications (SIMP Type 3, 6 bytes).
  * - Self-generating & configurable via 'isiMotor_RawUDP.ini' placed next to the DLL.
  * - Sub-millisecond latency supporting 120Hz to 400Hz+ streaming.
@@ -42,7 +42,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
 /**
  * Compact Scoring Packet (SIMP Type 2)
- * Lightweight 176-byte representation of session and player timing data.
+ * Lightweight 168-byte representation of session and player timing data.
  */
 struct CompactScoringPacket {
     char magic[4];           // "SIMP"
@@ -131,15 +131,15 @@ private:
                     "; ==================================================================\n"
                     "\n"
                     "[Network]\n"
-                    "; Destination IP address (127.0.0.1 for local PC, or LAN IP for phone/tablet/rig)\n"
+                    "; Destination IP address (Unicast e.g. 127.0.0.1 or 192.168.1.50, Multicast e.g. 239.255.0.1, Broadcast e.g. 255.255.255.255)\n"
                     "TargetIP=127.0.0.1\n"
                     "; Destination UDP Port (default: 5000)\n"
                     "TargetPort=5000\n"
                     "\n"
                     "[Streams]\n"
-                    "; Raw Telemetry binary stream (1904 bytes @ 60-100Hz): 1=Enabled, 0=Disabled\n"
+                    "; Raw Telemetry binary stream (1888 bytes @ 60-100Hz): 1=Enabled, 0=Disabled\n"
                     "EnableTelemetry=1\n"
-                    "; Compact Scoring binary stream (176 bytes @ 1-5Hz): 1=Enabled, 0=Disabled\n"
+                    "; Compact Scoring binary stream (168 bytes @ 1-5Hz): 1=Enabled, 0=Disabled\n"
                     "EnableScoring=1\n"
                     "; System Events notification (6 bytes on state changes): 1=Enabled, 0=Disabled\n"
                     "EnableSystemEvents=1\n"
@@ -194,6 +194,14 @@ public:
             WSACleanup();
             return;
         }
+
+        // Enable Broadcast permission so broadcast targets work out-of-the-box
+        int broadcastEnable = 1;
+        setsockopt(udpSocket, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char*>(&broadcastEnable), sizeof(broadcastEnable));
+
+        // Set Multicast TTL to 2 hops by default
+        unsigned char ttl = 2;
+        setsockopt(udpSocket, IPPROTO_IP, IP_MULTICAST_TTL, reinterpret_cast<const char*>(&ttl), sizeof(ttl));
 
         // Configure target endpoint
         serverAddr.sin_family = AF_INET;
