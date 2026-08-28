@@ -36,12 +36,12 @@ isiMotor-RawUDP-Plugin/
 
 ---
 
-## 📊 Live Telemetry Sniffer & Frequency Benchmark (`Textual` TUI)
+## 📊 Raw Telemetry Explorer & Benchmark (`Textual` TUI)
 
-An interactive terminal dashboard is provided in [`benchmark/`](file:///home/marcgardent/PycharmProjects/simpad/isiMotor-RawUDP-Plugin/benchmark) to inspect incoming packets, measure frequencies (Hz), analyze jitter/delays, and view live vehicle telemetry:
+An interactive terminal raw data inspector is provided in [`benchmark/`](benchmark) to explore raw binary packets (`Key`, `Value`, `Description`), filter fields in real-time, copy data to clipboard (JSON/TSV), and benchmark stream frequencies (Hz):
 
 ```bash
-# Launch live sniffer on UDP port 5000:
+# Launch live explorer on default UDP port 5000:
 make benchmark
 
 # Launch simulation mode with built-in mock telemetry generator:

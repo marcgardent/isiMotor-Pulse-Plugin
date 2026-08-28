@@ -1,20 +1,31 @@
-# isiMotor Telemetry Packet Sniffer & Frequency Benchmark (Textual TUI)
+# isiMotor Telemetry Raw Packet Explorer & Benchmark (Textual TUI)
 
-Modern, interactive terminal dashboard built with **[Textual](https://textual.textualize.io/)** for **Le Mans Ultimate** and **rFactor 2** binary telemetry streams.
+Modern, interactive terminal raw data inspector built with **[Textual](https://textual.textualize.io/)** for **Le Mans Ultimate** and **rFactor 2** binary telemetry streams.
 
 ---
 
 ## 🚀 Key Features
 
-* **Interactive Textual TUI:**
-  * **Header & Clock:** Live session duration, total packets, and instant bandwidth (KB/s & MB).
-  * **Frequency & Jitter Table (DataTable):** Real-time Hz measurement (sliding 1s window), average delay (ms), jitter (±ms), and throughput per binary stream.
-  * **Physics & Driver Input Gauges:** Visual progress bars for Throttle, Brake, Steering, plus 3D/ISO speed, RPM, Gear, Fuel, and Downforce.
-  * **4 Wheels Matrix:** Surface temperatures (°C), Brake temperatures (°C), and live tire slip ratios.
-  * **Scoring & Chronometer:** Track name, Lap counter, Sector, S1/S2 timing, Last lap, and Best lap.
+* **Raw Data Explorer (`Key`, `Value`, `Description`):**
+  * Live inspection of all 100+ native struct fields with high-contrast formatting and units.
+  * Real-time cell updates at 30 FPS without table flickering or selection jumping.
+* **Packet Type Selector Menu (Tabs):**
+  * `🏎️ TelemInfo (1904 B)` : Full physical vehicle telemetry (kinematics, engine, driver inputs, 4 wheels matrix, hybrid battery/MGU, aero).
+  * `⏱️ CompactScoring (176 B)` : Timing, session status, lap counters, sector splits (S1/S2/S3), and personal bests.
+  * `🔔 SystemEvent (6 B)` : System state transitions (Enter/Exit Realtime, Start/End Session).
+  * `📊 Stream Rates` : Real-time reception frequency (Hz), average delay (ms), jitter (±ms), and bandwidth (KB/s).
+* **Search & Filter Bar:**
+  * Real-time instant filtering by field key, value, or description (press `/` to focus).
+* **One-Click Clipboard Export:**
+  * `📋 Copy JSON` (`c` key) : Exports full active packet dictionary to clipboard in pretty-printed JSON.
+  * `📑 Copy Table` (`t` key) : Exports visible/filtered key-value-desc rows in TSV table format.
 * **Keyboard Shortcuts:**
+  * `1` / `2` / `3` / `4` : Switch packet explorer tabs.
+  * `/` : Focus search filter bar.
+  * `c` : Copy active packet as JSON.
+  * `t` : Copy active table as TSV.
   * `m` : Toggle built-in mock telemetry transmitter on/off (@ 100 Hz).
-  * `r` : Reset counters and statistics.
+  * `r` : Reset packet counters and statistics.
   * `q` : Quit application cleanly.
 
 ---
@@ -31,3 +42,4 @@ python sniffer.py --mock
 # Listen on custom host/port:
 python sniffer.py --host 0.0.0.0 --port 5000
 ```
+
