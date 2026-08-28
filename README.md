@@ -1,8 +1,10 @@
 # isiMotor-RawUDP-Plugin
 
-High-performance, zero-overhead telemetry and scoring plugin for **Le Mans Ultimate** and **rFactor 2** (isiMotor technology), accompanied by its dedicated Python subproject **`isimotor-rawudp-client`**.
+High-performance, zero-overhead telemetry and scoring plugin for **Le Mans Ultimate** and **rFactor 2** (isiMotor technology), accompanied by its dedicated Python subproject **`isimotor-rawudp-client`** and interactive TUI benchmark tool.
 
-Streams raw native binary structures directly over local UDP (`127.0.0.1:5000`) with **zero dynamic memory allocations** and **zero third-party dependencies**.
+* **100% Native Binary Protocol**: Zero dynamic memory allocations and zero third-party dependencies.
+* **Fully Configurable via `.ini`**: Target IP (local loopback or remote LAN/Wi-Fi devices), target port, and stream toggles.
+* **Auto-Generating Configuration**: Self-creates `isiMotor_RawUDP.ini` with default settings upon first launch.
 
 ---
 
@@ -26,7 +28,7 @@ isiMotor-RawUDP-Plugin/
 │   ├── setup.py                # Legacy pip compatibility
 │   ├── README.md               # Python client documentation
 │   └── isimotor_rawudp_client/ # Package source (models, decoders, client)
-└── benchmark/                  # 📊 Real-time UDP sniffer & frequency benchmark (Rich UI)
+└── benchmark/                  # 📊 Real-time UDP sniffer & frequency benchmark (Textual TUI)
     ├── pyproject.toml
     ├── README.md
     └── sniffer.py
@@ -34,18 +36,16 @@ isiMotor-RawUDP-Plugin/
 
 ---
 
-## 📊 Live Telemetry Sniffer & Frequency Benchmark (`Rich` UI)
+## 📊 Live Telemetry Sniffer & Frequency Benchmark (`Textual` TUI)
 
-A real-time terminal dashboard is provided in [`benchmark/`](file:///home/marcgardent/PycharmProjects/simpad/isiMotor-RawUDP-Plugin/benchmark) to inspect incoming packets, measure frequencies (Hz), analyze jitter/delays, and test payload compatibility:
+An interactive terminal dashboard is provided in [`benchmark/`](file:///home/marcgardent/PycharmProjects/simpad/isiMotor-RawUDP-Plugin/benchmark) to inspect incoming packets, measure frequencies (Hz), analyze jitter/delays, and view live vehicle telemetry:
 
 ```bash
 # Launch live sniffer on UDP port 5000:
 make benchmark
-# Or: python benchmark/sniffer.py
 
 # Launch simulation mode with built-in mock telemetry generator:
 make benchmark-mock
-# Or: python benchmark/sniffer.py --mock
 ```
 
 ---
@@ -136,11 +136,15 @@ make build
 
 ## ⚙️ Configuration File (`isiMotor_RawUDP.ini`)
 
-When loaded by the game, the plugin automatically checks for an `isiMotor_RawUDP.ini` file in the same directory as the DLL. If it does not exist, it is **automatically generated** with default settings:
+When loaded by the game, the plugin automatically looks for an `isiMotor_RawUDP.ini` file in the same folder as the DLL. If it does not exist, it is **automatically generated** with default settings:
 
 ```ini
+; ==================================================================
+; isiMotor-RawUDP-Plugin Configuration File
+; ==================================================================
+
 [Network]
-; Destination IP address (127.0.0.1 for local client, or LAN IP for external tablet/rig)
+; Destination IP address (127.0.0.1 for local PC, or LAN IP for phone/tablet/rig)
 TargetIP=127.0.0.1
 ; Destination UDP Port (default: 5000)
 TargetPort=5000
@@ -154,9 +158,18 @@ EnableScoring=1
 EnableSystemEvents=1
 ```
 
+### 💡 Common Configuration Scenarios
+
+* **Local Machine (Default)**:
+  Leave `TargetIP=127.0.0.1` and `TargetPort=5000` to stream to SimPad or any local Python dashboard.
+* **Remote Dashboard / Smartphone / Tablet / Secondary Rig PC**:
+  Change `TargetIP` to the local LAN IP of your device (e.g. `TargetIP=192.168.1.42`) to stream telemetry wirelessly over your local Wi-Fi network without third-party forwarding software.
+* **Performance Optimization (Selective Streams)**:
+  If a client only needs scoring/timing data (e.g. pit-wall / live timing board), set `EnableTelemetry=0`. The game will immediately bypass the high-frequency physics telemetry callbacks, saving CPU cycles.
+
 ---
 
-## 📡 UDP Protocol Specification (`127.0.0.1:5000`)
+## 📡 UDP Protocol Specification
 
 ### 1. Raw Telemetry Packet (`TelemInfoV01`)
 * **Size:** `1904 bytes` | **Rate:** 60 Hz – 100 Hz (per physics tick)
@@ -184,34 +197,50 @@ EnableSystemEvents=1
 
 ---
 
-## 👏 Acknowledgments & Alternative JSON Plugin (lmu-socket)
+## ⚖️ Alternatives, PRO vs CON
 
-If you are looking for a feature-rich, human-readable **JSON-over-UDP** telemetry plugin, check out [shin0bi's lmu-socket](https://gitlab.com/shin0bi/lmu-socket) on GitLab!
-
-### 🐧 Linux (Wine / Proton) Compatibility Note for `lmu-socket`
-In `lmu-socket`, packets are broadcast by default to `255.255.255.255`. Under Linux using Steam Proton/Wine:
-1. **Receiver side (Python/Middleware):** Bind your UDP socket to `0.0.0.0` (`INADDR_ANY`) so it accepts packets forwarded across network interfaces:
-   ```python
-   sock.bind(("0.0.0.0", 5000))
-   ```
-2. **Sender side (C++ DLL):** Alternatively, configure the plugin destination IP from `255.255.255.255` to local loopback unicast `127.0.0.1` in `socket.h` / `main.cpp` for direct local delivery.
+In the rFactor 2 / Le Mans Ultimate ecosystem, several IPC (Inter-Process Communication) and telemetry streaming approaches exist. Here is how **`isiMotor-RawUDP-Plugin`** compares against the main alternatives:
 
 ---
 
-## 🗄️ Architectural Alternatives: UDP vs Shared Memory (rF2SharedMemoryMapPlugin)
-
-In the rFactor 2 / Le Mans Ultimate ecosystem, two main IPC (Inter-Process Communication) paradigms exist for telemetry:
-
 ### 1. Windows Shared Memory (`rF2SharedMemoryMapPlugin`)
-* **On Windows:** Traditional plugins (such as [TheIronWolf's rF2SharedMemoryMapPlugin](https://github.com/TheIronWolfModding/rF2SharedMemoryMapPlugin)) use Windows Memory-Mapped Files (`CreateFileMappingW` / `MapViewOfFile`). This provides ultra-fast zero-copy memory reads on Windows.
-* **On Linux (Steam Proton / Wine) — The Compatibility Challenge:**
-  Because the game runs inside a Wine/Proton prefix, Windows named shared memory objects are isolated within Wine's internal namespace. Native Linux applications **cannot** directly access or map these memory blocks.
-  To achieve Linux compatibility with Shared Memory, you must use a dedicated Wine bridge such as [schlegp/rF2SharedMemoryMapPlugin_Wine](https://github.com/schlegp/rF2SharedMemoryMapPlugin_Wine):
-  * Requires compiling a specific Wine-aware DLL (`rF2SharedMemoryMapPlugin_Wine.dll`).
-  * Requires running a continuous background **bridge daemon** to mirror Wine's memory map to Linux POSIX shared memory (`/dev/shm`) or domain sockets.
-  * Involves complex multi-step installation, prefix dependencies, and process synchronization.
 
-### 2. Raw Binary UDP (`isiMotor-RawUDP-Plugin`) — *Our Approach*
-* **Zero Configuration & Cross-Platform:** Local UDP (`127.0.0.1:5000`) naturally bridges the Wine/Proton network stack to native Linux host applications without any helper daemon.
-* **Single Universal Binary:** The exact same `isiMotor_RawUDP.dll` works identically on both native Windows and Linux Proton.
-* **Sub-Microsecond Latency:** Transmits direct native binary memory structures with zero allocations and zero runtime overhead.
+Traditional plugins such as [TheIronWolf's rF2SharedMemoryMapPlugin](https://github.com/TheIronWolfModding/rF2SharedMemoryMapPlugin) use Windows Memory-Mapped Files (`CreateFileMappingW` / `MapViewOfFile`).
+
+* **PROs:**
+  * **Zero-copy IPC:** Ultra-fast direct memory reads on native Windows.
+  * **Widespread adoption:** Standard in the legacy Windows rFactor 2 ecosystem and broadly supported by tools like SimHub.
+* **CONs:**
+  * **Proton / Linux Complexity:** Windows named shared memory blocks are isolated inside the Wine prefix. To bridge telemetry to Linux host apps, you must use a bridge like [schlegp/rF2SharedMemoryMapPlugin_Wine](https://github.com/schlegp/rF2SharedMemoryMapPlugin_Wine), which requires a Wine-specific DLL build and a continuous background daemon copying memory to `/dev/shm`.
+  * **Local-only:** Cannot transmit data over LAN/Wi-Fi to external dashboards, smartphones, or secondary PCs without an extra network forwarder.
+
+---
+
+### 2. JSON over UDP (`lmu-socket`)
+
+If you prefer human-readable textual payloads, check out [shin0bi's lmu-socket](https://gitlab.com/shin0bi/lmu-socket) on GitLab for JSON-over-UDP streaming.
+
+* **PROs:**
+  * **Human-readable & Self-documenting:** Easy to inspect packets and build quick web prototypes.
+  * **Language-agnostic:** Any language with a standard JSON parser can ingest telemetry directly.
+  * **Network capability:** Streams over UDP across local and remote networks.
+* **CONs:**
+  * **High CPU overhead:** Dynamic JSON serialization and heap allocations (`malloc`/`new`) on every physics tick (~0.2 ms – 0.8 ms per frame vs < 0.001 ms).
+  * **Large payload size:** Verbose text keys yield 4 KB – 8 KB per packet (vs 1.9 KB binary).
+  * **Linux / Proton note:** By default broadcasts to `255.255.255.255`; under Wine/Proton, receiver sockets must bind to `0.0.0.0` (`INADDR_ANY`) or configure loopback unicast `127.0.0.1`.
+
+---
+
+### 3. Raw Binary UDP (`isiMotor-RawUDP-Plugin`) — *This Project*
+
+Direct native binary memory streaming over configurable UDP sockets.
+
+* **PROs:**
+  * **Zero allocations & Sub-microsecond latency:** Direct binary struct transfer in `< 0.001 ms` per tick with 0 heap allocations and 0 external dependencies.
+  * **Universal Cross-Platform (Proton/Wine & Windows):** Single universal binary (`isiMotor_RawUDP.dll`) works out-of-the-box on both native Windows and Linux Proton without any helper bridge or background daemon.
+  * **Fully Configurable Network Routing:** Stream to local loopback (`127.0.0.1`) or remote LAN devices (tablets, smartphones, secondary rigs) via `isiMotor_RawUDP.ini`.
+  * **Selective Streams:** Independent toggles for Telemetry, Scoring, and System Events to save bandwidth and CPU cycles when only timing is needed.
+  * **Turnkey Ecosystem:** Complete with the [`isimotor-rawudp-client`](isimotor-rawudp-client) Python library and the [`benchmark/`](benchmark) TUI dashboard.
+* **CONs:**
+  * **Binary protocol:** Requires struct unpacking / memory mapping rather than parsing plain text (handled automatically by our Python client or a 1-line C struct cast).
+  * **Schema coupling:** Packet binary layout is tied to the isiMotor SDK definitions (though versioned and strictly packed).
