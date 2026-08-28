@@ -10,6 +10,7 @@ import time
 import socket
 import unittest
 from isimotor_rawudp_client.client import IsiMotorClient
+from isimotor_rawudp_client.models import PitAction
 from isimotor_rawudp_client.decoder import (
     decode_telemetry,
     decode_compact_scoring,
@@ -44,6 +45,9 @@ class TestLiveCppIntegration(unittest.TestCase):
         track_rules_list = []
         pit_menu_list = []
         weather_list = []
+        ext_state_list = []
+        ffb_list = []
+        gfx_list = []
         event_list = []
 
         client.on_telemetry = lambda t: telem_list.append(t)
@@ -52,6 +56,9 @@ class TestLiveCppIntegration(unittest.TestCase):
         client.on_track_rules = lambda tr: track_rules_list.append(tr)
         client.on_pit_menu = lambda pm: pit_menu_list.append(pm)
         client.on_weather = lambda w: weather_list.append(w)
+        client.on_extended_state = lambda ext: ext_state_list.append(ext)
+        client.on_force_feedback = lambda ffb: ffb_list.append(ffb)
+        client.on_graphics = lambda gfx: gfx_list.append(gfx)
         client.on_system_event = lambda ev: event_list.append(ev)
 
         client.start()
@@ -94,6 +101,15 @@ class TestLiveCppIntegration(unittest.TestCase):
         self.assertGreaterEqual(
             len(weather_list), 1, f"Expected weather packets, received {len(weather_list)}"
         )
+        self.assertGreaterEqual(
+            len(ext_state_list), 1, f"Expected extended state packets, received {len(ext_state_list)}"
+        )
+        self.assertGreaterEqual(
+            len(ffb_list), 50, f"Expected 50+ FFB packets, received {len(ffb_list)}"
+        )
+        self.assertGreaterEqual(
+            len(gfx_list), 10, f"Expected 10+ graphics packets, received {len(gfx_list)}"
+        )
 
         # Validate multi-car full scoring
         latest_fs = full_scoring_list[-1]
@@ -127,6 +143,26 @@ class TestLiveCppIntegration(unittest.TestCase):
         latest_w = weather_list[-1]
         self.assertAlmostEqual(latest_w.ambient_temp_c, 24.5, places=1)
         self.assertAlmostEqual(latest_w.origin_raining, 0.05, places=2)
+
+        # Validate Extended State (FR-05)
+        latest_ext = ext_state_list[-1]
+        self.assertEqual(latest_ext.physics.traction_control_str, "Medium")
+        self.assertEqual(latest_ext.physics.anti_lock_brakes_str, "Low")
+        self.assertTrue(latest_ext.physics.auto_clutch)
+        self.assertTrue(latest_ext.physics.auto_blip)
+        self.assertAlmostEqual(latest_ext.current_pit_speed_limit_kmh, 60.0, places=1)
+        self.assertGreater(latest_ext.accumulated_impact_magnitude, 3000.0)
+
+        # Validate Force Feedback (FR-06)
+        latest_ffb = ffb_list[-1]
+        self.assertGreaterEqual(latest_ffb.percentage, 0.0)
+        self.assertLessEqual(latest_ffb.percentage, 100.0)
+
+        # Validate Graphics (FR-06)
+        latest_gfx = gfx_list[-1]
+        self.assertEqual(latest_gfx.slot_id, 42)
+        self.assertEqual(latest_gfx.camera_type_str, "Cockpit")
+        self.assertTrue(latest_gfx.is_cockpit_view)
 
         # Validate physical dynamics in stream
         first_t = telem_list[0]
@@ -178,6 +214,59 @@ class TestLiveCppIntegration(unittest.TestCase):
         self.assertLessEqual(
             received_count, target_hz + 5, f"Expected ~{target_hz} pkts, got {received_count}"
         )
+
+    def test_live_bidirectional_control(self):
+        """
+        Tests live bi-directional UDP communication (FR-07):
+        - Sending Pit Menu actions (PitMenuDown)
+        - Sending Hardware controls (TCIncrease)
+        - Injecting dynamic weather overrides (ambient_temp, raining)
+        """
+        port = 5090
+        inbound_port = 5091
+
+        client = IsiMotorClient(host="127.0.0.1", port=port, inbound_host="127.0.0.1", inbound_port=inbound_port)
+        weather_updates = []
+        pit_menu_updates = []
+
+        client.on_weather = lambda w: weather_updates.append(w)
+        client.on_pit_menu = lambda p: pit_menu_updates.append(p)
+        client.start()
+
+        proc = subprocess.Popen(
+            [MOCK_BIN, "--serve", str(port), "100", "2"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+        try:
+            # Wait for mock server to be listening
+            time.sleep(0.3)
+
+            # 1. Send PitMenuDown action
+            res_pit = client.send_pit_action(PitAction.MENU_DOWN)
+            self.assertTrue(res_pit, "send_pit_action returned False")
+
+            # 2. Send HW control
+            res_hw = client.send_hw_control("TCIncrease", control_value=1.0, duration_ms=50)
+            self.assertTrue(res_hw, "send_hw_control returned False")
+
+            # 3. Send dynamic weather override
+            res_weather = client.send_weather_override(ambient_temp=36.5, raining=0.80)
+            self.assertTrue(res_weather, "send_weather_override returned False")
+
+            time.sleep(1.0)
+        finally:
+            client.stop()
+            if proc.stdout:
+                proc.stdout.close()
+            if proc.stderr:
+                proc.stderr.close()
+            proc.wait(timeout=2)
+
+        # Validate that the weather override was received by the mock host and reflected in the live stream
+        self.assertTrue(any(abs(w.ambient_temp_c - 36.5) < 0.5 for w in weather_updates),
+                        f"Expected weather override (36.5°C) in stream: {[w.ambient_temp_c for w in weather_updates]}")
 
 
 if __name__ == "__main__":

@@ -15,7 +15,14 @@ from .models import (
     TrackRulesSession,
     PitMenu,
     WeatherControl,
+    PhysicsOptions,
+    ExtendedState,
+    ForceFeedback,
+    Graphics,
     SystemEvent,
+    PitAction,
+    HWControlCommand,
+    WeatherControlCommand,
 )
 from .decoder import (
     decode_header,
@@ -28,11 +35,19 @@ from .decoder import (
     decode_track_rules,
     decode_pit_menu,
     decode_weather,
+    decode_extended_state,
+    decode_force_feedback,
+    decode_graphics,
     decode_system_event,
+    decode_hw_control,
+    decode_weather_control,
+    encode_header,
+    encode_hw_control,
+    encode_weather_control,
 )
 from .client import IsiMotorClient
 
-__version__ = "1.2.0"
+__version__ = "1.4.0"
 __all__ = [
     "IsiMotorClient",
     "RawUdpHeader",
@@ -46,7 +61,14 @@ __all__ = [
     "TrackRulesSession",
     "PitMenu",
     "WeatherControl",
+    "PhysicsOptions",
+    "ExtendedState",
+    "ForceFeedback",
+    "Graphics",
     "SystemEvent",
+    "PitAction",
+    "HWControlCommand",
+    "WeatherControlCommand",
     "decode_header",
     "decode_packet",
     "decode_telemetry",
@@ -57,5 +79,13 @@ __all__ = [
     "decode_track_rules",
     "decode_pit_menu",
     "decode_weather",
+    "decode_extended_state",
+    "decode_force_feedback",
+    "decode_graphics",
     "decode_system_event",
+    "decode_hw_control",
+    "decode_weather_control",
+    "encode_header",
+    "encode_hw_control",
+    "encode_weather_control",
 ]

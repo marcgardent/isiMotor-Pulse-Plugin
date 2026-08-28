@@ -1,0 +1,134 @@
+name: CI & PR Validation
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  # --- 1. Validate Windows MSVC Compilation ---
+  build-msvc:
+    name: Build DLL (MSVC Windows x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure CMake (MSVC)
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build isiMotor_RawUDP.dll
+        run: |
+          cmake --build build --config Release
+
+      - name: Verify Built DLL
+        shell: bash
+        run: |
+          if [ -f "bin/isiMotor_RawUDP.dll" ]; then
+            cp bin/isiMotor_RawUDP.dll isiMotor_RawUDP.dll
+          elif [ -f "bin/Release/isiMotor_RawUDP.dll" ]; then
+            cp bin/Release/isiMotor_RawUDP.dll isiMotor_RawUDP.dll
+          else
+            cp $(find . -name "isiMotor_RawUDP.dll" | head -n 1) isiMotor_RawUDP.dll
+          fi
+          ls -lh isiMotor_RawUDP.dll
+
+      - name: Upload Test Artifact (MSVC DLL)
+        uses: actions/upload-artifact@v4
+        with:
+          name: isiMotor_RawUDP-msvc-x64
+          path: isiMotor_RawUDP.dll
+          retention-days: 7
+
+  # --- 2. Validate Linux MinGW Cross-Compilation ---
+  build-mingw:
+    name: Cross-Compile DLL (MinGW Linux x64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install MinGW-w64 Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 cmake ninja-build
+
+      - name: Configure CMake (MinGW Cross-Toolchain)
+        run: |
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build isiMotor_RawUDP.dll
+        run: |
+          cmake --build build --config Release
+
+      - name: Verify Built DLL
+        run: |
+          if [ -f "bin/isiMotor_RawUDP.dll" ]; then
+            cp bin/isiMotor_RawUDP.dll isiMotor_RawUDP_mingw.dll
+          else
+            cp $(find build bin -name "isiMotor_RawUDP.dll" | head -n 1) isiMotor_RawUDP_mingw.dll
+          fi
+          ls -lh isiMotor_RawUDP_mingw.dll
+
+      - name: Upload Test Artifact (MinGW DLL)
+        uses: actions/upload-artifact@v4
+        with:
+          name: isiMotor_RawUDP-mingw-x64
+          path: isiMotor_RawUDP_mingw.dll
+          retention-days: 7
+
+  # --- 3. Python Integration & Mock Tests Matrix ---
+  test-python-matrix:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build C++ Mock Host & Run Test Suite
+        run: |
+          make test
+
+  # --- 4. Validate Python Client Packaging & PyPI Metadata ---
+  package-python-check:
+    name: Validate Python Package (Wheel & sdist)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packaging tools
+        run: |
+          python -m pip install --upgrade pip build twine
+
+      - name: Build sdist and wheel
+        run: |
+          python -m build isimotor-rawudp-client
+
+      - name: Check package metadata with Twine
+        run: |
+          twine check isimotor-rawudp-client/dist/*
+
+      - name: Upload Python Package Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: isimotor-rawudp-client-dist
+          path: isimotor-rawudp-client/dist/*
+          retention-days: 7

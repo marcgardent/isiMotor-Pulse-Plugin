@@ -3,6 +3,9 @@
  * High-Performance Raw Binary Telemetry & Multi-Car Scoring Plugin for isiMotor games
  * (Le Mans Ultimate, rFactor 2).
  * 
+ * Copyright 2026 Marc GARDENT
+ * Licensed under the Apache License, Version 2.0.
+ * 
  * Features:
  * - Zero third-party dependencies (no nlohmann/json, no Boost, native Winsock2 only).
  * - Zero dynamic memory allocations in high-frequency telemetry and scoring update loops.
@@ -15,7 +18,7 @@
  * - Compact binary scoring packet (SIMP Type 2, 168 bytes) for ultra-low overhead HUDs.
  * - System event state notifications (SIMP Type 3, 6 bytes).
  * - UnsubscribedBuffersMask support matching rF2SharedMemoryMapPlugin.
- * - Self-generating & configurable via 'isiMotor_RawUDP.ini' placed next to the DLL.
+ * - Standard isiMotor configuration via CustomPluginVariables.JSON (InternalsPluginV07).
  * - Sub-millisecond latency supporting 120Hz to 400Hz+ streaming.
  */
 
@@ -39,6 +42,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h>
 #define __cdecl
 #define __declspec(x)
 typedef void* HWND;
@@ -56,11 +60,6 @@ typedef void* HWND;
 #define LPVOID void*
 #define DLL_PROCESS_ATTACH 1
 #define MAX_PATH 260
-#define INVALID_FILE_ATTRIBUTES ((DWORD)-1)
-#define GetFileAttributesA(p) INVALID_FILE_ATTRIBUTES
-#define GetPrivateProfileStringA(s, k, d, b, sz, p) std::strncpy(b, d, sz)
-#define GetPrivateProfileIntA(s, k, d, p) (d)
-#define GetModuleFileNameA(m, b, sz) 0
 typedef union _LARGE_INTEGER {
     int64_t QuadPart;
 } LARGE_INTEGER;
@@ -75,7 +74,6 @@ struct WSADATA {};
 #define PLUGIN_NAME "isiMotor-RawUDP"
 #define DEFAULT_UDP_PORT 5000
 #define DEFAULT_UDP_HOST "127.0.0.1"
-#define INI_FILE_NAME "isiMotor_RawUDP.ini"
 
 // Module handle saved at DLL injection time
 static HINSTANCE g_hModule = NULL;
@@ -248,6 +246,100 @@ struct WeatherPacket {
     unsigned char pad[3];
 };
 
+/**
+ * Extended State Packet (SIMP Type 8, 68 bytes)
+ * Driving aids, physics multipliers, accumulated damage & session state.
+ */
+struct ExtendedStatePacket {
+    // Physics options (40 bytes)
+    unsigned char tractionControl;          // 0 (off) - 3 (high)
+    unsigned char antiLockBrakes;           // 0 (off) - 2 (high)
+    unsigned char stabilityControl;         // 0 (off) - 2 (high)
+    unsigned char autoShift;                // 0 (off), 1 (upshifts), 2 (downshifts), 3 (all)
+    unsigned char autoClutch;               // 0 (off), 1 (on)
+    unsigned char invulnerable;             // 0 (off), 1 (on)
+    unsigned char oppositeLock;             // 0 (off), 1 (on)
+    unsigned char steeringHelp;             // 0 (off) - 3 (high)
+    unsigned char brakingHelp;              // 0 (off) - 2 (high)
+    unsigned char spinRecovery;             // 0 (off), 1 (on)
+    unsigned char autoPit;                  // 0 (off), 1 (on)
+    unsigned char autoLift;                 // 0 (off), 1 (on)
+    unsigned char autoBlip;                 // 0 (off), 1 (on)
+    unsigned char fuelMult;                 // fuel multiplier (0x-7x)
+    unsigned char tireMult;                 // tire wear multiplier (0x-7x)
+    unsigned char mechFail;                 // mechanical failure (0=off, 1=normal, 2=timescaled)
+    unsigned char allowPitcrewPush;         // 0 (off), 1 (on)
+    unsigned char repeatShifts;             // accidental repeat shift prevention (0-5)
+    unsigned char holdClutch;               // 0 (off), 1 (on)
+    unsigned char autoReverse;              // 0 (off), 1 (on)
+    unsigned char alternateNeutral;         // 0 (off), 1 (on)
+    unsigned char aiControl;                // 0 (player), 1 (AI)
+    unsigned char pad1[2];
+    float         manualShiftOverrideTime;  // time before auto-shift can resume
+    float         autoShiftOverrideTime;    // time before manual shift can resume
+    float         speedSensitiveSteering;   // 0.0 (off) - 1.0
+    float         steerRatioSpeed;          // speed (m/s) under which lock expands
+    
+    // Accumulated damage tracking (16 bytes)
+    double        maxImpactMagnitude;       // Max collision impact recorded in session
+    double        accumulatedImpactMagnitude;// Cumulative collision damage energy
+
+    // Session status & transitions (12 bytes)
+    bool          inRealtimeFC;             // In realtime cockpit mode
+    bool          sessionStarted;           // Session started flag
+    unsigned char pad2[2];
+    long          session;                  // Current session index
+    float         currentPitSpeedLimit;     // Pit speed limit m/s
+};
+
+/**
+ * Force Feedback Packet (SIMP Type 9, 8 bytes)
+ * Ultra-high frequency steering shaft force feedback torque.
+ */
+struct ForceFeedbackPacket {
+    double forceValue;                     // Steering shaft torque value
+};
+
+/**
+ * Graphics & Camera Packet (SIMP Type 10, 128 bytes)
+ * Camera world position, orientation matrix & ambient lighting.
+ */
+struct GraphicsPacket {
+    TelemVect3 camPos;                     // Camera 3D world position
+    TelemVect3 camOri[3];                  // Camera 3x3 orientation matrix
+    double     ambientRed;                 // Ambient light RGB
+    double     ambientGreen;
+    double     ambientBlue;
+    long       slotId;                     // Slot ID being viewed (-1 if none)
+    long       cameraType;                 // Camera viewpoint type
+};
+
+/**
+ * Hardware & Pit Menu Control Command (SIMP Type 100, 44 bytes padded)
+ * Inbound UDP command to trigger car/cockpit/pit menu inputs.
+ */
+struct HWControlCommandPacket {
+    char          controlName[32];       // Control name (e.g. "PitMenuUp", "PitMenuSelect", "TCIncrease")
+    double        controlValue;          // 1.0 = press/on, 0.0 = release/off, or analog value
+    unsigned short durationMs;           // Pulse duration in ms (e.g. 50ms)
+    unsigned char pad[2];                // Explicit 4-byte struct padding
+};
+
+/**
+ * Dynamic Weather Control Injection (SIMP Type 101, 64 bytes)
+ * Inbound UDP command to inject ambient weather into live session.
+ */
+struct WeatherControlCommandPacket {
+    double        ambientTemp;           // Air temp in °C
+    double        trackTemp;             // Track surface temp in °C
+    double        darkCloud;             // 0.0 to 1.0
+    double        raining;               // 0.0 to 1.0
+    double        windSpeed;             // Wind speed in m/s
+    double        windDirection;         // Wind direction in radians
+    double        minPathWetness;        // 0.0 to 1.0
+    double        maxPathWetness;        // 0.0 to 1.0
+};
+
 #pragma pack(pop)
 
 // Buffer unsubscription bitmask (rF2SharedMemoryMapPlugin compatibility)
@@ -332,61 +424,20 @@ public:
     }
 };
 
-static double ParseRateHz(const char* str, double defaultRate = -1.0) {
-    if (!str || str[0] == '\0') return defaultRate;
-
-    while (*str == ' ' || *str == '\t') ++str;
-    if (*str == '\0') return defaultRate;
-
-    char buf[64] = {0};
-    size_t i = 0;
-    while (*str && i < sizeof(buf) - 1) {
-        char c = *str++;
-        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);
-        buf[i++] = c;
-    }
-
-    if (std::strcmp(buf, "off") == 0) {
-        return 0.0;
-    }
-    if (std::strcmp(buf, "unlimited") == 0) {
-        return -1.0;
-    }
-
-    char* endPtr = nullptr;
-    double val = std::strtod(buf, &endPtr);
-    if (val <= 0.0) {
-        return 0.0;
-    }
-    return val;
-}
-
-static bool ParseSystemEvents(const char* str, bool defaultVal = true) {
-    if (!str || str[0] == '\0') return defaultVal;
-    while (*str == ' ' || *str == '\t') ++str;
-    if (*str == '\0') return defaultVal;
-
-    char buf[64] = {0};
-    size_t i = 0;
-    while (*str && i < sizeof(buf) - 1) {
-        char c = *str++;
-        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);
-        buf[i++] = c;
-    }
-    if (std::strcmp(buf, "off") == 0) return false;
-    if (std::strcmp(buf, "on") == 0 || std::strcmp(buf, "unlimited") == 0) return true;
-    return defaultVal;
-}
-
 struct PluginConfig {
     char targetIp[64];
     int targetPort;
+    int inboundPort;
+    bool enableInboundControl;
     double telemetryHz;
     double compactScoringHz;
     double fullScoringHz;
     double trackRulesHz;
     double pitMenuHz;
     double weatherHz;
+    double extendedStateHz;
+    double forceFeedbackHz;
+    double graphicsHz;
     bool enableSystemEvents;
     long unsubscribedBuffersMask;
 };
@@ -400,7 +451,9 @@ static char s_chunkPacketBuffer[sizeof(RawUdpHeader) + MAX_UDP_CHUNK_SIZE];
 class IsiMotorRawUdpPlugin : public InternalsPluginV07 {
 private:
     SOCKET udpSocket;
+    SOCKET inboundSocket;
     sockaddr_in serverAddr;
+    sockaddr_in inboundAddr;
     PluginConfig config;
     RateLimiter telemetryLimiter;
     RateLimiter compactScoringLimiter;
@@ -408,124 +461,159 @@ private:
     RateLimiter trackRulesLimiter;
     RateLimiter pitMenuLimiter;
     RateLimiter weatherLimiter;
+    RateLimiter extendedStateLimiter;
+    RateLimiter forceFeedbackLimiter;
+    RateLimiter graphicsLimiter;
     unsigned int sequenceCounters[256];
     bool initialized;
 
-    void GetIniPath(char* outPath, size_t maxLen) {
-        char dllPath[MAX_PATH] = {0};
-        if (GetModuleFileNameA(g_hModule, dllPath, MAX_PATH) > 0) {
-            char* lastSlash = std::strrchr(dllPath, '\\');
-            if (!lastSlash) lastSlash = std::strrchr(dllPath, '/');
-            if (lastSlash) {
-                *(lastSlash + 1) = '\0';
-                std::snprintf(outPath, maxLen, "%s%s", dllPath, INI_FILE_NAME);
-                return;
-            }
+    // Inbound Hardware & Pit Menu Controls (FR-07)
+    struct ActiveHWControl {
+        char controlName[32];
+        double value;
+        double remainingTimeSec;
+        bool active;
+    };
+    static const int MAX_ACTIVE_HW_CONTROLS = 32;
+    ActiveHWControl activeControls[MAX_ACTIVE_HW_CONTROLS];
+
+    // Inbound Dynamic Weather Override (FR-07)
+    struct WeatherOverrideState {
+        bool active;
+        WeatherControlCommandPacket data;
+    };
+    WeatherOverrideState weatherOverride;
+
+    // Tracked state for ExtendedStatePacket (FR-05)
+    PhysicsOptionsV01 cachedPhysics;
+    double maxImpactMagnitude;
+    double accumulatedImpactMagnitude;
+    bool inRealtimeFC;
+    bool sessionStarted;
+    long currentSession;
+    float currentPitSpeedLimit;
+
+    // -------------------------------------------------------------------------
+    // Custom Plugin Variables Table & Metadata (InternalsPluginV07 String Standard API)
+    // -------------------------------------------------------------------------
+    struct CustomVarDef {
+        const char* caption;
+        const char* defaultValue;
+    };
+
+    static inline void TrimString(const char* src, char* dst, size_t maxLen) {
+        if (!src || !dst || maxLen == 0) return;
+        while (*src == ' ' || *src == '\t' || *src == '\r' || *src == '\n' || *src == '"') ++src;
+        size_t i = 0;
+        while (*src && i < maxLen - 1) {
+            char c = *src++;
+            if (c == '"' || c == '\r' || c == '\n') break;
+            dst[i++] = c;
         }
-        std::snprintf(outPath, maxLen, ".\\%s", INI_FILE_NAME);
+        while (i > 0 && (dst[i - 1] == ' ' || dst[i - 1] == '\t' || dst[i - 1] == '"')) {
+            --i;
+        }
+        dst[i] = '\0';
     }
 
-    void LoadConfiguration() {
-        // Safe hardcoded defaults
+    static inline double ParseRateString(const char* str, double defaultRate) {
+        if (!str || str[0] == '\0') return defaultRate;
+        char clean[64] = {0};
+        TrimString(str, clean, sizeof(clean));
+        if (clean[0] == '\0') return defaultRate;
+
+        char lower[64] = {0};
+        for (size_t i = 0; i < sizeof(lower) - 1 && clean[i] != '\0'; ++i) {
+            char c = clean[i];
+            if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);
+            lower[i] = c;
+        }
+
+        if (std::strcmp(lower, "off") == 0 || std::strcmp(lower, "disabled") == 0 || std::strcmp(lower, "0") == 0 || std::strcmp(lower, "0hz") == 0) {
+            return 0.0;
+        }
+        if (std::strcmp(lower, "unlimited") == 0 || std::strcmp(lower, "raw") == 0 || std::strcmp(lower, "max") == 0 || std::strcmp(lower, "-1") == 0) {
+            return -1.0;
+        }
+
+        char* endPtr = nullptr;
+        double val = std::strtod(lower, &endPtr);
+        if (val <= 0.0) return 0.0;
+        return val;
+    }
+
+    static inline bool ParseBoolString(const char* str, bool defaultVal) {
+        if (!str || str[0] == '\0') return defaultVal;
+        char clean[64] = {0};
+        TrimString(str, clean, sizeof(clean));
+        if (clean[0] == '\0') return defaultVal;
+
+        char lower[64] = {0};
+        for (size_t i = 0; i < sizeof(lower) - 1 && clean[i] != '\0'; ++i) {
+            char c = clean[i];
+            if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);
+            lower[i] = c;
+        }
+
+        if (std::strcmp(lower, "off") == 0 || std::strcmp(lower, "disabled") == 0 || std::strcmp(lower, "0") == 0 || std::strcmp(lower, "false") == 0) {
+            return false;
+        }
+        if (std::strcmp(lower, "on") == 0 || std::strcmp(lower, "enabled") == 0 || std::strcmp(lower, "1") == 0 || std::strcmp(lower, "true") == 0) {
+            return true;
+        }
+        return defaultVal;
+    }
+
+    static inline int ParseIntString(const char* str, int defaultVal) {
+        if (!str || str[0] == '\0') return defaultVal;
+        char clean[64] = {0};
+        TrimString(str, clean, sizeof(clean));
+        if (clean[0] == '\0') return defaultVal;
+        char* endPtr = nullptr;
+        long val = std::strtol(clean, &endPtr, 10);
+        if (endPtr == clean) return defaultVal;
+        return static_cast<int>(val);
+    }
+
+    static inline const CustomVarDef* GetCustomVarDefs(int& count) {
+        static const CustomVarDef s_defs[] = {
+            { "TargetIP",                "127.0.0.1" },
+            { "TargetPort",              "5000" },
+            { "InboundControl",          "Enabled" },
+            { "InboundPort",             "5001" },
+            { "TelemetryRate",           "unlimited" },
+            { "CompactScoringRate",      "unlimited" },
+            { "FullScoringRate",         "5Hz" },
+            { "TrackRulesRate",          "3Hz" },
+            { "PitMenuRate",             "100Hz" },
+            { "WeatherRate",             "1Hz" },
+            { "ExtendedStateRate",       "5Hz" },
+            { "ForceFeedbackRate",       "unlimited" },
+            { "GraphicsRate",            "60Hz" },
+            { "SystemEvents",            "Enabled" },
+            { "UnsubscribedBuffersMask", "0" }
+        };
+        count = static_cast<int>(sizeof(s_defs) / sizeof(s_defs[0]));
+        return s_defs;
+    }
+
+    void InitDefaults() {
         std::strncpy(config.targetIp, DEFAULT_UDP_HOST, sizeof(config.targetIp) - 1);
         config.targetIp[sizeof(config.targetIp) - 1] = '\0';
         config.targetPort = DEFAULT_UDP_PORT;
+        config.inboundPort = 5001;
+        config.enableInboundControl = true;
         config.telemetryHz = -1.0;     // unlimited
         config.compactScoringHz = -1.0;// unlimited
         config.fullScoringHz = 5.0;    // 5Hz
         config.trackRulesHz = 3.0;     // 3Hz
         config.pitMenuHz = 100.0;      // 100Hz
         config.weatherHz = 1.0;        // 1Hz
+        config.extendedStateHz = 5.0;  // 5Hz
+        config.forceFeedbackHz = -1.0; // unlimited (up to 400Hz)
+        config.graphicsHz = 60.0;      // 60Hz
         config.enableSystemEvents = true;
         config.unsubscribedBuffersMask = 0;
-
-        char iniPath[MAX_PATH] = {0};
-        GetIniPath(iniPath, sizeof(iniPath));
-
-        // If INI does not exist, generate default template
-        DWORD attr = GetFileAttributesA(iniPath);
-        if (attr == INVALID_FILE_ATTRIBUTES) {
-            FILE* f = std::fopen(iniPath, "w");
-            if (f) {
-                std::fprintf(f,
-                    "; ==================================================================\n"
-                    "; isiMotor-RawUDP-Plugin Configuration\n"
-                    "; ==================================================================\n"
-                    "\n"
-                    "[Network]\n"
-                    "; Destination IP address (Unicast e.g. 127.0.0.1 or 192.168.1.50, Multicast e.g. 239.255.0.1, Broadcast e.g. 255.255.255.255)\n"
-                    "TargetIP=127.0.0.1\n"
-                    "; Destination UDP Port (default: 5000)\n"
-                    "TargetPort=5000\n"
-                    "\n"
-                    "[Streams]\n"
-                    "; Channel frequency limiter format: off | unlimited | <N>Hz\n"
-                    "; ------------------------------------------------------------------\n"
-                    "; Telemetry stream (1888 B): off | unlimited | 100Hz | 60Hz | 30Hz | 20Hz | 10Hz\n"
-                    "Telemetry=unlimited\n"
-                    "\n"
-                    "; Compact scoring stream (168 B, single-player): off | unlimited | 5Hz | 2Hz | 1Hz\n"
-                    "CompactScoring=unlimited\n"
-                    "\n"
-                    "; Full grid scoring stream (up to 128 cars, sliced): off | unlimited | 5Hz | 2Hz | 1Hz\n"
-                    "FullScoring=5Hz\n"
-                    "\n"
-                    "; Track rules, flags and Safety Car stream: off | unlimited | 5Hz | 3Hz | 1Hz\n"
-                    "TrackRules=3Hz\n"
-                    "\n"
-                    "; Pit menu navigation & state stream: off | unlimited | 100Hz | 60Hz | 30Hz\n"
-                    "PitMenu=100Hz\n"
-                    "\n"
-                    "; Weather & environmental conditions stream: off | unlimited | 2Hz | 1Hz\n"
-                    "Weather=1Hz\n"
-                    "\n"
-                    "; System events stream (session / realtime transitions): off | on\n"
-                    "SystemEvents=on\n"
-                    "\n"
-                    "; Buffer unsubscription bitmask (rF2SharedMemoryMapPlugin compatibility):\n"
-                    "; Telemetry=1, Scoring=2, Rules=4, MultiRules=8, ForceFeedback=16, Graphics=32, PitInfo=64, Weather=128\n"
-                    "UnsubscribedBuffersMask=0\n"
-                );
-                std::fclose(f);
-            }
-        }
-
-        // Read network settings
-        GetPrivateProfileStringA("Network", "TargetIP", DEFAULT_UDP_HOST, config.targetIp, sizeof(config.targetIp), iniPath);
-        config.targetPort = GetPrivateProfileIntA("Network", "TargetPort", DEFAULT_UDP_PORT, iniPath);
-
-        // Read stream frequency limiters
-        char telemStr[64] = {0};
-        GetPrivateProfileStringA("Streams", "Telemetry", "unlimited", telemStr, sizeof(telemStr), iniPath);
-        config.telemetryHz = ParseRateHz(telemStr, -1.0);
-
-        char legacyScoringStr[64] = {0};
-        GetPrivateProfileStringA("Streams", "Scoring", "unlimited", legacyScoringStr, sizeof(legacyScoringStr), iniPath);
-        char compactStr[64] = {0};
-        GetPrivateProfileStringA("Streams", "CompactScoring", legacyScoringStr, compactStr, sizeof(compactStr), iniPath);
-        config.compactScoringHz = ParseRateHz(compactStr, -1.0);
-
-        char fullStr[64] = {0};
-        GetPrivateProfileStringA("Streams", "FullScoring", "5Hz", fullStr, sizeof(fullStr), iniPath);
-        config.fullScoringHz = ParseRateHz(fullStr, 5.0);
-
-        char rulesStr[64] = {0};
-        GetPrivateProfileStringA("Streams", "TrackRules", "3Hz", rulesStr, sizeof(rulesStr), iniPath);
-        config.trackRulesHz = ParseRateHz(rulesStr, 3.0);
-
-        char pitStr[64] = {0};
-        GetPrivateProfileStringA("Streams", "PitMenu", "100Hz", pitStr, sizeof(pitStr), iniPath);
-        config.pitMenuHz = ParseRateHz(pitStr, 100.0);
-
-        char weatherStr[64] = {0};
-        GetPrivateProfileStringA("Streams", "Weather", "1Hz", weatherStr, sizeof(weatherStr), iniPath);
-        config.weatherHz = ParseRateHz(weatherStr, 1.0);
-
-        char eventStr[64] = {0};
-        GetPrivateProfileStringA("Streams", "SystemEvents", "on", eventStr, sizeof(eventStr), iniPath);
-        config.enableSystemEvents = ParseSystemEvents(eventStr, true);
-
-        config.unsubscribedBuffersMask = GetPrivateProfileIntA("Streams", "UnsubscribedBuffersMask", 0, iniPath);
 
         telemetryLimiter.SetRate(config.telemetryHz);
         compactScoringLimiter.SetRate(config.compactScoringHz);
@@ -533,6 +621,145 @@ private:
         trackRulesLimiter.SetRate(config.trackRulesHz);
         pitMenuLimiter.SetRate(config.pitMenuHz);
         weatherLimiter.SetRate(config.weatherHz);
+        extendedStateLimiter.SetRate(config.extendedStateHz);
+        forceFeedbackLimiter.SetRate(config.forceFeedbackHz);
+        graphicsLimiter.SetRate(config.graphicsHz);
+    }
+
+public:
+    // -------------------------------------------------------------------------
+    // InternalsPluginV07 Custom Variables Callbacks (String-Based API)
+    // -------------------------------------------------------------------------
+
+    bool GetCustomVariable(long i, CustomVariableV01 &var) override {
+        int count = 0;
+        const CustomVarDef* defs = GetCustomVarDefs(count);
+        if (i < 0 || i >= count) return false;
+
+        std::strncpy(var.mCaption, defs[i].caption, sizeof(var.mCaption) - 1);
+        var.mCaption[sizeof(var.mCaption) - 1] = '\0';
+        var.mNumSettings = 0; // 0 indicates limitless / string type in isiMotor Custom Variables API
+        var.mCurrentSetting = 0;
+        std::memset(var.mExpansion, 0, sizeof(var.mExpansion));
+        std::strncpy(reinterpret_cast<char*>(var.mExpansion), defs[i].defaultValue, sizeof(var.mExpansion) - 1);
+        return true;
+    }
+
+    void GetCustomVariableSetting(CustomVariableV01 &var, long i, CustomSettingV01 &setting) override {
+        (void)var;
+        (void)i;
+        (void)setting;
+        // Not used when mNumSettings == 0 (string type)
+    }
+
+    void AccessCustomVariable(CustomVariableV01 &var) override {
+        const char* strVal = reinterpret_cast<const char*>(var.mExpansion);
+        char cleanStr[128] = {0};
+        if (strVal && strVal[0] != '\0') {
+            TrimString(strVal, cleanStr, sizeof(cleanStr));
+        }
+
+        if (std::strcmp(var.mCaption, "TargetIP") == 0) {
+            if (cleanStr[0] != '\0') {
+                std::strncpy(config.targetIp, cleanStr, sizeof(config.targetIp) - 1);
+                config.targetIp[sizeof(config.targetIp) - 1] = '\0';
+            }
+            if (initialized && udpSocket != INVALID_SOCKET) {
+                inet_pton(AF_INET, config.targetIp, &serverAddr.sin_addr);
+            }
+        }
+        else if (std::strcmp(var.mCaption, "TargetPort") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.targetPort = ParseIntString(cleanStr, DEFAULT_UDP_PORT);
+            } else if (var.mCurrentSetting > 0) {
+                config.targetPort = static_cast<int>(var.mCurrentSetting);
+            }
+            if (initialized && udpSocket != INVALID_SOCKET) {
+                serverAddr.sin_port = htons(static_cast<u_short>(config.targetPort));
+            }
+        }
+        else if (std::strcmp(var.mCaption, "InboundControl") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.enableInboundControl = ParseBoolString(cleanStr, true);
+            } else {
+                config.enableInboundControl = (var.mCurrentSetting != 0);
+            }
+        }
+        else if (std::strcmp(var.mCaption, "InboundPort") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.inboundPort = ParseIntString(cleanStr, 5001);
+            } else if (var.mCurrentSetting > 0) {
+                config.inboundPort = static_cast<int>(var.mCurrentSetting);
+            }
+        }
+        else if (std::strcmp(var.mCaption, "TelemetryRate") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.telemetryHz = ParseRateString(cleanStr, -1.0);
+            }
+            telemetryLimiter.SetRate(config.telemetryHz);
+        }
+        else if (std::strcmp(var.mCaption, "CompactScoringRate") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.compactScoringHz = ParseRateString(cleanStr, -1.0);
+            }
+            compactScoringLimiter.SetRate(config.compactScoringHz);
+        }
+        else if (std::strcmp(var.mCaption, "FullScoringRate") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.fullScoringHz = ParseRateString(cleanStr, 5.0);
+            }
+            fullScoringLimiter.SetRate(config.fullScoringHz);
+        }
+        else if (std::strcmp(var.mCaption, "TrackRulesRate") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.trackRulesHz = ParseRateString(cleanStr, 3.0);
+            }
+            trackRulesLimiter.SetRate(config.trackRulesHz);
+        }
+        else if (std::strcmp(var.mCaption, "PitMenuRate") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.pitMenuHz = ParseRateString(cleanStr, 100.0);
+            }
+            pitMenuLimiter.SetRate(config.pitMenuHz);
+        }
+        else if (std::strcmp(var.mCaption, "WeatherRate") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.weatherHz = ParseRateString(cleanStr, 1.0);
+            }
+            weatherLimiter.SetRate(config.weatherHz);
+        }
+        else if (std::strcmp(var.mCaption, "ExtendedStateRate") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.extendedStateHz = ParseRateString(cleanStr, 5.0);
+            }
+            extendedStateLimiter.SetRate(config.extendedStateHz);
+        }
+        else if (std::strcmp(var.mCaption, "ForceFeedbackRate") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.forceFeedbackHz = ParseRateString(cleanStr, -1.0);
+            }
+            forceFeedbackLimiter.SetRate(config.forceFeedbackHz);
+        }
+        else if (std::strcmp(var.mCaption, "GraphicsRate") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.graphicsHz = ParseRateString(cleanStr, 60.0);
+            }
+            graphicsLimiter.SetRate(config.graphicsHz);
+        }
+        else if (std::strcmp(var.mCaption, "SystemEvents") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.enableSystemEvents = ParseBoolString(cleanStr, true);
+            } else {
+                config.enableSystemEvents = (var.mCurrentSetting != 0);
+            }
+        }
+        else if (std::strcmp(var.mCaption, "UnsubscribedBuffersMask") == 0) {
+            if (cleanStr[0] != '\0') {
+                config.unsubscribedBuffersMask = ParseIntString(cleanStr, 0);
+            } else {
+                config.unsubscribedBuffersMask = var.mCurrentSetting;
+            }
+        }
     }
 
     void SendSlicedPayload(unsigned char packetType, unsigned short subTypeOrId, const void* payload, size_t totalPayloadSize, double sessionET) {
@@ -578,11 +805,79 @@ private:
                reinterpret_cast<const sockaddr*>(&serverAddr), sizeof(serverAddr));
     }
 
+    void ApplyHWControl(const char* name, double value, unsigned short durationMs) {
+        if (!name || name[0] == '\0') return;
+
+        double durationSec = (durationMs > 0) ? (durationMs / 1000.0) : 0.050; // Default 50ms pulse
+
+        // Check if already active
+        for (int i = 0; i < MAX_ACTIVE_HW_CONTROLS; ++i) {
+            if (activeControls[i].active && std::strncmp(activeControls[i].controlName, name, sizeof(activeControls[i].controlName)) == 0) {
+                activeControls[i].value = value;
+                activeControls[i].remainingTimeSec = durationSec;
+                return;
+            }
+        }
+
+        // Find inactive slot
+        for (int i = 0; i < MAX_ACTIVE_HW_CONTROLS; ++i) {
+            if (!activeControls[i].active) {
+                std::strncpy(activeControls[i].controlName, name, sizeof(activeControls[i].controlName) - 1);
+                activeControls[i].controlName[sizeof(activeControls[i].controlName) - 1] = '\0';
+                activeControls[i].value = value;
+                activeControls[i].remainingTimeSec = durationSec;
+                activeControls[i].active = true;
+                return;
+            }
+        }
+    }
+
+    void PollInboundCommands() {
+        if (!initialized || inboundSocket == INVALID_SOCKET || !config.enableInboundControl) return;
+
+        char recvBuf[512];
+        sockaddr_in clientAddr;
+#ifdef _WIN32
+        int addrLen = sizeof(clientAddr);
+#else
+        socklen_t addrLen = sizeof(clientAddr);
+#endif
+
+        while (true) {
+            int bytes = recvfrom(inboundSocket, recvBuf, sizeof(recvBuf), 0,
+                                 reinterpret_cast<sockaddr*>(&clientAddr), &addrLen);
+            if (bytes < static_cast<int>(sizeof(RawUdpHeader))) {
+                break;
+            }
+
+            const RawUdpHeader* hdr = reinterpret_cast<const RawUdpHeader*>(recvBuf);
+            if (std::memcmp(hdr->magic, "SIMP", 4) != 0 || hdr->protocolVersion != 1) {
+                continue;
+            }
+
+            const char* payload = recvBuf + sizeof(RawUdpHeader);
+            size_t payloadSize = static_cast<size_t>(bytes - sizeof(RawUdpHeader));
+
+            if (hdr->packetType == 100 && payloadSize >= sizeof(HWControlCommandPacket)) {
+                const HWControlCommandPacket* cmd = reinterpret_cast<const HWControlCommandPacket*>(payload);
+                ApplyHWControl(cmd->controlName, cmd->controlValue, cmd->durationMs);
+            } else if (hdr->packetType == 101 && payloadSize >= sizeof(WeatherControlCommandPacket)) {
+                const WeatherControlCommandPacket* cmd = reinterpret_cast<const WeatherControlCommandPacket*>(payload);
+                weatherOverride.data = *cmd;
+                weatherOverride.active = true;
+            }
+        }
+    }
+
 public:
-    IsiMotorRawUdpPlugin() : udpSocket(INVALID_SOCKET), initialized(false) {
+    IsiMotorRawUdpPlugin() : udpSocket(INVALID_SOCKET), inboundSocket(INVALID_SOCKET), initialized(false) {
         std::memset(&serverAddr, 0, sizeof(serverAddr));
+        std::memset(&inboundAddr, 0, sizeof(inboundAddr));
         std::memset(&config, 0, sizeof(config));
         std::memset(sequenceCounters, 0, sizeof(sequenceCounters));
+        std::memset(activeControls, 0, sizeof(activeControls));
+        std::memset(&weatherOverride, 0, sizeof(weatherOverride));
+        InitDefaults();
     }
 
     ~IsiMotorRawUdpPlugin() override {
@@ -593,16 +888,13 @@ public:
         (void)version;
         if (initialized) return;
 
-        // Load or auto-create configuration file
-        LoadConfiguration();
-
         // Initialize Winsock 2.2
         WSADATA wsaData;
         if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
             return;
         }
 
-        // Create non-blocking UDP socket
+        // 1. Create outgoing UDP socket
         udpSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         if (udpSocket == INVALID_SOCKET) {
             WSACleanup();
@@ -622,7 +914,36 @@ public:
         serverAddr.sin_port = htons(static_cast<u_short>(config.targetPort));
         inet_pton(AF_INET, config.targetIp, &serverAddr.sin_addr);
 
+        // 2. Create inbound UDP socket (FR-07 Bi-Directional Input)
+        if (config.enableInboundControl) {
+            inboundSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+            if (inboundSocket != INVALID_SOCKET) {
+                int reuse = 1;
+                setsockopt(inboundSocket, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+#ifdef _WIN32
+                u_long nonBlocking = 1;
+                ioctlsocket(inboundSocket, FIONBIO, &nonBlocking);
+#else
+                int flags = fcntl(inboundSocket, F_GETFL, 0);
+                fcntl(inboundSocket, F_SETFL, flags | O_NONBLOCK);
+#endif
+                inboundAddr.sin_family = AF_INET;
+                inboundAddr.sin_port = htons(static_cast<u_short>(config.inboundPort));
+                inboundAddr.sin_addr.s_addr = INADDR_ANY;
+                bind(inboundSocket, reinterpret_cast<const sockaddr*>(&inboundAddr), sizeof(inboundAddr));
+            }
+        }
+
         initialized = true;
+        maxImpactMagnitude = 0.0;
+        accumulatedImpactMagnitude = 0.0;
+        inRealtimeFC = false;
+        sessionStarted = false;
+        currentSession = 0;
+        currentPitSpeedLimit = 16.67f;
+        std::memset(&cachedPhysics, 0, sizeof(cachedPhysics));
+        std::memset(activeControls, 0, sizeof(activeControls));
+        std::memset(&weatherOverride, 0, sizeof(weatherOverride));
     }
 
     void Shutdown() override {
@@ -631,25 +952,92 @@ public:
                 closesocket(udpSocket);
                 udpSocket = INVALID_SOCKET;
             }
+            if (inboundSocket != INVALID_SOCKET) {
+                closesocket(inboundSocket);
+                inboundSocket = INVALID_SOCKET;
+            }
             WSACleanup();
             initialized = false;
         }
     }
 
+    void SendExtendedState(double sessionET) {
+        if (!initialized || udpSocket == INVALID_SOCKET) return;
+        if (!extendedStateLimiter.IsEnabled()) return;
+
+        ExtendedStatePacket pkt{};
+        // Physics options
+        pkt.tractionControl = cachedPhysics.mTractionControl;
+        pkt.antiLockBrakes = cachedPhysics.mAntiLockBrakes;
+        pkt.stabilityControl = cachedPhysics.mStabilityControl;
+        pkt.autoShift = cachedPhysics.mAutoShift;
+        pkt.autoClutch = cachedPhysics.mAutoClutch;
+        pkt.invulnerable = cachedPhysics.mInvulnerable;
+        pkt.oppositeLock = cachedPhysics.mOppositeLock;
+        pkt.steeringHelp = cachedPhysics.mSteeringHelp;
+        pkt.brakingHelp = cachedPhysics.mBrakingHelp;
+        pkt.spinRecovery = cachedPhysics.mSpinRecovery;
+        pkt.autoPit = cachedPhysics.mAutoPit;
+        pkt.autoLift = cachedPhysics.mAutoLift;
+        pkt.autoBlip = cachedPhysics.mAutoBlip;
+        pkt.fuelMult = cachedPhysics.mFuelMult;
+        pkt.tireMult = cachedPhysics.mTireMult;
+        pkt.mechFail = cachedPhysics.mMechFail;
+        pkt.allowPitcrewPush = cachedPhysics.mAllowPitcrewPush;
+        pkt.repeatShifts = cachedPhysics.mRepeatShifts;
+        pkt.holdClutch = cachedPhysics.mHoldClutch;
+        pkt.autoReverse = cachedPhysics.mAutoReverse;
+        pkt.alternateNeutral = cachedPhysics.mAlternateNeutral;
+        pkt.aiControl = cachedPhysics.mAIControl;
+        pkt.pad1[0] = 0; pkt.pad1[1] = 0;
+        pkt.manualShiftOverrideTime = cachedPhysics.mManualShiftOverrideTime;
+        pkt.autoShiftOverrideTime = cachedPhysics.mAutoShiftOverrideTime;
+        pkt.speedSensitiveSteering = cachedPhysics.mSpeedSensitiveSteering;
+        pkt.steerRatioSpeed = cachedPhysics.mSteerRatioSpeed;
+
+        // Damage tracking
+        pkt.maxImpactMagnitude = maxImpactMagnitude;
+        pkt.accumulatedImpactMagnitude = accumulatedImpactMagnitude;
+
+        // Status
+        pkt.inRealtimeFC = inRealtimeFC;
+        pkt.sessionStarted = sessionStarted;
+        pkt.pad2[0] = 0; pkt.pad2[1] = 0;
+        pkt.session = currentSession;
+        pkt.currentPitSpeedLimit = currentPitSpeedLimit;
+
+        SendSlicedPayload(8, 0, &pkt, sizeof(pkt), sessionET);
+    }
+
     void EnterRealtime() override {
+        inRealtimeFC = true;
         SendSystemEvent(1);
+        SendExtendedState(0.0);
     }
 
     void ExitRealtime() override {
+        inRealtimeFC = false;
         SendSystemEvent(2);
+        SendExtendedState(0.0);
     }
 
     void StartSession() override {
+        sessionStarted = true;
+        maxImpactMagnitude = 0.0;
+        accumulatedImpactMagnitude = 0.0;
         SendSystemEvent(3);
+        SendExtendedState(0.0);
     }
 
     void EndSession() override {
+        sessionStarted = false;
         SendSystemEvent(4);
+        SendExtendedState(0.0);
+    }
+
+    void SetPhysicsOptions(PhysicsOptionsV01 &options) override {
+        std::memcpy(&cachedPhysics, &options, sizeof(PhysicsOptionsV01));
+        SendExtendedState(0.0);
     }
 
     // Subscribe to telemetry updates: 1 = Player vehicle only, 2 = All vehicles, 0 = Disabled
@@ -661,6 +1049,20 @@ public:
     // High frequency callback (~60-100Hz): Direct memory dump (zero-copy, zero-allocation)
     void UpdateTelemetry(const TelemInfoV01 &info) override {
         if (!initialized || udpSocket == INVALID_SOCKET) return;
+
+        // Track collision damage impacts
+        if (info.mLastImpactMagnitude > 0.0) {
+            if (info.mLastImpactMagnitude > maxImpactMagnitude) {
+                maxImpactMagnitude = info.mLastImpactMagnitude;
+            }
+            accumulatedImpactMagnitude += info.mLastImpactMagnitude;
+        }
+
+        // Periodic ExtendedState stream (SIMP Type 8 @ 5Hz)
+        if (extendedStateLimiter.IsEnabled() && extendedStateLimiter.ShouldSend()) {
+            SendExtendedState(info.mElapsedTime);
+        }
+
         if (config.unsubscribedBuffersMask & UNSUB_TELEMETRY) return;
         if (!telemetryLimiter.ShouldSend()) return;
 
@@ -869,16 +1271,88 @@ public:
         return false;
     }
 
-    // Subscribe to weather updates (FR-04, SIMP Type 7 @ 1Hz)
+    // Inbound Hardware & Pit Menu Controls (FR-07)
+    bool HasHardwareInputs() override {
+        return config.enableInboundControl;
+    }
+
+    void UpdateHardware(const double fDT) override {
+        if (!initialized || !config.enableInboundControl) return;
+
+        // Poll non-blocking inbound UDP socket
+        PollInboundCommands();
+
+        // Decrement remaining pulse timers
+        for (int i = 0; i < MAX_ACTIVE_HW_CONTROLS; ++i) {
+            if (activeControls[i].active) {
+                activeControls[i].remainingTimeSec -= fDT;
+                if (activeControls[i].remainingTimeSec <= 0.0) {
+                    activeControls[i].active = false;
+                }
+            }
+        }
+    }
+
+    bool CheckHWControl(const char* const controlName, double &fRetVal) override {
+        if (!initialized || !config.enableInboundControl || !controlName) return false;
+
+        // Handle both with and without leading underscore (isiMotor standard)
+        const char* cleanName = (controlName[0] == '_') ? (controlName + 1) : controlName;
+
+        for (int i = 0; i < MAX_ACTIVE_HW_CONTROLS; ++i) {
+            if (activeControls[i].active) {
+                if (std::strcmp(activeControls[i].controlName, controlName) == 0 ||
+                    std::strcmp(activeControls[i].controlName, cleanName) == 0) {
+                    fRetVal = activeControls[i].value;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Subscribe to weather updates (FR-04, SIMP Type 7 @ 1Hz) & Weather Injection (FR-07)
     bool WantsWeatherAccess() override {
         if (config.unsubscribedBuffersMask & UNSUB_WEATHER) return false;
-        return weatherLimiter.IsEnabled();
+        return weatherLimiter.IsEnabled() || (config.enableInboundControl && weatherOverride.active);
     }
 
     bool AccessWeather(double trackNodeSize, WeatherControlInfoV01 &info) override {
         (void)trackNodeSize;
-        if (!initialized || udpSocket == INVALID_SOCKET) return false;
+        if (!initialized) return false;
+
+        // 1. Apply Inbound Weather Override (FR-07)
+        if (config.enableInboundControl && weatherOverride.active) {
+            info.mAmbientTempK = weatherOverride.data.ambientTemp + 273.15;
+            info.mRaining[1][1] = weatherOverride.data.raining;
+            info.mCloudiness = weatherOverride.data.darkCloud;
+            info.mWindMaxSpeed = weatherOverride.data.windSpeed;
+            info.mApplyCloudinessInstantly = true;
+            weatherOverride.active = false; // Override applied
+
+            // Broadcast the modified conditions immediately if output socket is ready
+            if (udpSocket != INVALID_SOCKET && !(config.unsubscribedBuffersMask & UNSUB_WEATHER) && weatherLimiter.IsEnabled()) {
+                WeatherPacket pkt{};
+                pkt.et = info.mET;
+                for (int r = 0; r < 3; ++r) {
+                    for (int c = 0; c < 3; ++c) {
+                        pkt.raining[r][c] = info.mRaining[r][c];
+                    }
+                }
+                pkt.cloudiness = info.mCloudiness;
+                pkt.ambientTempK = info.mAmbientTempK;
+                pkt.windMaxSpeed = info.mWindMaxSpeed;
+                pkt.applyCloudinessInstantly = info.mApplyCloudinessInstantly;
+                pkt.pad[0] = 0; pkt.pad[1] = 0; pkt.pad[2] = 0;
+
+                SendSlicedPayload(7, 0, &pkt, sizeof(pkt), info.mET);
+            }
+            return true; // Overridden!
+        }
+
+        // 2. Standard weather broadcast (FR-04)
         if (config.unsubscribedBuffersMask & UNSUB_WEATHER) return false;
+        if (udpSocket == INVALID_SOCKET) return false;
         if (!weatherLimiter.ShouldSend()) return false;
 
         WeatherPacket pkt{};
@@ -896,6 +1370,39 @@ public:
 
         SendSlicedPayload(7, 0, &pkt, sizeof(pkt), info.mET);
         return false;
+    }
+
+    // High frequency Force Feedback callback (FR-06, SIMP Type 9 @ up to 400Hz)
+    bool ForceFeedback(double &forceValue) override {
+        if (!initialized || udpSocket == INVALID_SOCKET) return false;
+        if (config.unsubscribedBuffersMask & UNSUB_FORCE_FEEDBACK) return false;
+        if (!forceFeedbackLimiter.ShouldSend()) return false;
+
+        ForceFeedbackPacket pkt{};
+        pkt.forceValue = forceValue;
+
+        SendSlicedPayload(9, 0, &pkt, sizeof(pkt), 0.0);
+        return false; // Return false so game's native FFB calculation is not overridden
+    }
+
+    // High frequency Graphics & Camera callback (FR-06, SIMP Type 10 @ 60-100Hz)
+    void UpdateGraphics(const GraphicsInfoV02 &info) override {
+        if (!initialized || udpSocket == INVALID_SOCKET) return;
+        if (config.unsubscribedBuffersMask & UNSUB_GRAPHICS) return;
+        if (!graphicsLimiter.ShouldSend()) return;
+
+        GraphicsPacket pkt{};
+        pkt.camPos = info.mCamPos;
+        pkt.camOri[0] = info.mCamOri[0];
+        pkt.camOri[1] = info.mCamOri[1];
+        pkt.camOri[2] = info.mCamOri[2];
+        pkt.ambientRed = info.mAmbientRed;
+        pkt.ambientGreen = info.mAmbientGreen;
+        pkt.ambientBlue = info.mAmbientBlue;
+        pkt.slotId = info.mID;
+        pkt.cameraType = info.mCameraType;
+
+        SendSlicedPayload(10, static_cast<unsigned short>(info.mID >= 0 ? info.mID : 0), &pkt, sizeof(pkt), 0.0);
     }
 };
 

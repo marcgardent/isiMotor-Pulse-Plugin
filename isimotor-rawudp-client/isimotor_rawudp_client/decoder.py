@@ -3,30 +3,40 @@ High-performance binary decoder for isiMotor / LMU / rFactor 2 raw UDP packets.
 """
 
 import struct
-from typing import Optional, Union, Tuple, List
+from typing import Optional, Union, List, Tuple
 from .models import (
-    RawUdpHeader,
-    TelemInfo,
-    TelemWheel,
     TelemVect3,
+    TelemWheel,
+    WheelInfo,
+    TelemInfo,
     CompactScoring,
-    FullScoringSession,
     VehicleScoring,
+    FullScoringSession,
     TrackRulesParticipant,
     TrackRulesSession,
     PitMenu,
     WeatherControl,
+    PhysicsOptions,
+    ExtendedState,
+    ForceFeedback,
+    Graphics,
     SystemEvent,
+    RawUdpHeader,
+    PitAction,
+    HWControlCommand,
+    WeatherControlCommand,
 )
 
+# ── Packet Size & Struct Constants ─────────────────────────────────────────────
 HEADER_SIZE = 24
 HEADER_STRUCT = "<4sBBHIdBBH"
+SYSTEM_EVENT_SIZE = 6
+SYSTEM_EVENT_STRUCT = "<4sBB"
 
 TELEMINFO_SIZE = 1888
 COMPACT_SCORING_SIZE = 168
 FULL_SCORING_SESSION_SIZE = 284
 VEHICLE_SCORING_SIZE = 584
-SYSTEM_EVENT_SIZE = 6
 
 TRACK_RULES_PARTICIPANT_SIZE = 140
 TRACK_RULES_PARTICIPANT_STRUCT = "<ihhfdiiiB?2xd96s"
@@ -39,6 +49,21 @@ PIT_MENU_STRUCT = "<i32si32si"
 
 WEATHER_SIZE = 108
 WEATHER_STRUCT = "<d9dddd?3x"
+
+EXTENDED_STATE_SIZE = 68
+EXTENDED_STATE_STRUCT = "<22B2x4f2d2B2xif"
+
+FORCE_FEEDBACK_SIZE = 8
+FORCE_FEEDBACK_STRUCT = "<d"
+
+GRAPHICS_SIZE = 128
+GRAPHICS_STRUCT = "<3d9d3dii"
+
+HW_CONTROL_COMMAND_SIZE = 44
+HW_CONTROL_COMMAND_STRUCT = "<32sdH2x"
+
+WEATHER_CONTROL_COMMAND_SIZE = 64
+WEATHER_CONTROL_COMMAND_STRUCT = "<8d"
 
 
 def _decode_string(raw_bytes: bytes) -> str:
@@ -734,12 +759,202 @@ def decode_weather(data: bytes, offset: int = 0) -> Optional[WeatherControl]:
     )
 
 
+def decode_extended_state(data: bytes, offset: int = 0) -> Optional[ExtendedState]:
+    """Decodes a 68-byte ExtendedState packet (Type 8)."""
+    if len(data) - offset < EXTENDED_STATE_SIZE:
+        return None
+
+    unpacked = struct.unpack_from(EXTENDED_STATE_STRUCT, data, offset)
+    physics = PhysicsOptions(
+        traction_control=unpacked[0],
+        anti_lock_brakes=unpacked[1],
+        stability_control=unpacked[2],
+        auto_shift=unpacked[3],
+        auto_clutch=unpacked[4],
+        invulnerable=unpacked[5],
+        opposite_lock=unpacked[6],
+        steering_help=unpacked[7],
+        braking_help=unpacked[8],
+        spin_recovery=unpacked[9],
+        auto_pit=unpacked[10],
+        auto_lift=unpacked[11],
+        auto_blip=unpacked[12],
+        fuel_mult=unpacked[13],
+        tire_mult=unpacked[14],
+        mech_fail=unpacked[15],
+        allow_pitcrew_push=unpacked[16],
+        repeat_shifts=unpacked[17],
+        hold_clutch=unpacked[18],
+        auto_reverse=unpacked[19],
+        alternate_neutral=unpacked[20],
+        ai_control=unpacked[21],
+        manual_shift_override_time=unpacked[22],
+        auto_shift_override_time=unpacked[23],
+        speed_sensitive_steering=unpacked[24],
+        steer_ratio_speed=unpacked[25],
+    )
+
+    max_impact = unpacked[26]
+    acc_impact = unpacked[27]
+    in_rt = bool(unpacked[28])
+    session_started = bool(unpacked[29])
+    session = unpacked[30]
+    pit_speed = unpacked[31]
+
+    return ExtendedState(
+        physics=physics,
+        max_impact_magnitude=max_impact,
+        accumulated_impact_magnitude=acc_impact,
+        in_realtime_fc=in_rt,
+        session_started=session_started,
+        session=session,
+        current_pit_speed_limit=pit_speed,
+    )
+
+
+def decode_force_feedback(data: bytes, offset: int = 0) -> Optional[ForceFeedback]:
+    """Decodes an 8-byte ForceFeedback packet (Type 9)."""
+    if len(data) - offset < FORCE_FEEDBACK_SIZE:
+        return None
+
+    force_val = struct.unpack_from(FORCE_FEEDBACK_STRUCT, data, offset)[0]
+    return ForceFeedback(force_value=force_val)
+
+
+def decode_graphics(data: bytes, offset: int = 0) -> Optional[Graphics]:
+    """Decodes a 128-byte Graphics packet (Type 10)."""
+    if len(data) - offset < GRAPHICS_SIZE:
+        return None
+
+    unpacked = struct.unpack_from(GRAPHICS_STRUCT, data, offset)
+    cam_pos = TelemVect3(unpacked[0], unpacked[1], unpacked[2])
+    cam_ori = (
+        TelemVect3(unpacked[3], unpacked[4], unpacked[5]),
+        TelemVect3(unpacked[6], unpacked[7], unpacked[8]),
+        TelemVect3(unpacked[9], unpacked[10], unpacked[11]),
+    )
+    ambient_rgb = (unpacked[12], unpacked[13], unpacked[14])
+    slot_id = unpacked[15]
+    camera_type = unpacked[16]
+
+    return Graphics(
+        cam_pos=cam_pos,
+        cam_ori=cam_ori,
+        ambient_rgb=ambient_rgb,
+        slot_id=slot_id,
+        camera_type=camera_type,
+    )
+
+
 def decode_system_event(data: bytes, offset: int = 0) -> Optional[SystemEvent]:
     """Decodes a 6-byte SIMP Type 3 system event packet."""
     if len(data) - offset < 2:
         return None
     event_id = data[offset + 5] if (offset == 0 and data.startswith(b"SIMP")) else data[offset]
     return SystemEvent(event_id=event_id)
+
+
+def encode_header(
+    packet_type: int,
+    payload_size: int,
+    sequence_number: int = 0,
+    session_et: float = 0.0,
+    chunk_index: int = 0,
+    total_chunks: int = 1,
+    sub_type_or_id: int = 0,
+) -> bytes:
+    """Encodes a standard 24-byte SIMP protocol header."""
+    return struct.pack(
+        HEADER_STRUCT,
+        b"SIMP",
+        1,  # protocol_version
+        packet_type,
+        payload_size,
+        sequence_number,
+        session_et,
+        chunk_index,
+        total_chunks,
+        sub_type_or_id,
+    )
+
+
+def encode_hw_control(
+    control_name: str,
+    control_value: float = 1.0,
+    duration_ms: int = 50,
+    with_header: bool = False,
+    sequence_number: int = 0,
+) -> bytes:
+    """
+    Encodes a 44-byte HWControlCommandPacket, optionally prepended with the 24-byte SIMP header (Type 100).
+    """
+    raw_name = control_name.encode("utf-8")[:32].ljust(32, b"\x00")
+    payload = struct.pack(HW_CONTROL_COMMAND_STRUCT, raw_name, float(control_value), int(duration_ms))
+    if with_header:
+        hdr = encode_header(100, len(payload), sequence_number=sequence_number)
+        return hdr + payload
+    return payload
+
+
+def decode_hw_control(data: bytes, offset: int = 0) -> Optional[HWControlCommand]:
+    """Decodes a 44-byte HWControlCommand packet (Type 100)."""
+    if len(data) - offset < HW_CONTROL_COMMAND_SIZE:
+        return None
+    raw_name, val, dur = struct.unpack_from(HW_CONTROL_COMMAND_STRUCT, data, offset)
+    return HWControlCommand(
+        control_name=_decode_string(raw_name),
+        control_value=val,
+        duration_ms=dur,
+    )
+
+
+def encode_weather_control(
+    ambient_temp: float = 20.0,
+    track_temp: float = 25.0,
+    dark_cloud: float = 0.0,
+    raining: float = 0.0,
+    wind_speed: float = 0.0,
+    wind_direction: float = 0.0,
+    min_path_wetness: float = 0.0,
+    max_path_wetness: float = 0.0,
+    with_header: bool = False,
+    sequence_number: int = 0,
+) -> bytes:
+    """
+    Encodes a 64-byte WeatherControlCommandPacket, optionally prepended with the 24-byte SIMP header (Type 101).
+    """
+    payload = struct.pack(
+        WEATHER_CONTROL_COMMAND_STRUCT,
+        float(ambient_temp),
+        float(track_temp),
+        float(dark_cloud),
+        float(raining),
+        float(wind_speed),
+        float(wind_direction),
+        float(min_path_wetness),
+        float(max_path_wetness),
+    )
+    if with_header:
+        hdr = encode_header(101, len(payload), sequence_number=sequence_number)
+        return hdr + payload
+    return payload
+
+
+def decode_weather_control(data: bytes, offset: int = 0) -> Optional[WeatherControlCommand]:
+    """Decodes a 64-byte WeatherControlCommand packet (Type 101)."""
+    if len(data) - offset < WEATHER_CONTROL_COMMAND_SIZE:
+        return None
+    unpacked = struct.unpack_from(WEATHER_CONTROL_COMMAND_STRUCT, data, offset)
+    return WeatherControlCommand(
+        ambient_temp=unpacked[0],
+        track_temp=unpacked[1],
+        dark_cloud=unpacked[2],
+        raining=unpacked[3],
+        wind_speed=unpacked[4],
+        wind_direction=unpacked[5],
+        min_path_wetness=unpacked[6],
+        max_path_wetness=unpacked[7],
+    )
 
 
 def decode_packet(
@@ -752,7 +967,12 @@ def decode_packet(
         TrackRulesSession,
         PitMenu,
         WeatherControl,
+        ExtendedState,
+        ForceFeedback,
+        Graphics,
         SystemEvent,
+        HWControlCommand,
+        WeatherControlCommand,
     ]
 ]:
     """
@@ -787,6 +1007,16 @@ def decode_packet(
                     return decode_pit_menu(payload)
                 elif hdr.packet_type == 7:
                     return decode_weather(payload)
+                elif hdr.packet_type == 8:
+                    return decode_extended_state(payload)
+                elif hdr.packet_type == 9:
+                    return decode_force_feedback(payload)
+                elif hdr.packet_type == 10:
+                    return decode_graphics(payload)
+                elif hdr.packet_type == 100:
+                    return decode_hw_control(payload)
+                elif hdr.packet_type == 101:
+                    return decode_weather_control(payload)
 
     # 2. Legacy SIMP Packet Types (CompactScoring=2, SystemEvent=3)
     if data.startswith(b"SIMP") and len(data) >= 5:

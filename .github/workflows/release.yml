@@ -1,0 +1,208 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v1.4.0)'
+        required: true
+        default: 'v1.4.0'
+
+permissions:
+  contents: write
+
+jobs:
+  # --- 1. Gatekeeper Tests ---
+  run-tests:
+    name: Run Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build C++ Mock Host & Run Tests
+        run: |
+          make test
+
+  # --- 2. Build MSVC DLL ---
+  build-msvc:
+    name: Build DLL (MSVC x64 Static)
+    runs-on: windows-latest
+    needs: [run-tests]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure CMake (MSVC)
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build isiMotor_RawUDP.dll
+        run: |
+          cmake --build build --config Release
+
+      - name: Locate and verify DLL
+        shell: bash
+        run: |
+          if [ -f "bin/isiMotor_RawUDP.dll" ]; then
+            cp bin/isiMotor_RawUDP.dll isiMotor_RawUDP.dll
+          elif [ -f "bin/Release/isiMotor_RawUDP.dll" ]; then
+            cp bin/Release/isiMotor_RawUDP.dll isiMotor_RawUDP.dll
+          elif [ -f "build/bin/Release/isiMotor_RawUDP.dll" ]; then
+            cp build/bin/Release/isiMotor_RawUDP.dll isiMotor_RawUDP.dll
+          elif [ -f "build/Release/isiMotor_RawUDP.dll" ]; then
+            cp build/Release/isiMotor_RawUDP.dll isiMotor_RawUDP.dll
+          else
+            cp $(find . -name "isiMotor_RawUDP.dll" | head -n 1) isiMotor_RawUDP.dll
+          fi
+
+      - name: Upload MSVC DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-msvc-dll
+          path: isiMotor_RawUDP.dll
+
+  # --- 3. Build MinGW DLL ---
+  build-mingw:
+    name: Cross-Compile DLL (MinGW-w64 Linux)
+    runs-on: ubuntu-latest
+    needs: [run-tests]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install MinGW-w64 Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 cmake ninja-build
+
+      - name: Configure CMake (MinGW Cross-Toolchain)
+        run: |
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build isiMotor_RawUDP.dll
+        run: |
+          cmake --build build --config Release
+
+      - name: Locate MinGW DLL
+        run: |
+          if [ -f "bin/isiMotor_RawUDP.dll" ]; then
+            cp bin/isiMotor_RawUDP.dll isiMotor_RawUDP_mingw.dll
+          elif [ -f "build/isiMotor_RawUDP.dll" ]; then
+            cp build/isiMotor_RawUDP.dll isiMotor_RawUDP_mingw.dll
+          else
+            cp $(find build bin -name "isiMotor_RawUDP.dll" | head -n 1) isiMotor_RawUDP_mingw.dll
+          fi
+
+      - name: Upload MinGW DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-mingw-dll
+          path: isiMotor_RawUDP_mingw.dll
+
+  # --- 4. Package Python Client ---
+  package-python:
+    name: Build Python Wheel & sdist
+    runs-on: ubuntu-latest
+    needs: [run-tests]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip build twine
+
+      - name: Build Python packages
+        run: |
+          python -m build isimotor-rawudp-client
+
+      - name: Validate distribution
+        run: |
+          twine check isimotor-rawudp-client/dist/*
+
+      - name: Upload Python Dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-python-dist
+          path: isimotor-rawudp-client/dist/*
+
+  publish-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-msvc, build-mingw, package-python]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine Tag Name
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download MSVC DLL
+        uses: actions/download-artifact@v4
+        with:
+          name: release-msvc-dll
+          path: staging/
+
+      - name: Download MinGW DLL
+        uses: actions/download-artifact@v4
+        with:
+          name: release-mingw-dll
+          path: staging/alt_builds/
+
+      - name: Download Python Dist
+        uses: actions/download-artifact@v4
+        with:
+          name: release-python-dist
+          path: staging/python_client/
+
+      - name: Prepare Release ZIP and Assets
+        run: |
+          TAG="${{ steps.vars.outputs.TAG }}"
+          mkdir -p staging/scripts
+          cp scripts/install_plugin.py staging/scripts/
+          cp USER_NOTICE.md staging/
+          cp README.md staging/
+          cp LICENSE staging/
+          
+          # Create zip package
+          cd staging
+          zip -r "../isiMotor-RawUDP-Plugin-${TAG}-Windows-x64.zip" .
+          cd ..
+          
+          mkdir -p release_assets
+          cp staging/isiMotor_RawUDP.dll release_assets/
+          cp "isiMotor-RawUDP-Plugin-${TAG}-Windows-x64.zip" release_assets/
+          cp staging/python_client/* release_assets/
+          ls -lh release_assets/
+
+      - name: Create GitHub Release & Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.TAG }}
+          name: isiMotor-RawUDP Plugin ${{ steps.vars.outputs.TAG }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: release_assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

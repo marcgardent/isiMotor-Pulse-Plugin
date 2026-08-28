@@ -1,7 +1,3 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
-setup(
-    name="isimotor-rawudp-client",
-    version="1.0.0",
-    packages=find_packages(),
-)
+setup()

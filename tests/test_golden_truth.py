@@ -7,13 +7,27 @@ import json
 import os
 import struct
 import unittest
-from isimotor_rawudp_client.models import RawUdpHeader
+from isimotor_rawudp_client.models import (
+    RawUdpHeader,
+    PitAction,
+    HWControlCommand,
+    WeatherControlCommand,
+)
 from isimotor_rawudp_client.decoder import (
     decode_header,
     decode_telemetry,
     decode_compact_scoring,
     decode_full_scoring,
     decode_system_event,
+    decode_pit_menu,
+    decode_weather,
+    decode_extended_state,
+    decode_force_feedback,
+    decode_graphics,
+    decode_hw_control,
+    decode_weather_control,
+    encode_hw_control,
+    encode_weather_control,
     decode_packet,
     HEADER_SIZE,
 )
@@ -287,7 +301,86 @@ class TestGoldenTruth(unittest.TestCase):
         self.assertAlmostEqual(w.ambient_temp_k, truth["ambient_temp_k"], places=2)
         self.assertAlmostEqual(w.ambient_temp_c, 24.5, places=1)
         self.assertAlmostEqual(w.wind_max_speed, truth["wind_max_speed"], places=2)
-        self.assertAlmostEqual(w.origin_raining, 0.05, places=2)
+    def test_extended_state_golden_decoding(self):
+        bin_path = os.path.join(GOLDEN_DIR, "extended_golden.bin")
+        json_path = os.path.join(GOLDEN_DIR, "extended_golden.json")
+
+        self.assertTrue(os.path.exists(bin_path))
+        self.assertTrue(os.path.exists(json_path))
+
+        with open(bin_path, "rb") as f:
+            data = f.read()
+        with open(json_path, "r", encoding="utf-8") as f:
+            truth = json.load(f)
+
+        self.assertEqual(len(data), 68)
+        ext = decode_packet(
+            struct.pack("<4sBBHIdBBH", b"SIMP", 1, 8, 68, 20, 125.456, 0, 1, 0) + data
+        )
+        self.assertIsNotNone(ext)
+        self.assertEqual(ext.physics.traction_control, truth["traction_control"])
+        self.assertEqual(ext.physics.traction_control_str, "Medium")
+        self.assertEqual(ext.physics.anti_lock_brakes, truth["anti_lock_brakes"])
+        self.assertEqual(ext.physics.anti_lock_brakes_str, "Low")
+        self.assertEqual(ext.physics.auto_shift_str, "Manual")
+        self.assertTrue(ext.physics.auto_clutch)
+        self.assertTrue(ext.physics.auto_blip)
+        self.assertEqual(ext.physics.tire_mult, truth["tire_mult"])
+        self.assertAlmostEqual(ext.max_impact_magnitude, truth["max_impact_magnitude"], places=2)
+        self.assertAlmostEqual(ext.accumulated_impact_magnitude, truth["accumulated_impact_magnitude"], places=2)
+        self.assertTrue(ext.in_realtime_fc)
+        self.assertTrue(ext.session_started)
+        self.assertEqual(ext.session, truth["session"])
+        self.assertAlmostEqual(ext.current_pit_speed_limit, truth["current_pit_speed_limit"], places=3)
+        self.assertAlmostEqual(ext.current_pit_speed_limit_kmh, 60.0, places=1)
+
+    def test_ffb_golden_decoding(self):
+        bin_path = os.path.join(GOLDEN_DIR, "ffb_golden.bin")
+        json_path = os.path.join(GOLDEN_DIR, "ffb_golden.json")
+
+        self.assertTrue(os.path.exists(bin_path))
+        self.assertTrue(os.path.exists(json_path))
+
+        with open(bin_path, "rb") as f:
+            data = f.read()
+        with open(json_path, "r", encoding="utf-8") as f:
+            truth = json.load(f)
+
+        self.assertEqual(len(data), 8)
+        ffb = decode_packet(
+            struct.pack("<4sBBHIdBBH", b"SIMP", 1, 9, 8, 30, 0.0, 0, 1, 0) + data
+        )
+        self.assertIsNotNone(ffb)
+        self.assertAlmostEqual(ffb.force_value, truth["force_value"], places=4)
+        self.assertAlmostEqual(ffb.percentage, 68.5, places=1)
+
+    def test_graphics_golden_decoding(self):
+        bin_path = os.path.join(GOLDEN_DIR, "graphics_golden.bin")
+        json_path = os.path.join(GOLDEN_DIR, "graphics_golden.json")
+
+        self.assertTrue(os.path.exists(bin_path))
+        self.assertTrue(os.path.exists(json_path))
+
+        with open(bin_path, "rb") as f:
+            data = f.read()
+        with open(json_path, "r", encoding="utf-8") as f:
+            truth = json.load(f)
+
+        self.assertEqual(len(data), 128)
+        gfx = decode_packet(
+            struct.pack("<4sBBHIdBBH", b"SIMP", 1, 10, 128, 40, 0.0, 0, 1, 42) + data
+        )
+        self.assertIsNotNone(gfx)
+        self.assertAlmostEqual(gfx.cam_pos.x, truth["cam_pos"][0], places=2)
+        self.assertAlmostEqual(gfx.cam_pos.y, truth["cam_pos"][1], places=2)
+        self.assertAlmostEqual(gfx.cam_pos.z, truth["cam_pos"][2], places=2)
+        self.assertAlmostEqual(gfx.ambient_rgb[0], truth["ambient_rgb"][0], places=2)
+        self.assertAlmostEqual(gfx.ambient_rgb[1], truth["ambient_rgb"][1], places=2)
+        self.assertAlmostEqual(gfx.ambient_rgb[2], truth["ambient_rgb"][2], places=2)
+        self.assertEqual(gfx.slot_id, truth["slot_id"])
+        self.assertEqual(gfx.camera_type, truth["camera_type"])
+        self.assertEqual(gfx.camera_type_str, "Cockpit")
+        self.assertTrue(gfx.is_cockpit_view)
 
     def test_header_decoding(self):
         # Pack sample 24-byte header
@@ -368,6 +461,79 @@ class TestGoldenTruth(unittest.TestCase):
         self.assertIsNotNone(ev)
         self.assertEqual(ev.event_id, 1)
         self.assertEqual(ev.name, "EnterRealtime")
+
+    def test_hw_control_golden_decoding_and_encoding(self):
+        bin_path = os.path.join(GOLDEN_DIR, "hw_control_golden.bin")
+        json_path = os.path.join(GOLDEN_DIR, "hw_control_golden.json")
+
+        self.assertTrue(os.path.exists(bin_path))
+        self.assertTrue(os.path.exists(json_path))
+
+        with open(bin_path, "rb") as f:
+            data = f.read()
+        with open(json_path, "r", encoding="utf-8") as f:
+            truth = json.load(f)
+
+        self.assertEqual(len(data), 44)
+        hw = decode_hw_control(data)
+        self.assertIsNotNone(hw)
+        self.assertEqual(hw.control_name, truth["control_name"])
+        self.assertEqual(hw.control_name, "PitMenuNext")
+        self.assertAlmostEqual(hw.control_value, truth["control_value"], places=2)
+        self.assertEqual(hw.duration_ms, truth["duration_ms"])
+
+        # Test decode_packet with SIMP header
+        packet_with_hdr = struct.pack("<4sBBHIdBBH", b"SIMP", 1, 100, 44, 50, 0.0, 0, 1, 0) + data
+        decoded_pkt = decode_packet(packet_with_hdr)
+        self.assertIsInstance(decoded_pkt, HWControlCommand)
+        self.assertEqual(decoded_pkt.control_name, "PitMenuNext")
+
+        # Test byte-for-byte binary re-encoding
+        re_encoded = encode_hw_control(truth["control_name"], truth["control_value"], truth["duration_ms"])
+        self.assertEqual(re_encoded, data)
+
+    def test_weather_control_golden_decoding_and_encoding(self):
+        bin_path = os.path.join(GOLDEN_DIR, "weather_control_golden.bin")
+        json_path = os.path.join(GOLDEN_DIR, "weather_control_golden.json")
+
+        self.assertTrue(os.path.exists(bin_path))
+        self.assertTrue(os.path.exists(json_path))
+
+        with open(bin_path, "rb") as f:
+            data = f.read()
+        with open(json_path, "r", encoding="utf-8") as f:
+            truth = json.load(f)
+
+        self.assertEqual(len(data), 64)
+        wc = decode_weather_control(data)
+        self.assertIsNotNone(wc)
+        self.assertAlmostEqual(wc.ambient_temp, truth["ambient_temp"], places=2)
+        self.assertAlmostEqual(wc.track_temp, truth["track_temp"], places=2)
+        self.assertAlmostEqual(wc.dark_cloud, truth["dark_cloud"], places=2)
+        self.assertAlmostEqual(wc.raining, truth["raining"], places=2)
+        self.assertAlmostEqual(wc.wind_speed, truth["wind_speed"], places=2)
+        self.assertAlmostEqual(wc.wind_direction, truth["wind_direction"], places=4)
+        self.assertAlmostEqual(wc.min_path_wetness, truth["min_path_wetness"], places=2)
+        self.assertAlmostEqual(wc.max_path_wetness, truth["max_path_wetness"], places=2)
+
+        # Test decode_packet with SIMP header
+        packet_with_hdr = struct.pack("<4sBBHIdBBH", b"SIMP", 1, 101, 64, 51, 0.0, 0, 1, 0) + data
+        decoded_pkt = decode_packet(packet_with_hdr)
+        self.assertIsInstance(decoded_pkt, WeatherControlCommand)
+        self.assertAlmostEqual(decoded_pkt.ambient_temp, 24.5, places=1)
+
+        # Test byte-for-byte binary re-encoding
+        re_encoded = encode_weather_control(
+            ambient_temp=truth["ambient_temp"],
+            track_temp=truth["track_temp"],
+            dark_cloud=truth["dark_cloud"],
+            raining=truth["raining"],
+            wind_speed=truth["wind_speed"],
+            wind_direction=truth["wind_direction"],
+            min_path_wetness=truth["min_path_wetness"],
+            max_path_wetness=truth["max_path_wetness"],
+        )
+        self.assertEqual(re_encoded, data)
 
 
 if __name__ == "__main__":

@@ -8,14 +8,21 @@ import threading
 import time
 from typing import Optional, Callable, Dict, List, Union
 from .models import (
-    RawUdpHeader,
     TelemInfo,
     CompactScoring,
     FullScoringSession,
     TrackRulesSession,
     PitMenu,
     WeatherControl,
+    PhysicsOptions,
+    ExtendedState,
+    ForceFeedback,
+    Graphics,
     SystemEvent,
+    RawUdpHeader,
+    PitAction,
+    HWControlCommand,
+    WeatherControlCommand,
 )
 from .decoder import (
     decode_header,
@@ -27,16 +34,19 @@ from .decoder import (
     decode_pit_menu,
     decode_weather,
     decode_system_event,
+    decode_hw_control,
+    decode_weather_control,
+    encode_hw_control,
+    encode_weather_control,
     HEADER_SIZE,
 )
 
 
 class IsiMotorClient:
     """
-    Thread-safe UDP Client for isiMotor-RawUDP-Plugin.
+    Ultra-low latency UDP client for isiMotor / LMU telemetry and scoring.
 
-    Usage Examples:
-
+    Usage examples:
     1. Callback-based:
         client = IsiMotorClient(port=5000)
         client.on_telemetry = lambda t: print(f"RPM: {t.engine_rpm}, Speed: {t.speed_kmh:.1f}")
@@ -44,6 +54,9 @@ class IsiMotorClient:
         client.on_track_rules = lambda r: print(f"FCY: {r.is_caution_active}, SC: {r.is_safety_car_active}")
         client.on_pit_menu = lambda p: print(f"Pit Menu: {p.category_name} -> {p.choice_string}")
         client.on_weather = lambda w: print(f"Track Temp: {w.ambient_temp_c:.1f} °C, Rain: {w.origin_raining * 100:.0f}%")
+        client.on_extended_state = lambda e: print(f"TC: {e.physics.traction_control_str}, Damage: {e.accumulated_impact_magnitude:.1f}")
+        client.on_force_feedback = lambda f: print(f"FFB: {f.percentage:.1f}%")
+        client.on_graphics = lambda g: print(f"Cam: {g.camera_type_str}")
         client.start()
         ...
         client.stop()
@@ -53,19 +66,29 @@ class IsiMotorClient:
             while True:
                 telem = client.get_latest_telemetry()
                 rules = client.get_latest_track_rules()
+                ffb = client.get_latest_force_feedback()
                 if telem:
                     print(telem.gear_str, telem.speed_kmh)
                 time.sleep(0.01)
     """
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 5000):
+    def __init__(
+        self,
+        host: str = "0.0.0.0",
+        port: int = 5000,
+        inbound_host: str = "127.0.0.1",
+        inbound_port: int = 5001,
+    ):
         self.host = host
         self.port = port
+        self.inbound_host = inbound_host
+        self.inbound_port = inbound_port
 
         self._socket: Optional[socket.socket] = None
         self._thread: Optional[threading.Thread] = None
         self._running = False
         self._lock = threading.Lock()
+        self._inbound_seq = 0
 
         # Cached latest frames
         self._latest_telemetry: Optional[TelemInfo] = None
@@ -74,7 +97,12 @@ class IsiMotorClient:
         self._latest_track_rules: Optional[TrackRulesSession] = None
         self._latest_pit_menu: Optional[PitMenu] = None
         self._latest_weather: Optional[WeatherControl] = None
+        self._latest_extended_state: Optional[ExtendedState] = None
+        self._latest_force_feedback: Optional[ForceFeedback] = None
+        self._latest_graphics: Optional[Graphics] = None
         self._latest_system_event: Optional[SystemEvent] = None
+        self._latest_hw_control: Optional[HWControlCommand] = None
+        self._latest_weather_control: Optional[WeatherControlCommand] = None
         self._last_packet_time: float = 0.0
         self._packet_count: int = 0
 
@@ -89,7 +117,12 @@ class IsiMotorClient:
         self.on_track_rules: Optional[Callable[[TrackRulesSession], None]] = None
         self.on_pit_menu: Optional[Callable[[PitMenu], None]] = None
         self.on_weather: Optional[Callable[[WeatherControl], None]] = None
+        self.on_extended_state: Optional[Callable[[ExtendedState], None]] = None
+        self.on_force_feedback: Optional[Callable[[ForceFeedback], None]] = None
+        self.on_graphics: Optional[Callable[[Graphics], None]] = None
         self.on_system_event: Optional[Callable[[SystemEvent], None]] = None
+        self.on_hw_control: Optional[Callable[[HWControlCommand], None]] = None
+        self.on_weather_control: Optional[Callable[[WeatherControlCommand], None]] = None
         self.on_packet: Optional[
             Callable[
                 [
@@ -100,7 +133,12 @@ class IsiMotorClient:
                         TrackRulesSession,
                         PitMenu,
                         WeatherControl,
+                        ExtendedState,
+                        ForceFeedback,
+                        Graphics,
                         SystemEvent,
+                        HWControlCommand,
+                        WeatherControlCommand,
                     ]
                 ],
                 None,
@@ -254,8 +292,18 @@ class IsiMotorClient:
                                         self._latest_pit_menu = pkt
                                     elif isinstance(pkt, WeatherControl):
                                         self._latest_weather = pkt
+                                    elif isinstance(pkt, ExtendedState):
+                                        self._latest_extended_state = pkt
+                                    elif isinstance(pkt, ForceFeedback):
+                                        self._latest_force_feedback = pkt
+                                    elif isinstance(pkt, Graphics):
+                                        self._latest_graphics = pkt
                                     elif isinstance(pkt, SystemEvent):
                                         self._latest_system_event = pkt
+                                    elif isinstance(pkt, HWControlCommand):
+                                        self._latest_hw_control = pkt
+                                    elif isinstance(pkt, WeatherControlCommand):
+                                        self._latest_weather_control = pkt
 
                                 # Invoke callbacks outside lock
                                 if self.on_packet:
@@ -292,10 +340,35 @@ class IsiMotorClient:
                                 ):
                                     self.on_weather(pkt)
                                 elif (
+                                    isinstance(pkt, ExtendedState)
+                                    and self.on_extended_state
+                                ):
+                                    self.on_extended_state(pkt)
+                                elif (
+                                    isinstance(pkt, ForceFeedback)
+                                    and self.on_force_feedback
+                                ):
+                                    self.on_force_feedback(pkt)
+                                elif (
+                                    isinstance(pkt, Graphics)
+                                    and self.on_graphics
+                                ):
+                                    self.on_graphics(pkt)
+                                elif (
                                     isinstance(pkt, SystemEvent)
                                     and self.on_system_event
                                 ):
                                     self.on_system_event(pkt)
+                                elif (
+                                    isinstance(pkt, HWControlCommand)
+                                    and self.on_hw_control
+                                ):
+                                    self.on_hw_control(pkt)
+                                elif (
+                                    isinstance(pkt, WeatherControlCommand)
+                                    and self.on_weather_control
+                                ):
+                                    self.on_weather_control(pkt)
 
                         except (BlockingIOError, socket.error):
                             break
@@ -333,10 +406,151 @@ class IsiMotorClient:
         with self._lock:
             return self._latest_weather
 
+    def get_latest_extended_state(self) -> Optional[ExtendedState]:
+        """Returns the most recently received ExtendedState frame thread-safely."""
+        with self._lock:
+            return self._latest_extended_state
+
+    def get_latest_force_feedback(self) -> Optional[ForceFeedback]:
+        """Returns the most recently received ForceFeedback frame thread-safely."""
+        with self._lock:
+            return self._latest_force_feedback
+
+    def get_latest_graphics(self) -> Optional[Graphics]:
+        """Returns the most recently received Graphics frame thread-safely."""
+        with self._lock:
+            return self._latest_graphics
+
     def get_latest_system_event(self) -> Optional[SystemEvent]:
         """Returns the most recently received SystemEvent thread-safely."""
         with self._lock:
             return self._latest_system_event
+
+    def get_latest_hw_control(self) -> Optional[HWControlCommand]:
+        """Returns the most recently received HWControlCommand thread-safely."""
+        with self._lock:
+            return self._latest_hw_control
+
+    def get_latest_weather_control(self) -> Optional[WeatherControlCommand]:
+        """Returns the most recently received WeatherControlCommand thread-safely."""
+        with self._lock:
+            return self._latest_weather_control
+
+    def send_hw_control(
+        self,
+        control_name: str,
+        control_value: float = 1.0,
+        duration_ms: int = 50,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+    ) -> bool:
+        """
+        Transmits a hardware / pit menu control command (SIMP Type 100) to the game plugin.
+
+        :param control_name: Control name (e.g. "PitMenuUp", "PitMenuSelect", "TCIncrease", "ABSDecrease").
+        :param control_value: 1.0 = press/activate, 0.0 = release, or analog value.
+        :param duration_ms: Pulse duration in milliseconds (default: 50ms).
+        :param host: Destination IP (defaults to self.inbound_host).
+        :param port: Destination inbound port (defaults to self.inbound_port).
+        """
+        dest_host = host or self.inbound_host
+        dest_port = port or self.inbound_port
+
+        with self._lock:
+            self._inbound_seq += 1
+            seq = self._inbound_seq
+
+        packet = encode_hw_control(
+            control_name=control_name,
+            control_value=control_value,
+            duration_ms=duration_ms,
+            with_header=True,
+            sequence_number=seq,
+        )
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.sendto(packet, (dest_host, dest_port))
+            return True
+        except Exception:
+            return False
+        finally:
+            sock.close()
+
+    def send_pit_action(
+        self,
+        action: Union[PitAction, str],
+        duration_ms: int = 50,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+    ) -> bool:
+        """
+        Convenience helper to send pit menu navigation actions (Up, Down, Prev, Next, Select).
+        """
+        name = action.value if isinstance(action, PitAction) else str(action)
+        return self.send_hw_control(
+            control_name=name,
+            control_value=1.0,
+            duration_ms=duration_ms,
+            host=host,
+            port=port,
+        )
+
+    def send_weather_override(
+        self,
+        ambient_temp: float = 20.0,
+        track_temp: float = 25.0,
+        dark_cloud: float = 0.0,
+        raining: float = 0.0,
+        wind_speed: float = 0.0,
+        wind_direction: float = 0.0,
+        min_path_wetness: float = 0.0,
+        max_path_wetness: float = 0.0,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+    ) -> bool:
+        """
+        Injects dynamic weather and ambient environmental conditions (SIMP Type 101) into the game session.
+
+        :param ambient_temp: Ambient air temperature in °C.
+        :param track_temp: Track surface temperature in °C.
+        :param dark_cloud: Cloudiness / overcast fraction (0.0 to 1.0).
+        :param raining: Rain intensity (0.0 to 1.0).
+        :param wind_speed: Wind speed in m/s.
+        :param wind_direction: Wind direction in radians.
+        :param min_path_wetness: Minimum path wetness (0.0 to 1.0).
+        :param max_path_wetness: Maximum off-line wetness (0.0 to 1.0).
+        :param host: Destination IP (defaults to self.inbound_host).
+        :param port: Destination inbound port (defaults to self.inbound_port).
+        """
+        dest_host = host or self.inbound_host
+        dest_port = port or self.inbound_port
+
+        with self._lock:
+            self._inbound_seq += 1
+            seq = self._inbound_seq
+
+        packet = encode_weather_control(
+            ambient_temp=ambient_temp,
+            track_temp=track_temp,
+            dark_cloud=dark_cloud,
+            raining=raining,
+            wind_speed=wind_speed,
+            wind_direction=wind_direction,
+            min_path_wetness=min_path_wetness,
+            max_path_wetness=max_path_wetness,
+            with_header=True,
+            sequence_number=seq,
+        )
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.sendto(packet, (dest_host, dest_port))
+            return True
+        except Exception:
+            return False
+        finally:
+            sock.close()
 
     @property
     def packet_count(self) -> int:

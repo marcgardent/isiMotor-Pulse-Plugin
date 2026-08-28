@@ -25,6 +25,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 // Windows / isiMotor compatibility macros
 #define __cdecl
@@ -167,6 +168,80 @@ struct WeatherPacket {
     double        windMaxSpeed;              // Wind speed (m/s)
     bool          applyCloudinessInstantly;  // Instant cloud application flag
     uint8_t       pad[3];
+};
+
+struct ExtendedStatePacket {
+    // Physics options (40 bytes)
+    uint8_t       tractionControl;           // 0 (off) - 3 (high)
+    uint8_t       antiLockBrakes;            // 0 (off) - 2 (high)
+    uint8_t       stabilityControl;          // 0 (off) - 2 (high)
+    uint8_t       autoShift;                 // 0 (off), 1 (upshifts), 2 (downshifts), 3 (all)
+    uint8_t       autoClutch;                // 0 (off), 1 (on)
+    uint8_t       invulnerable;              // 0 (off), 1 (on)
+    uint8_t       oppositeLock;              // 0 (off), 1 (on)
+    uint8_t       steeringHelp;              // 0 (off) - 3 (high)
+    uint8_t       brakingHelp;               // 0 (off) - 2 (high)
+    uint8_t       spinRecovery;              // 0 (off), 1 (on)
+    uint8_t       autoPit;                   // 0 (off), 1 (on)
+    uint8_t       autoLift;                  // 0 (off), 1 (on)
+    uint8_t       autoBlip;                  // 0 (off), 1 (on)
+    uint8_t       fuelMult;                  // fuel multiplier (0x-7x)
+    uint8_t       tireMult;                  // tire wear multiplier (0x-7x)
+    uint8_t       mechFail;                  // mechanical failure (0=off, 1=normal, 2=timescaled)
+    uint8_t       allowPitcrewPush;          // 0 (off), 1 (on)
+    uint8_t       repeatShifts;              // accidental repeat shift prevention (0-5)
+    uint8_t       holdClutch;                // 0 (off), 1 (on)
+    uint8_t       autoReverse;               // 0 (off), 1 (on)
+    uint8_t       alternateNeutral;          // 0 (off), 1 (on)
+    uint8_t       aiControl;                 // 0 (player), 1 (AI)
+    uint8_t       pad1[2];
+    float         manualShiftOverrideTime;   // time before auto-shift can resume
+    float         autoShiftOverrideTime;     // time before manual shift can resume
+    float         speedSensitiveSteering;    // 0.0 (off) - 1.0
+    float         steerRatioSpeed;           // speed (m/s) under which lock expands
+    
+    // Accumulated damage tracking (16 bytes)
+    double        maxImpactMagnitude;        // Max collision impact recorded in session
+    double        accumulatedImpactMagnitude; // Cumulative collision damage energy
+
+    // Session status & transitions (12 bytes)
+    bool          inRealtimeFC;              // In realtime cockpit mode
+    bool          sessionStarted;            // Session started flag
+    uint8_t       pad2[2];
+    int32_t       session;                   // Current session index
+    float         currentPitSpeedLimit;      // Pit speed limit m/s
+};
+
+struct ForceFeedbackPacket {
+    double forceValue;                      // Steering shaft torque value
+};
+
+struct GraphicsPacket {
+    TelemVect3 camPos;                      // Camera 3D world position
+    TelemVect3 camOri[3];                   // Camera 3x3 orientation matrix
+    double     ambientRed;                  // Ambient light RGB
+    double     ambientGreen;
+    double     ambientBlue;
+    int32_t    slotId;                      // Slot ID being viewed (-1 if none)
+    int32_t    cameraType;                  // Camera viewpoint type
+};
+
+struct HWControlCommandPacket {
+    char          controlName[32];       // Control name (e.g. "PitMenuUp", "PitMenuSelect", "TCIncrease")
+    double        controlValue;          // 1.0 = press/on, 0.0 = release/off, or analog value
+    uint16_t      durationMs;            // Pulse duration in ms (e.g. 50ms)
+    uint8_t       pad[2];                // Explicit 4-byte struct padding
+};
+
+struct WeatherControlCommandPacket {
+    double        ambientTemp;           // Air temp in °C
+    double        trackTemp;             // Track surface temp in °C
+    double        darkCloud;             // 0.0 to 1.0
+    double        raining;               // 0.0 to 1.0
+    double        windSpeed;             // Wind speed in m/s
+    double        windDirection;         // Wind direction in radians
+    double        minPathWetness;        // 0.0 to 1.0
+    double        maxPathWetness;        // 0.0 to 1.0
 };
 
 #pragma pack(pop)
@@ -497,11 +572,88 @@ void populate_golden_weather(WeatherPacket &w) {
     w.applyCloudinessInstantly = false;
 }
 
+void populate_golden_extended(ExtendedStatePacket &ext) {
+    std::memset(&ext, 0, sizeof(ext));
+    ext.tractionControl = 2;          // Medium
+    ext.antiLockBrakes = 1;           // Low
+    ext.stabilityControl = 0;         // Off
+    ext.autoShift = 0;                // Manual
+    ext.autoClutch = 1;               // On
+    ext.invulnerable = 0;
+    ext.oppositeLock = 0;
+    ext.steeringHelp = 0;
+    ext.brakingHelp = 0;
+    ext.spinRecovery = 0;
+    ext.autoPit = 0;
+    ext.autoLift = 0;
+    ext.autoBlip = 1;                // On
+    ext.fuelMult = 1;
+    ext.tireMult = 2;                // 2x
+    ext.mechFail = 1;                // Normal
+    ext.allowPitcrewPush = 1;
+    ext.repeatShifts = 0;
+    ext.holdClutch = 0;
+    ext.autoReverse = 0;
+    ext.alternateNeutral = 0;
+    ext.aiControl = 0;               // Player
+    ext.pad1[0] = 0; ext.pad1[1] = 0;
+    ext.manualShiftOverrideTime = 0.5f;
+    ext.autoShiftOverrideTime = 0.3f;
+    ext.speedSensitiveSteering = 0.15f;
+    ext.steerRatioSpeed = 25.0f;
+
+    ext.maxImpactMagnitude = 1845.50;
+    ext.accumulatedImpactMagnitude = 3250.75;
+    ext.inRealtimeFC = true;
+    ext.sessionStarted = true;
+    ext.pad2[0] = 0; ext.pad2[1] = 0;
+    ext.session = 10;                // Race
+    ext.currentPitSpeedLimit = 16.6667f; // 60 km/h
+}
+
+void populate_golden_ffb(ForceFeedbackPacket &ffb) {
+    std::memset(&ffb, 0, sizeof(ffb));
+    ffb.forceValue = 0.685;
+}
+
+void populate_golden_graphics(GraphicsPacket &gfx) {
+    std::memset(&gfx, 0, sizeof(gfx));
+    gfx.camPos.Set(-1250.5, 46.8, 3420.2);
+    gfx.camOri[0].Set(1.0, 0.0, 0.0);
+    gfx.camOri[1].Set(0.0, 1.0, 0.0);
+    gfx.camOri[2].Set(0.0, 0.0, 1.0);
+    gfx.ambientRed = 0.85;
+    gfx.ambientGreen = 0.88;
+    gfx.ambientBlue = 0.92;
+    gfx.slotId = 42;
+    gfx.cameraType = 1; // Cockpit
+}
+
 void populate_golden_event(SystemEventPacket &ev, uint8_t type = 1) {
     std::memset(&ev, 0, sizeof(ev));
     ev.magic[0] = 'S'; ev.magic[1] = 'I'; ev.magic[2] = 'M'; ev.magic[3] = 'P';
     ev.packetType = 3;
     ev.eventType = type;
+}
+
+void populate_golden_hw_control(HWControlCommandPacket &hw) {
+    std::memset(&hw, 0, sizeof(hw));
+    std::strncpy(hw.controlName, "PitMenuNext", sizeof(hw.controlName) - 1);
+    hw.controlValue = 1.0;
+    hw.durationMs = 50;
+    hw.pad[0] = 0; hw.pad[1] = 0;
+}
+
+void populate_golden_weather_control(WeatherControlCommandPacket &w) {
+    std::memset(&w, 0, sizeof(w));
+    w.ambientTemp = 24.5;
+    w.trackTemp = 29.8;
+    w.darkCloud = 0.75;
+    w.raining = 0.45;
+    w.windSpeed = 4.2;
+    w.windDirection = 1.5708;
+    w.minPathWetness = 0.2;
+    w.maxPathWetness = 0.8;
 }
 
 // ── JSON & Binary Dumper ──────────────────────────────────────────────────────
@@ -512,6 +664,9 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
                 const std::string &bin_rules_path, const std::string &json_rules_path,
                 const std::string &bin_pit_path, const std::string &json_pit_path,
                 const std::string &bin_weather_path, const std::string &json_weather_path,
+                const std::string &bin_ext_path, const std::string &json_ext_path,
+                const std::string &bin_ffb_path, const std::string &json_ffb_path,
+                const std::string &bin_gfx_path, const std::string &json_gfx_path,
                 const std::string &bin_event_path, const std::string &json_event_path) {
     // 1. Telemetry
     TelemInfoV01 t;
@@ -713,7 +868,65 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
     fj_wp << "}\n";
     fj_wp.close();
 
-    // 7. System Event
+    // 7. Extended State (FR-05)
+    ExtendedStatePacket ext;
+    populate_golden_extended(ext);
+    std::ofstream fb_ext(bin_ext_path, std::ios::binary);
+    fb_ext.write(reinterpret_cast<const char*>(&ext), sizeof(ext));
+    fb_ext.close();
+
+    std::ofstream fj_ext(json_ext_path);
+    fj_ext << std::setprecision(6) << std::fixed;
+    fj_ext << "{\n";
+    fj_ext << "  \"struct_size\": " << sizeof(ext) << ",\n";
+    fj_ext << "  \"traction_control\": " << static_cast<int>(ext.tractionControl) << ",\n";
+    fj_ext << "  \"anti_lock_brakes\": " << static_cast<int>(ext.antiLockBrakes) << ",\n";
+    fj_ext << "  \"auto_clutch\": " << static_cast<int>(ext.autoClutch) << ",\n";
+    fj_ext << "  \"auto_blip\": " << static_cast<int>(ext.autoBlip) << ",\n";
+    fj_ext << "  \"tire_mult\": " << static_cast<int>(ext.tireMult) << ",\n";
+    fj_ext << "  \"max_impact_magnitude\": " << ext.maxImpactMagnitude << ",\n";
+    fj_ext << "  \"accumulated_impact_magnitude\": " << ext.accumulatedImpactMagnitude << ",\n";
+    fj_ext << "  \"in_realtime_fc\": " << (ext.inRealtimeFC ? "true" : "false") << ",\n";
+    fj_ext << "  \"session_started\": " << (ext.sessionStarted ? "true" : "false") << ",\n";
+    fj_ext << "  \"session\": " << ext.session << ",\n";
+    fj_ext << "  \"current_pit_speed_limit\": " << ext.currentPitSpeedLimit << "\n";
+    fj_ext << "}\n";
+    fj_ext.close();
+
+    // 8. Force Feedback (FR-06)
+    ForceFeedbackPacket ffb;
+    populate_golden_ffb(ffb);
+    std::ofstream fb_ffb(bin_ffb_path, std::ios::binary);
+    fb_ffb.write(reinterpret_cast<const char*>(&ffb), sizeof(ffb));
+    fb_ffb.close();
+
+    std::ofstream fj_ffb(json_ffb_path);
+    fj_ffb << std::setprecision(6) << std::fixed;
+    fj_ffb << "{\n";
+    fj_ffb << "  \"struct_size\": " << sizeof(ffb) << ",\n";
+    fj_ffb << "  \"force_value\": " << ffb.forceValue << "\n";
+    fj_ffb << "}\n";
+    fj_ffb.close();
+
+    // 9. Graphics (FR-06)
+    GraphicsPacket gfx;
+    populate_golden_graphics(gfx);
+    std::ofstream fb_gfx(bin_gfx_path, std::ios::binary);
+    fb_gfx.write(reinterpret_cast<const char*>(&gfx), sizeof(gfx));
+    fb_gfx.close();
+
+    std::ofstream fj_gfx(json_gfx_path);
+    fj_gfx << std::setprecision(6) << std::fixed;
+    fj_gfx << "{\n";
+    fj_gfx << "  \"struct_size\": " << sizeof(gfx) << ",\n";
+    fj_gfx << "  \"cam_pos\": [" << gfx.camPos.x << ", " << gfx.camPos.y << ", " << gfx.camPos.z << "],\n";
+    fj_gfx << "  \"ambient_rgb\": [" << gfx.ambientRed << ", " << gfx.ambientGreen << ", " << gfx.ambientBlue << "],\n";
+    fj_gfx << "  \"slot_id\": " << gfx.slotId << ",\n";
+    fj_gfx << "  \"camera_type\": " << gfx.cameraType << "\n";
+    fj_gfx << "}\n";
+    fj_gfx.close();
+
+    // 10. System Event
     SystemEventPacket ev;
     populate_golden_event(ev, 1);
     std::ofstream fb_e(bin_event_path, std::ios::binary);
@@ -727,6 +940,49 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
     fj_e << "  \"name\": \"EnterRealtime\"\n";
     fj_e << "}\n";
     fj_e.close();
+
+    // 11. Hardware Control Inbound (FR-07, Type 100)
+    HWControlCommandPacket hw;
+    populate_golden_hw_control(hw);
+    std::string bin_hw_path = bin_event_path.substr(0, bin_event_path.find_last_of('/')) + "/hw_control_golden.bin";
+    std::string json_hw_path = json_event_path.substr(0, json_event_path.find_last_of('/')) + "/hw_control_golden.json";
+    std::ofstream fb_hw(bin_hw_path, std::ios::binary);
+    fb_hw.write(reinterpret_cast<const char*>(&hw), sizeof(hw));
+    fb_hw.close();
+
+    std::ofstream fj_hw(json_hw_path);
+    fj_hw << std::setprecision(6) << std::fixed;
+    fj_hw << "{\n";
+    fj_hw << "  \"struct_size\": " << sizeof(hw) << ",\n";
+    fj_hw << "  \"control_name\": \"" << hw.controlName << "\",\n";
+    fj_hw << "  \"control_value\": " << hw.controlValue << ",\n";
+    fj_hw << "  \"duration_ms\": " << hw.durationMs << "\n";
+    fj_hw << "}\n";
+    fj_hw.close();
+
+    // 12. Weather Control Inbound (FR-07, Type 101)
+    WeatherControlCommandPacket wc;
+    populate_golden_weather_control(wc);
+    std::string bin_wc_path = bin_event_path.substr(0, bin_event_path.find_last_of('/')) + "/weather_control_golden.bin";
+    std::string json_wc_path = json_event_path.substr(0, json_event_path.find_last_of('/')) + "/weather_control_golden.json";
+    std::ofstream fb_wc(bin_wc_path, std::ios::binary);
+    fb_wc.write(reinterpret_cast<const char*>(&wc), sizeof(wc));
+    fb_wc.close();
+
+    std::ofstream fj_wc(json_wc_path);
+    fj_wc << std::setprecision(6) << std::fixed;
+    fj_wc << "{\n";
+    fj_wc << "  \"struct_size\": " << sizeof(wc) << ",\n";
+    fj_wc << "  \"ambient_temp\": " << wc.ambientTemp << ",\n";
+    fj_wc << "  \"track_temp\": " << wc.trackTemp << ",\n";
+    fj_wc << "  \"dark_cloud\": " << wc.darkCloud << ",\n";
+    fj_wc << "  \"raining\": " << wc.raining << ",\n";
+    fj_wc << "  \"wind_speed\": " << wc.windSpeed << ",\n";
+    fj_wc << "  \"wind_direction\": " << wc.windDirection << ",\n";
+    fj_wc << "  \"min_path_wetness\": " << wc.minPathWetness << ",\n";
+    fj_wc << "  \"max_path_wetness\": " << wc.maxPathWetness << "\n";
+    fj_wc << "}\n";
+    fj_wc.close();
 }
 
 // ── Live UDP Server Mock ──────────────────────────────────────────────────────
@@ -777,6 +1033,20 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
     dest.sin_port = htons(port);
     inet_pton(AF_INET, "127.0.0.1", &dest.sin_addr);
 
+    // Inbound Socket for FR-07 Bi-Directional Input & Control
+    int inbound_port = port + 1;
+    int inbound_sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (inbound_sock >= 0) {
+        int reuse = 1;
+        setsockopt(inbound_sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+        fcntl(inbound_sock, F_SETFL, O_NONBLOCK);
+        sockaddr_in in_addr{};
+        in_addr.sin_family = AF_INET;
+        in_addr.sin_port = htons(inbound_port);
+        in_addr.sin_addr.s_addr = INADDR_ANY;
+        bind(inbound_sock, reinterpret_cast<sockaddr*>(&in_addr), sizeof(in_addr));
+    }
+
     TelemInfoV01 telem;
     populate_golden_telemetry(telem);
 
@@ -805,6 +1075,15 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
     WeatherPacket weather;
     populate_golden_weather(weather);
 
+    ExtendedStatePacket ext_state;
+    populate_golden_extended(ext_state);
+
+    ForceFeedbackPacket ffb;
+    populate_golden_ffb(ffb);
+
+    GraphicsPacket gfx;
+    populate_golden_graphics(gfx);
+
     SystemEventPacket ev;
     populate_golden_event(ev, 1);
 
@@ -812,6 +1091,9 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
     unsigned int rules_seq = 0;
     unsigned int pit_seq = 0;
     unsigned int weather_seq = 0;
+    unsigned int ext_seq = 0;
+    unsigned int ffb_seq = 0;
+    unsigned int gfx_seq = 0;
 
     // Send initial system event
     sendto(sock, reinterpret_cast<const char*>(&ev), sizeof(ev), 0,
@@ -821,16 +1103,55 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
     int scoring_divider = std::max(1, hz / 5);    // 5Hz scoring
     int rules_divider = std::max(1, hz / 3);      // 3Hz track rules
     int weather_divider = std::max(1, hz / 1);    // 1Hz weather
+    int ext_divider = std::max(1, hz / 5);        // 5Hz extended state
+    int gfx_divider = std::max(1, hz / 60);       // 60Hz graphics
     auto frame_delay = std::chrono::microseconds(1000000 / hz);
 
-    std::cout << "[C++ Mock Host] Streaming Phase 2 UDP packets to 127.0.0.1:" << port
-              << " @ " << hz << "Hz for " << duration_sec << "s..." << std::endl;
+    std::cout << "[C++ Mock Host] Streaming UDP packets to 127.0.0.1:" << port
+              << " (Inbound listening on :" << inbound_port << ") @ "
+              << hz << "Hz for " << duration_sec << "s..." << std::endl;
 
     for (int frame = 0; frame < total_frames; ++frame) {
         double sim_time = frame * (1.0 / hz);
         telem.mElapsedTime = 125.0 + sim_time;
         telem.mEngineRPM = 7500.0 + std::sin(sim_time * 5.0) * 1200.0;
         telem.mSpeedLimiter = (frame % 200 < 50) ? 1 : 0;
+
+        // Poll inbound commands (FR-07)
+        if (inbound_sock >= 0) {
+            char in_buf[512];
+            sockaddr_in from_addr{};
+            socklen_t from_len = sizeof(from_addr);
+            while (true) {
+                int bytes = recvfrom(inbound_sock, in_buf, sizeof(in_buf), 0,
+                                     reinterpret_cast<sockaddr*>(&from_addr), &from_len);
+                if (bytes < static_cast<int>(sizeof(RawUdpHeader))) break;
+
+                const RawUdpHeader* in_hdr = reinterpret_cast<const RawUdpHeader*>(in_buf);
+                if (std::memcmp(in_hdr->magic, "SIMP", 4) != 0) continue;
+
+                const char* in_payload = in_buf + sizeof(RawUdpHeader);
+                size_t in_size = static_cast<size_t>(bytes - sizeof(RawUdpHeader));
+
+                if (in_hdr->packetType == 100 && in_size >= sizeof(HWControlCommandPacket)) {
+                    const HWControlCommandPacket* cmd = reinterpret_cast<const HWControlCommandPacket*>(in_payload);
+                    std::cout << "[C++ Mock Host] Received HW Control Command: " << cmd->controlName
+                              << " (val=" << cmd->controlValue << ", dur=" << cmd->durationMs << "ms)" << std::endl;
+                    if (std::strcmp(cmd->controlName, "PitMenuDown") == 0) {
+                        pit_menu.choiceIndex = (pit_menu.choiceIndex + 1) % pit_menu.numChoices;
+                    }
+                } else if (in_hdr->packetType == 101 && in_size >= sizeof(WeatherControlCommandPacket)) {
+                    const WeatherControlCommandPacket* cmd = reinterpret_cast<const WeatherControlCommandPacket*>(in_payload);
+                    std::cout << "[C++ Mock Host] Received Weather Control Command: Temp=" << cmd->ambientTemp
+                              << "C, Rain=" << cmd->raining << std::endl;
+                    weather.ambientTempK = cmd->ambientTemp + 273.15;
+                    weather.raining[1][1] = cmd->raining;
+                    weather.cloudiness = cmd->darkCloud;
+                    weather.windMaxSpeed = cmd->windSpeed;
+                    send_sliced_udp_mock(sock, dest, 7, 0, &weather, sizeof(weather), telem.mElapsedTime, weather_seq);
+                }
+            }
+        }
 
         // 1. Send telemetry (1888 bytes)
         sendto(sock, reinterpret_cast<const char*>(&telem), sizeof(telem), 0,
@@ -839,7 +1160,16 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
         // 2. Send PitMenu (Type 6 @ 100Hz)
         send_sliced_udp_mock(sock, dest, 6, 0, &pit_menu, sizeof(pit_menu), 0.0, pit_seq);
 
-        // 3. Send Scoring (Compact + Full Sliced @ 5Hz)
+        // 3. Send Force Feedback (Type 9 @ high frequency up to 400Hz)
+        ffb.forceValue = 0.65 + 0.3 * std::sin(sim_time * 25.0);
+        send_sliced_udp_mock(sock, dest, 9, 0, &ffb, sizeof(ffb), 0.0, ffb_seq);
+
+        // 4. Send Graphics (Type 10 @ 60Hz)
+        if (frame % gfx_divider == 0) {
+            send_sliced_udp_mock(sock, dest, 10, static_cast<unsigned short>(gfx.slotId), &gfx, sizeof(gfx), 0.0, gfx_seq);
+        }
+
+        // 5. Send Scoring (Compact + Full Sliced @ 5Hz)
         if (frame % scoring_divider == 0) {
             scoring.currentET = 1250.0 + sim_time;
             sendto(sock, reinterpret_cast<const char*>(&scoring), sizeof(scoring), 0,
@@ -851,7 +1181,7 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
                                 full_scoring_buf.data(), full_scoring_buf.size(), full_sess.currentET, full_scoring_seq);
         }
 
-        // 4. Send TrackRules (Type 5 Sliced @ 3Hz)
+        // 6. Send TrackRules (Type 5 Sliced @ 3Hz)
         if (frame % rules_divider == 0) {
             rules_sess.currentET = 1250.0 + sim_time;
             std::memcpy(rules_buf.data(), &rules_sess, sizeof(rules_sess));
@@ -859,7 +1189,13 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
                                 rules_buf.data(), rules_buf.size(), rules_sess.currentET, rules_seq);
         }
 
-        // 5. Send Weather (Type 7 @ 1Hz)
+        // 7. Send Extended State (Type 8 @ 5Hz)
+        if (frame % ext_divider == 0) {
+            ext_state.accumulatedImpactMagnitude = 3250.75 + sim_time * 10.0;
+            send_sliced_udp_mock(sock, dest, 8, 0, &ext_state, sizeof(ext_state), telem.mElapsedTime, ext_seq);
+        }
+
+        // 8. Send Weather (Type 7 @ 1Hz)
         if (frame % weather_divider == 0) {
             weather.et = 1250.0 + sim_time;
             send_sliced_udp_mock(sock, dest, 7, 0, &weather, sizeof(weather), weather.et, weather_seq);
@@ -868,6 +1204,7 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
         std::this_thread::sleep_for(frame_delay);
     }
 
+    if (inbound_sock >= 0) close(inbound_sock);
     close(sock);
     std::cout << "[C++ Mock Host] Stream completed (" << total_frames << " frames sent)." << std::endl;
 }
@@ -894,7 +1231,12 @@ int main(int argc, char** argv) {
         std::cout << "TrackRulesParticipantPacket: " << sizeof(TrackRulesParticipantPacket) << " bytes" << std::endl;
         std::cout << "PitMenuPacket: " << sizeof(PitMenuPacket) << " bytes" << std::endl;
         std::cout << "WeatherPacket: " << sizeof(WeatherPacket) << " bytes" << std::endl;
+        std::cout << "ExtendedStatePacket: " << sizeof(ExtendedStatePacket) << " bytes" << std::endl;
+        std::cout << "ForceFeedbackPacket: " << sizeof(ForceFeedbackPacket) << " bytes" << std::endl;
+        std::cout << "GraphicsPacket: " << sizeof(GraphicsPacket) << " bytes" << std::endl;
         std::cout << "SystemEventPacket: " << sizeof(SystemEventPacket) << " bytes" << std::endl;
+        std::cout << "HWControlCommandPacket: " << sizeof(HWControlCommandPacket) << " bytes" << std::endl;
+        std::cout << "WeatherControlCommandPacket: " << sizeof(WeatherControlCommandPacket) << " bytes" << std::endl;
         return 0;
     }
 
@@ -907,6 +1249,9 @@ int main(int argc, char** argv) {
             dir + "/track_rules_golden.bin", dir + "/track_rules_golden.json",
             dir + "/pit_menu_golden.bin", dir + "/pit_menu_golden.json",
             dir + "/weather_golden.bin", dir + "/weather_golden.json",
+            dir + "/extended_golden.bin", dir + "/extended_golden.json",
+            dir + "/ffb_golden.bin", dir + "/ffb_golden.json",
+            dir + "/graphics_golden.bin", dir + "/graphics_golden.json",
             dir + "/event_golden.bin", dir + "/event_golden.json"
         );
         std::cout << "[C++ Mock Host] Golden datasets successfully dumped to " << dir << std::endl;

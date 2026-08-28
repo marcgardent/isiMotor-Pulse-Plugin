@@ -1,4 +1,4 @@
-.PHONY: help all build cross benchmark benchmark-mock info clean
+.PHONY: help all build cross test benchmark install uninstall status info clean
 
 BUILD_DIR = build
 BIN_DIR   = bin
@@ -17,8 +17,10 @@ help:
 	@echo "  make cross          - Cross-compile DLL using MinGW-w64 (on Linux)"
 	@echo "  make build          - Native compile DLL (on Windows MSVC / MinGW)"
 	@echo "  make test           - Run full C++ mock & golden dataset integration tests"
-	@echo "  make benchmark      - Run live Textual UDP packet sniffer & frequency benchmark"
-	@echo "  make benchmark-mock - Run benchmark in simulation mode (with mock telemetry)"
+	@echo "  make benchmark      - Run live Textual UDP packet sniffer & protocol inspector"
+	@echo "  make install        - Install plugin DLL into Le Mans Ultimate / rFactor 2"
+	@echo "  make uninstall      - Remove plugin DLL from detected game installations"
+	@echo "  make status         - Display detected game installations & plugin status"
 	@echo "  make info           - Display UDP packet structures & memory layout"
 	@echo "  make clean          - Remove build and bin directories"
 	@echo "=================================================================="
@@ -45,13 +47,18 @@ build:
 	cmake --build $(BUILD_DIR) --config Release
 	@echo "==> Build complete: $(BUILD_DIR)/isiMotor_RawUDP.dll"
 
-benchmark:
-	@echo "==> Launching Rich telemetry sniffer on UDP port 5000..."
-	@$(PYTHON) benchmark/sniffer.py
+install:
+	@$(PYTHON) scripts/install_plugin.py
 
-benchmark-mock:
-	@echo "==> Launching Rich telemetry sniffer with mock data generator..."
-	@$(PYTHON) benchmark/sniffer.py --mock
+uninstall:
+	@$(PYTHON) scripts/install_plugin.py --uninstall
+
+status:
+	@$(PYTHON) scripts/install_plugin.py --status
+
+benchmark:
+	@echo "==> Launching Textual telemetry sniffer on UDP port 5000..."
+	@$(PYTHON) benchmark/sniffer.py
 
 info:
 	@echo "=================================================================="

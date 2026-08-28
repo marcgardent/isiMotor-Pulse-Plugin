@@ -44,7 +44,14 @@ from isimotor_rawudp_client.models import (
     TrackRulesSession,
     PitMenu,
     WeatherControl,
+    PhysicsOptions,
+    ExtendedState,
+    ForceFeedback,
+    Graphics,
     SystemEvent,
+    PitAction,
+    HWControlCommand,
+    WeatherControlCommand,
 )
 from isimotor_rawudp_client.decoder import (
     decode_telemetry,
@@ -53,7 +60,14 @@ from isimotor_rawudp_client.decoder import (
     decode_track_rules,
     decode_pit_menu,
     decode_weather,
+    decode_extended_state,
+    decode_force_feedback,
+    decode_graphics,
     decode_system_event,
+    decode_hw_control,
+    decode_weather_control,
+    encode_hw_control,
+    encode_weather_control,
     decode_header,
     HEADER_SIZE,
 )
@@ -66,16 +80,25 @@ PKT_FULL_SCORING    = "FullScoring (SIMP v4 Sliced)"
 PKT_TRACK_RULES     = "TrackRules (SIMP v5 Sliced)"
 PKT_PIT_MENU        = "PitMenu (SIMP v6)"
 PKT_WEATHER         = "Weather (SIMP v7)"
+PKT_EXTENDED_STATE  = "ExtendedState (SIMP v8)"
+PKT_FORCE_FEEDBACK  = "ForceFeedback (SIMP v9 @ 400Hz)"
+PKT_GRAPHICS        = "Graphics (SIMP v10 @ 60Hz)"
 PKT_SYSTEM_EVENT    = "SystemEvent (SIMP v3)"
+PKT_HW_CONTROL      = "HWControl (SIMP v100)"
+PKT_WEATHER_CONTROL = "WeatherControl (SIMP v101)"
 PKT_FOREIGN         = "Foreign / Unknown"
 
-TAB_TELEM   = "tab-telem"
-TAB_SCORING = "tab-scoring"
-TAB_RULES   = "tab-rules"
-TAB_PIT     = "tab-pit"
-TAB_WEATHER = "tab-weather"
-TAB_EVENT   = "tab-event"
-TAB_STATS   = "tab-stats"
+TAB_TELEM    = "tab-telem"
+TAB_SCORING  = "tab-scoring"
+TAB_RULES    = "tab-rules"
+TAB_PIT      = "tab-pit"
+TAB_WEATHER  = "tab-weather"
+TAB_FFB      = "tab-ffb"
+TAB_GRAPHICS = "tab-graphics"
+TAB_PHYSICS  = "tab-physics"
+TAB_EVENT    = "tab-event"
+TAB_INBOUND  = "tab-inbound"
+TAB_STATS    = "tab-stats"
 
 
 @dataclass
@@ -160,7 +183,12 @@ class TelemetryEngine:
             PKT_TRACK_RULES: PacketStats(PKT_TRACK_RULES, "Sliced SIMP", "Multi-KB"),
             PKT_PIT_MENU: PacketStats(PKT_PIT_MENU, "Binary SIMP", "76 B"),
             PKT_WEATHER: PacketStats(PKT_WEATHER, "Binary SIMP", "108 B"),
+            PKT_EXTENDED_STATE: PacketStats(PKT_EXTENDED_STATE, "Binary SIMP", "68 B"),
+            PKT_FORCE_FEEDBACK: PacketStats(PKT_FORCE_FEEDBACK, "Binary SIMP", "8 B"),
+            PKT_GRAPHICS: PacketStats(PKT_GRAPHICS, "Binary SIMP", "128 B"),
             PKT_SYSTEM_EVENT: PacketStats(PKT_SYSTEM_EVENT, "Binary SIMP", "6 B"),
+            PKT_HW_CONTROL: PacketStats(PKT_HW_CONTROL, "Binary SIMP", "44 B"),
+            PKT_WEATHER_CONTROL: PacketStats(PKT_WEATHER_CONTROL, "Binary SIMP", "64 B"),
             PKT_FOREIGN: PacketStats(PKT_FOREIGN, "Raw/Other", "Variable"),
         }
 
@@ -170,10 +198,69 @@ class TelemetryEngine:
         self.latest_track_rules: Optional[TrackRulesSession] = None
         self.latest_pit_menu: Optional[PitMenu] = None
         self.latest_weather: Optional[WeatherControl] = None
+        self.latest_extended_state: Optional[ExtendedState] = None
+        self.latest_force_feedback: Optional[ForceFeedback] = None
+        self.latest_graphics: Optional[Graphics] = None
         self.latest_event: Optional[SystemEvent] = None
         self.latest_event_time: float = 0.0
+        self.latest_hw_control: Optional[HWControlCommand] = None
+        self.latest_weather_control: Optional[WeatherControlCommand] = None
+        self.inbound_target_host: str = "127.0.0.1"
+        self.inbound_target_port: int = 5001
+        self.last_inbound_cmd_sent: str = "None"
+        self.last_inbound_cmd_time: float = 0.0
+        self._inbound_seq: int = 0
         self.reassembly_buffers: Dict[tuple, dict] = {}
         self.last_cleanup_time: float = 0.0
+
+    def send_hw_control(self, control_name: str, control_value: float = 1.0, duration_ms: int = 50) -> bool:
+        """Sends an inbound Type 100 control packet."""
+        self._inbound_seq += 1
+        pkt = encode_hw_control(
+            control_name=control_name,
+            control_value=control_value,
+            duration_ms=duration_ms,
+            with_header=True,
+            sequence_number=self._inbound_seq,
+        )
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.sendto(pkt, (self.inbound_target_host, self.inbound_target_port))
+            self.last_inbound_cmd_sent = f"{control_name} (val={control_value}, dur={duration_ms}ms)"
+            self.last_inbound_cmd_time = time.time()
+            return True
+        except Exception as e:
+            self.last_inbound_cmd_sent = f"Error: {e}"
+            return False
+        finally:
+            sock.close()
+
+    def send_weather_override(self, ambient_temp: float = 20.0, raining: float = 0.0) -> bool:
+        """Sends an inbound Type 101 weather control packet."""
+        self._inbound_seq += 1
+        pkt = encode_weather_control(
+            ambient_temp=ambient_temp,
+            track_temp=ambient_temp + 5.0,
+            dark_cloud=min(1.0, raining * 1.2),
+            raining=raining,
+            wind_speed=2.5,
+            wind_direction=0.0,
+            min_path_wetness=raining * 0.8,
+            max_path_wetness=raining,
+            with_header=True,
+            sequence_number=self._inbound_seq,
+        )
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.sendto(pkt, (self.inbound_target_host, self.inbound_target_port))
+            self.last_inbound_cmd_sent = f"WeatherOverride (Temp={ambient_temp:.1f}°C, Rain={raining*100:.0f}%)"
+            self.last_inbound_cmd_time = time.time()
+            return True
+        except Exception as e:
+            self.last_inbound_cmd_sent = f"Error: {e}"
+            return False
+        finally:
+            sock.close()
 
     def start(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -296,6 +383,25 @@ class TelemetryEngine:
                     w = decode_weather(payload)
                     if w:
                         self.latest_weather = w
+                elif hdr.packet_type == 8:
+                    pkt_type = PKT_EXTENDED_STATE
+                    ext = decode_extended_state(payload)
+                    if ext:
+                        self.latest_extended_state = ext
+                elif hdr.packet_type == 9:
+                    pkt_type = PKT_FORCE_FEEDBACK
+                    ffb = decode_force_feedback(payload)
+                    if ffb:
+                        self.latest_force_feedback = ffb
+                elif hdr.packet_type == 10:
+                    pkt_type = PKT_GRAPHICS
+                    gfx = decode_graphics(payload)
+                    if gfx:
+                        self.latest_graphics = gfx
+                elif hdr.packet_type == 100:
+                    pkt_type = PKT_HW_CONTROL
+                elif hdr.packet_type == 101:
+                    pkt_type = PKT_WEATHER_CONTROL
 
         # 2. Legacy Raw Telemetry
         elif size >= 1888:
@@ -371,7 +477,7 @@ def extract_telemetry_rows(t: Optional[TelemInfo], st: Optional[PacketStats] = N
 
     if t is None:
         rows.append(
-            ("status", "Waiting for packets", "[dim]No TelemInfo packet received yet[/dim]", "Start game or enable mock simulation mode")
+            ("status", "Waiting for packets", "[dim]No TelemInfo packet received yet[/dim]", "Start game or launch native isi_mock_host")
         )
         return rows
 
@@ -808,6 +914,174 @@ def extract_weather_rows(
     return rows
 
 
+def extract_ffb_rows(
+    ffb: Optional[ForceFeedback], st: Optional[PacketStats] = None
+) -> List[Tuple[str, Any, str, str]]:
+    """Returns list of (key, raw_value, formatted_string, description) for ForceFeedback packet."""
+    rows = []
+
+    if st is not None:
+        freq_str = f"[bold #e3b341]{st.current_freq:5.1f} Hz[/]"
+        delay_str = f"{st.avg_interval_ms:4.2f} ms" if st.intervals else "-"
+        jitter_str = f"±{st.jitter_ms:3.2f} ms" if st.intervals else "-"
+        rows.extend([
+            ("_channel.frequency_hz", st.current_freq, freq_str, "Real-time reception frequency of Ultra-High FFB stream (up to 400Hz)"),
+            ("_channel.packets_count", st.count, f"{st.count:,}", "Total ForceFeedback packets received"),
+            ("_channel.avg_delay_ms", st.avg_interval_ms, delay_str, "Average arrival interval (target: 2.5ms @ 400Hz)"),
+            ("_channel.jitter_ms", st.jitter_ms, jitter_str, "FFB packet arrival jitter variation"),
+            ("_channel.bandwidth_kb_s", st.bandwidth_kb_s, f"{st.bandwidth_kb_s:5.1f} KB/s", "Instantaneous bandwidth for FFB stream"),
+        ])
+
+    if ffb is None:
+        rows.append(
+            ("status", "Waiting for packets", "[dim]No ForceFeedback packet received yet[/dim]", "Direct steering shaft torque from physics engine")
+        )
+        return rows
+
+    # Visual force gauge
+    pct = ffb.percentage
+    abs_pct = abs(pct)
+    bars_total = 20
+    filled = int((abs_pct / 100.0) * bars_total)
+    filled = min(bars_total, max(0, filled))
+    bar_color = "#f85149" if abs_pct >= 98.0 else ("#e3b341" if abs_pct >= 85.0 else "#3fb950")
+    gauge = f"[{bar_color}]{'█' * filled}[/][#30363d]{'░' * (bars_total - filled)}[/]"
+
+    rows.extend([
+        ("ffb.force_value", ffb.force_value, f"[bold #58a6ff]{ffb.force_value:+.4f}[/]", "Normalized steering shaft torque (-1.0 to +1.0)"),
+        ("ffb.percentage", ffb.percentage, f"[bold {bar_color}]{pct:+6.1f} %[/] {gauge}", "Steering shaft torque percentage with real-time bar gauge"),
+        ("ffb.is_clipping", abs_pct >= 99.0, format_value(abs_pct >= 99.0), "True if force exceeds 99% causing direct-drive motor clipping"),
+    ])
+
+    return rows
+
+
+def extract_graphics_rows(
+    gfx: Optional[Graphics], st: Optional[PacketStats] = None
+) -> List[Tuple[str, Any, str, str]]:
+    """Returns list of (key, raw_value, formatted_string, description) for Graphics packet."""
+    rows = []
+
+    if st is not None:
+        freq_str = f"[bold #e3b341]{st.current_freq:5.1f} Hz[/]"
+        delay_str = f"{st.avg_interval_ms:4.1f} ms" if st.intervals else "-"
+        rows.extend([
+            ("_channel.frequency_hz", st.current_freq, freq_str, "Real-time reception frequency of Graphics stream (60-100Hz)"),
+            ("_channel.packets_count", st.count, f"{st.count:,}", "Total Graphics packets received"),
+            ("_channel.avg_delay_ms", st.avg_interval_ms, delay_str, "Average arrival delay between Graphics packets"),
+            ("_channel.bandwidth_kb_s", st.bandwidth_kb_s, f"{st.bandwidth_kb_s:5.1f} KB/s", "Instantaneous bandwidth for Graphics stream"),
+        ])
+
+    if gfx is None:
+        rows.append(
+            ("status", "Waiting for packets", "[dim]No Graphics packet received yet[/dim]", "Camera 3D position, orientation & ambient lighting")
+        )
+        return rows
+
+    rows.extend([
+        ("camera.type", gfx.camera_type_str, f"[bold #58a6ff]{gfx.camera_type_str}[/] [dim](id: {gfx.camera_type})[/dim]", "Active camera perspective viewpoint"),
+        ("camera.is_cockpit", gfx.is_cockpit_view, format_value(gfx.is_cockpit_view), "True if active camera is inside driver cockpit"),
+        ("camera.slot_id", gfx.slot_id, format_value(gfx.slot_id), "Vehicle slot index currently tracked/viewed by camera (-1 = none)"),
+        ("camera.pos", gfx.cam_pos.as_tuple(), f"X:{gfx.cam_pos.x:8.2f}  Y:{gfx.cam_pos.y:8.2f}  Z:{gfx.cam_pos.z:8.2f} m", "World 3D coordinates of camera viewpoint"),
+        ("ambient.rgb", gfx.ambient_rgb, f"R:{gfx.ambient_rgb[0]:.3f}  G:{gfx.ambient_rgb[1]:.3f}  B:{gfx.ambient_rgb[2]:.3f}", "Track ambient environment light RGB intensity"),
+        ("camera.ori_matrix[0]", gfx.cam_ori[0].as_tuple(), format_value(gfx.cam_ori[0].as_tuple()), "Camera orientation matrix Row 0 (Pitch/Yaw/Roll)"),
+        ("camera.ori_matrix[1]", gfx.cam_ori[1].as_tuple(), format_value(gfx.cam_ori[1].as_tuple()), "Camera orientation matrix Row 1"),
+        ("camera.ori_matrix[2]", gfx.cam_ori[2].as_tuple(), format_value(gfx.cam_ori[2].as_tuple()), "Camera orientation matrix Row 2"),
+    ])
+
+    return rows
+
+
+def extract_physics_rows(
+    ext: Optional[ExtendedState], st: Optional[PacketStats] = None
+) -> List[Tuple[str, Any, str, str]]:
+    """Returns list of (key, raw_value, formatted_string, description) for ExtendedState packet."""
+    rows = []
+
+    if st is not None:
+        freq_str = f"[bold #e3b341]{st.current_freq:5.1f} Hz[/]"
+        delay_str = f"{st.avg_interval_ms:4.1f} ms" if st.intervals else "-"
+        rows.extend([
+            ("_channel.frequency_hz", st.current_freq, freq_str, "Real-time reception frequency of ExtendedState stream (5Hz)"),
+            ("_channel.packets_count", st.count, f"{st.count:,}", "Total ExtendedState packets received"),
+            ("_channel.avg_delay_ms", st.avg_interval_ms, delay_str, "Average arrival delay between ExtendedState packets"),
+            ("_channel.bandwidth_kb_s", st.bandwidth_kb_s, f"{st.bandwidth_kb_s:5.1f} KB/s", "Instantaneous bandwidth for ExtendedState stream"),
+        ])
+
+    if ext is None:
+        rows.append(
+            ("status", "Waiting for packets", "[dim]No ExtendedState packet received yet[/dim]", "Driving aids, multipliers & accumulated impact damage")
+        )
+        return rows
+
+    p = ext.physics
+    rows.extend([
+        # Driving Aids
+        ("physics.traction_control", p.traction_control_str, f"[bold #58a6ff]{p.traction_control_str}[/] [dim]({p.traction_control})[/dim]", "Traction Control assistance level (0=Off, 1=Low, 2=Med, 3=High)"),
+        ("physics.anti_lock_brakes", p.anti_lock_brakes_str, f"[bold #58a6ff]{p.anti_lock_brakes_str}[/] [dim]({p.anti_lock_brakes})[/dim]", "ABS assistance level (0=Off, 1=Low, 2=High)"),
+        ("physics.stability_control", p.stability_control_str, f"[bold #58a6ff]{p.stability_control_str}[/] [dim]({p.stability_control})[/dim]", "Electronic Stability Control (ESC) level"),
+        ("physics.auto_shift", p.auto_shift_str, f"[bold #58a6ff]{p.auto_shift_str}[/] [dim]({p.auto_shift})[/dim]", "Automatic transmission shifting mode"),
+        ("physics.auto_clutch", bool(p.auto_clutch), format_value(bool(p.auto_clutch)), "Automatic clutch aid enabled"),
+        ("physics.auto_blip", bool(p.auto_blip), format_value(bool(p.auto_blip)), "Throttle blip on downshift aid"),
+        ("physics.auto_lift", bool(p.auto_lift), format_value(bool(p.auto_lift)), "Throttle lift on upshift aid"),
+        ("physics.opposite_lock", bool(p.opposite_lock), format_value(bool(p.opposite_lock)), "Counter-steering / opposite lock aid"),
+        ("physics.steering_help", p.steering_help, format_value(p.steering_help), "Steering help assist (0-3)"),
+        ("physics.braking_help", p.braking_help, format_value(p.braking_help), "Braking help assist (0-2)"),
+        ("physics.spin_recovery", bool(p.spin_recovery), format_value(bool(p.spin_recovery)), "Spin recovery assist"),
+        ("physics.auto_pit", bool(p.auto_pit), format_value(bool(p.auto_pit)), "Auto pit drive / speed control aid"),
+        ("physics.invulnerable", bool(p.invulnerable), format_value(bool(p.invulnerable)), "Invulnerability / no damage cheat active"),
+        ("physics.ai_control", bool(p.ai_control), format_value(bool(p.ai_control)), "AI driving active (0=Human player, 1=AI takeover)"),
+
+        # Multipliers
+        ("physics.fuel_mult", p.fuel_mult, f"{p.fuel_mult}x", "Fuel consumption multiplier rate"),
+        ("physics.tire_mult", p.tire_mult, f"{p.tire_mult}x", "Tire wear degradation rate multiplier"),
+        ("physics.mech_fail", p.mech_fail, format_value(p.mech_fail), "Mechanical failures mode (0=Off, 1=Normal, 2=Time-scaled)"),
+
+        # Steering & Controls Sensitivity
+        ("physics.speed_sensitive_steering", p.speed_sensitive_steering, format_value(p.speed_sensitive_steering), "Speed-sensitive steering attenuation (0.0 to 1.0)"),
+        ("physics.steer_ratio_speed", p.steer_ratio_speed, f"{p.steer_ratio_speed:.1f} m/s", "Speed below which steering lock expands"),
+        ("physics.manual_shift_override_time", p.manual_shift_override_time, f"{p.manual_shift_override_time:.2f} s", "Override timeout before auto-shift can resume"),
+
+        # Damage Tracking
+        ("damage.max_impact_magnitude", ext.max_impact_magnitude, f"[bold {'#f85149' if ext.max_impact_magnitude > 5000 else '#e3b341'}]{ext.max_impact_magnitude:,.1f} N[/]", "Peak collision impact force recorded in current session"),
+        ("damage.accumulated_impact_magnitude", ext.accumulated_impact_magnitude, f"[bold {'#f85149' if ext.accumulated_impact_magnitude > 10000 else '#58a6ff'}]{ext.accumulated_impact_magnitude:,.1f} N·s[/]", "Cumulative crash impact damage energy"),
+
+        # Session Status
+        ("session.in_realtime_fc", ext.in_realtime_fc, format_value(ext.in_realtime_fc), "Real-time cockpit driving mode flag"),
+        ("session.session_started", ext.session_started, format_value(ext.session_started), "Session started flag"),
+        ("session.session_index", ext.session, format_value(ext.session), "Session type index"),
+        ("session.pit_speed_limit", ext.current_pit_speed_limit_kmh, f"[bold #e3b341]{ext.current_pit_speed_limit_kmh:.1f} km/h[/] [dim]({ext.current_pit_speed_limit:.2f} m/s)[/dim]", "Speed limit enforced in pit lane"),
+    ])
+
+    return rows
+
+
+def extract_inbound_rows(engine: TelemetryEngine) -> List[Tuple[str, Any, str, str]]:
+    """Returns list of (key, raw_value, formatted_string, description) for Inbound Control testing."""
+    rows = []
+    rows.append(("_inbound.status", "Active", "[bold green]Online / Ready[/]", "Status of Inbound UDP Control socket"))
+    rows.append(("_inbound.target_host", engine.inbound_target_host, f"[cyan]{engine.inbound_target_host}[/]", "Destination IP for HW / Weather commands"))
+    rows.append(("_inbound.target_port", engine.inbound_target_port, f"[yellow]{engine.inbound_target_port}[/]", "Destination Inbound UDP Port (default: 5001)"))
+    rows.append(("_inbound.last_command", engine.last_inbound_cmd_sent, f"[bold #58a6ff]{engine.last_inbound_cmd_sent}[/]", "Last transmitted command name or payload"))
+    rows.append(("_inbound.last_command_time", engine.last_inbound_cmd_time, f"{time.strftime('%H:%M:%S', time.localtime(engine.last_inbound_cmd_time))}" if engine.last_inbound_cmd_time > 0 else "-", "Timestamp of last command sent"))
+    rows.append(("_inbound.pulse_duration", 50, "50 ms", "Default pulse hold time before auto-release"))
+    rows.append(("_inbound.interactive_keys", "U / D / L / R / Enter / W", "[bold yellow]U[/]: Pit Up | [bold yellow]D[/]: Pit Down | [bold yellow]L[/]: Prev | [bold yellow]R[/]: Next | [bold yellow]Enter[/]: Select | [bold yellow]W[/]: Rain Injection", "Interactive Keyboard Shortcuts to trigger live UDP commands"))
+    rows.append(("_inbound.supported_controls", "12 items", "PitMenuUp/Down/Prev/Next/Select, TCIncrease/Decrease, ABSIncrease/Decrease, BrakeBias, Ignition, Wipers", "Supported CheckHWControl identifiers"))
+
+    # Live Feedback from connected channels
+    if engine.latest_pit_menu:
+        pm = engine.latest_pit_menu
+        rows.append(("live_feedback.pit_category", pm.category_name, f"[bold green]{pm.category_name}[/]", "Live pit category reflected from Type 6 stream"))
+        rows.append(("live_feedback.pit_choice", pm.choice_string, f"[bold green]{pm.choice_string}[/] ({pm.choice_index + 1}/{pm.num_choices})", "Live pit choice reflected from Type 6 stream"))
+
+    if engine.latest_weather:
+        w = engine.latest_weather
+        rows.append(("live_feedback.ambient_temp_c", w.ambient_temp_c, f"[bold green]{w.ambient_temp_c:.1f} °C[/]", "Live ambient temperature reflected from Type 7 stream"))
+        rows.append(("live_feedback.rain_intensity", w.origin_raining, f"[bold green]{w.origin_raining * 100:.1f} %[/]", "Live rain intensity reflected from Type 7 stream"))
+
+    return rows
+
+
 # ── Field Extractors (Key, Value, Desc) ────────────────────────────────────────
 
 def format_value(val: Any) -> str:
@@ -826,155 +1100,6 @@ def format_value(val: Any) -> str:
         items_str = ", ".join(f"{x:.2f}" if isinstance(x, float) else str(x) for x in val)
         return f"({items_str})"
     return str(val)
-
-
-# ── Mock Data Generator ────────────────────────────────────────────────────────
-
-def mock_transmitter_loop(port: int, stop_flag: threading.Event):
-    """Generates complete, realistic telemetry packets for simulation mode."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    dest = ("127.0.0.1", port)
-
-    buf_telemetry = bytearray(1888)
-    buf_scoring = bytearray(168)
-    buf_event = bytearray(6)
-
-    # Initial scoring header
-    buf_scoring[0:4] = b"SIMP"
-    buf_scoring[4] = 2
-    track_b = b"Circuit de Spa-Francorchamps\x00"
-    buf_scoring[5:5+len(track_b)] = track_b
-    struct.pack_into("<i", buf_scoring, 72, 11)   # Race session
-    struct.pack_into("<d", buf_scoring, 76, 120.0) # currentET
-    struct.pack_into("<d", buf_scoring, 84, 7004.0) # Lap dist
-    struct.pack_into("<i", buf_scoring, 92, 25)    # Max laps
-    buf_scoring[96] = 1                            # in_realtime
-    struct.pack_into("<h", buf_scoring, 98, 6)     # Total laps
-    struct.pack_into("<b", buf_scoring, 100, 2)    # Sector 2
-    buf_scoring[101] = 0                           # inGarageStall
-    buf_scoring[102] = 2                           # Valid lap
-    struct.pack_into("<d", buf_scoring, 104, 38.420)
-    struct.pack_into("<d", buf_scoring, 112, 94.850)
-    struct.pack_into("<d", buf_scoring, 120, 38.512)
-    struct.pack_into("<d", buf_scoring, 128, 94.901)
-    struct.pack_into("<d", buf_scoring, 136, 138.452)
-    struct.pack_into("<d", buf_scoring, 144, 38.310)
-    struct.pack_into("<d", buf_scoring, 152, 94.400)
-    struct.pack_into("<d", buf_scoring, 160, 137.910)
-
-    # Telemetry static strings
-    veh_b = b"Ferrari 499P Hypercar #51\x00"
-    buf_telemetry[32:32+len(veh_b)] = veh_b
-    buf_telemetry[96:96+len(track_b)] = track_b
-    f_comp = b"Michelin Medium Wet\x00"
-    r_comp = b"Michelin Medium Wet\x00"
-    buf_telemetry[620:620+len(f_comp)] = f_comp
-    buf_telemetry[638:638+len(r_comp)] = r_comp
-
-    t = 0.0
-    while not stop_flag.is_set():
-        t += 0.01
-
-        # Session & timing
-        struct.pack_into("<i", buf_telemetry, 0, 1)          # slot_id
-        struct.pack_into("<d", buf_telemetry, 4, 0.010)      # delta_time
-        struct.pack_into("<d", buf_telemetry, 12, t)         # elapsed_time
-        struct.pack_into("<i", buf_telemetry, 20, 6)         # lap_number
-        struct.pack_into("<d", buf_telemetry, 24, 120.0)     # lap_start_et
-
-        # Physics
-        spd = 65.0 + 25.0 * math.sin(t * 0.5)
-        rpm = 5200.0 + 2400.0 * math.sin(t * 1.5)
-        struct.pack_into("<ddd", buf_telemetry, 160, 1420.5, 320.1, -450.2) # pos
-        struct.pack_into("<ddd", buf_telemetry, 184, 0.2 * math.sin(t), 0.0, -spd) # local_vel
-        struct.pack_into("<ddd", buf_telemetry, 208, 2.5 * math.sin(t), 0.0, -1.2) # local_accel
-
-        # Orientation
-        struct.pack_into("<ddd", buf_telemetry, 232, 1.0, 0.0, 0.0)
-        struct.pack_into("<ddd", buf_telemetry, 256, 0.0, 1.0, 0.0)
-        struct.pack_into("<ddd", buf_telemetry, 280, 0.0, 0.0, 1.0)
-        struct.pack_into("<ddd", buf_telemetry, 304, 0.02 * math.sin(t), 0.05 * math.cos(t), 0.01)
-        struct.pack_into("<ddd", buf_telemetry, 328, 0.0, 0.0, 0.0)
-
-        # Engine & controls
-        gear_num = 4 if spd < 75 else 5
-        struct.pack_into("<i", buf_telemetry, 352, gear_num)
-        struct.pack_into("<d", buf_telemetry, 356, rpm)
-        struct.pack_into("<d", buf_telemetry, 364, 88.5)     # water_temp
-        struct.pack_into("<d", buf_telemetry, 372, 96.2)     # oil_temp
-        struct.pack_into("<d", buf_telemetry, 380, rpm)      # clutch_rpm
-
-        thr = 0.5 + 0.5 * math.sin(t * 2)
-        brk = max(0.0, -math.sin(t * 2))
-        steer = 0.25 * math.sin(t * 0.8)
-        struct.pack_into("<d", buf_telemetry, 388, thr)      # unf_thr
-        struct.pack_into("<d", buf_telemetry, 396, brk)      # unf_brk
-        struct.pack_into("<d", buf_telemetry, 404, steer)    # unf_str
-        struct.pack_into("<d", buf_telemetry, 412, 0.0)      # unf_clutch
-        struct.pack_into("<d", buf_telemetry, 420, thr * 0.98) # fil_thr
-        struct.pack_into("<d", buf_telemetry, 428, brk * 0.95) # fil_brk
-        struct.pack_into("<d", buf_telemetry, 436, steer)
-        struct.pack_into("<d", buf_telemetry, 444, 0.0)
-        struct.pack_into("<d", buf_telemetry, 452, steer * 15.0) # shaft torque
-
-        # Aero & chassis
-        struct.pack_into("<d", buf_telemetry, 460, 0.015 + 0.003 * math.sin(t)) # f_3rd
-        struct.pack_into("<d", buf_telemetry, 468, 0.018 + 0.004 * math.cos(t)) # r_3rd
-        struct.pack_into("<d", buf_telemetry, 476, 0.045)     # f_wing
-        struct.pack_into("<d", buf_telemetry, 484, 0.038)     # f_ride
-        struct.pack_into("<d", buf_telemetry, 492, 0.052)     # r_ride
-        struct.pack_into("<d", buf_telemetry, 500, 850.0)     # drag
-        struct.pack_into("<d", buf_telemetry, 508, 1450.0)    # f_df
-        struct.pack_into("<d", buf_telemetry, 516, 2100.0)    # r_df
-        struct.pack_into("<d", buf_telemetry, 524, max(1.0, 50.0 - t * 0.05)) # fuel
-        struct.pack_into("<d", buf_telemetry, 532, 8600.0)   # max_rpm
-        buf_telemetry[543] = 1                                # headlights
-        struct.pack_into("<d", buf_telemetry, 592, 560.0)    # torque
-        struct.pack_into("<i", buf_telemetry, 600, 2)         # sector 2
-        struct.pack_into("<d", buf_telemetry, 608, 105.0)     # fuel_capacity
-        struct.pack_into("<f", buf_telemetry, 660, 450.0)     # visual_steer_range
-        struct.pack_into("<d", buf_telemetry, 664, 0.46)      # rear_brake_bias
-        struct.pack_into("<d", buf_telemetry, 672, 142.5)     # turbo_boost
-        struct.pack_into("<f", buf_telemetry, 692, 450.0)     # physical_steer_range
-
-        # Hybrid
-        struct.pack_into("<d", buf_telemetry, 696, 0.76)      # battery SoC
-        struct.pack_into("<d", buf_telemetry, 704, 180.0)     # eb_torque
-        struct.pack_into("<d", buf_telemetry, 712, rpm * 1.3) # eb_rpm
-        struct.pack_into("<d", buf_telemetry, 720, 68.5)      # eb_temp
-        struct.pack_into("<d", buf_telemetry, 728, 46.2)      # eb_water_temp
-        buf_telemetry[736] = 2                                # propulsion
-
-        # 4 Wheels
-        for i in range(4):
-            struct.pack_into("<d", buf_telemetry, base + 40, spd / 0.33) # rot
-            struct.pack_into("<d", buf_telemetry, base + 56, spd + 1.2 * math.sin(t * 6 + i)) # patch_spd
-            struct.pack_into("<d", buf_telemetry, base + 72, spd) # ground_spd
-            struct.pack_into("<d", buf_telemetry, base + 80, -0.045 if i % 2 == 0 else 0.045) # camber
-            struct.pack_into("<d", buf_telemetry, base + 104, 5200.0) # tire_load
-            struct.pack_into("<d", buf_telemetry, base + 112, 0.08) # grip_frac
-            struct.pack_into("<d", buf_telemetry, base + 120, 168.0) # pressure (kPa)
-            # Temps L/C/R in Kelvin (85°C, 92°C, 88°C)
-            struct.pack_into("<ddd", buf_telemetry, base + 128, 358.15 + i*2, 365.15 + i*2, 361.15 + i*2)
-            struct.pack_into("<d", buf_telemetry, base + 152, 0.94) # wear
-            buf_telemetry[base + 160:base + 164] = b"ASPH"
-            struct.pack_into("<d", buf_telemetry, base + 204, 362.15 + i*2) # carcass
-
-        sock.sendto(buf_telemetry, dest)
-
-        # Scoring @ 2 Hz
-        if int(t * 100) % 50 == 0:
-            struct.pack_into("<d", buf_scoring, 80, t) # current_et
-            sock.sendto(buf_scoring, dest)
-
-        # Event occasionally (on session start or when t modulo 20s == 0)
-        if int(t * 100) == 10:
-            buf_event[0:4] = b"SIMP"
-            buf_event[4] = 3
-            buf_event[5] = 1 # EnterRealtime
-            sock.sendto(buf_event, dest)
-
-        time.sleep(0.01)
 
 
 # ── Textual TUI Application ───────────────────────────────────────────────────
@@ -1068,7 +1193,6 @@ class IsiMotorBenchmarkApp(App):
 
     BINDINGS = [
         Binding("q", "quit", "Quit", show=True),
-        Binding("m", "toggle_mock", "Toggle Mock Sim", show=True),
         Binding("c", "copy_json", "Copy JSON", show=True),
         Binding("t", "copy_table", "Copy Table", show=True),
         Binding("r", "reset_stats", "Reset Stats", show=True),
@@ -1078,20 +1202,27 @@ class IsiMotorBenchmarkApp(App):
         Binding("3", "select_tab_rules", "Rules", show=False),
         Binding("4", "select_tab_pit", "Pit", show=False),
         Binding("5", "select_tab_weather", "Weather", show=False),
-        Binding("6", "select_tab_event", "Event", show=False),
-        Binding("7", "select_tab_stats", "Stats", show=False),
+        Binding("6", "select_tab_ffb", "FFB", show=False),
+        Binding("7", "select_tab_graphics", "Graphics", show=False),
+        Binding("8", "select_tab_physics", "Physics", show=False),
+        Binding("9", "select_tab_event", "Event", show=False),
+        Binding("0", "select_tab_stats", "Stats", show=False),
+        Binding("i", "select_tab_inbound", "Inbound", show=False),
+        Binding("u", "inbound_pit_up", "Pit Up", show=False),
+        Binding("d", "inbound_pit_down", "Pit Down", show=False),
+        Binding("l", "inbound_pit_prev", "Pit Prev", show=False),
+        Binding("k", "inbound_pit_next", "Pit Next", show=False),
+        Binding("j", "inbound_pit_select", "Pit Select", show=False),
+        Binding("w", "inbound_rain_toggle", "Rain Toggle", show=False),
     ]
 
     active_tab = reactive(TAB_TELEM)
     search_query = reactive("")
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 5000, mock: bool = False):
+    def __init__(self, host: str = "0.0.0.0", port: int = 5000):
         super().__init__()
         self.host = host
         self.port = port
-        self.mock_enabled = mock
-        self.mock_stop_event = threading.Event()
-        self.mock_thread: Optional[threading.Thread] = None
 
         self.engine = TelemetryEngine(host=host, port=port)
 
@@ -1108,14 +1239,17 @@ class IsiMotorBenchmarkApp(App):
             Tab("🚩 Track Rules & SC", id=TAB_RULES),
             Tab("⛽ Pit Menu", id=TAB_PIT),
             Tab("🌦️ Weather", id=TAB_WEATHER),
-            Tab("🔔 SystemEvent (6 B)", id=TAB_EVENT),
+            Tab("⚡ FFB (400Hz)", id=TAB_FFB),
+            Tab("🎥 Graphics", id=TAB_GRAPHICS),
+            Tab("🔧 Physics & Aids", id=TAB_PHYSICS),
+            Tab("🔔 Events (6 B)", id=TAB_EVENT),
+            Tab("🎮 Inbound Tester", id=TAB_INBOUND),
             Tab("📊 Stream Rates", id=TAB_STATS),
             id="packet-tabs"
         )
         self.search_input = Input(placeholder="🔍 Filter fields by name or description... (Press '/' to focus)", id="search-box")
         self.btn_copy_json = Button("📋 Copy JSON", id="btn-copy-json", variant="primary", classes="btn-action")
         self.btn_copy_table = Button("📑 Copy Table", id="btn-copy-table", variant="default", classes="btn-action")
-        self.btn_mock = Button("🧪 Mock Sim", id="btn-mock", variant="success" if mock else "default", classes="btn-action")
         self.table = DataTable(cursor_type="row")
 
         # Cache of rows currently displayed in the table to allow fast cell updates
@@ -1139,7 +1273,6 @@ class IsiMotorBenchmarkApp(App):
             with Horizontal(id="actions-box"):
                 yield self.btn_copy_json
                 yield self.btn_copy_table
-                yield self.btn_mock
 
         with Container(id="table-container"):
             yield self.table
@@ -1158,31 +1291,11 @@ class IsiMotorBenchmarkApp(App):
         # Start UDP receiver engine
         self.engine.start()
 
-        # Start mock simulation if requested
-        if self.mock_enabled:
-            self._start_mock_sim()
-
         # Populate initial table
         self._rebuild_table_rows()
 
         # High-frequency UI tick (30 FPS)
         self.timer = self.set_interval(0.033, self._update_ui)
-
-    def _start_mock_sim(self):
-        self.mock_stop_event.clear()
-        self.mock_thread = threading.Thread(
-            target=mock_transmitter_loop,
-            args=(self.port, self.mock_stop_event),
-            daemon=True
-        )
-        self.mock_thread.start()
-        self.btn_mock.variant = "success"
-
-    def _stop_mock_sim(self):
-        if self.mock_thread and self.mock_thread.is_alive():
-            self.mock_stop_event.set()
-            self.mock_thread = None
-        self.btn_mock.variant = "default"
 
     # ── Tab & Search Handlers ──────────────────────────────────────────────────
 
@@ -1214,28 +1327,67 @@ class IsiMotorBenchmarkApp(App):
     def action_select_tab_weather(self) -> None:
         self.tabs.active = TAB_WEATHER
 
+    def action_select_tab_ffb(self) -> None:
+        self.tabs.active = TAB_FFB
+
+    def action_select_tab_graphics(self) -> None:
+        self.tabs.active = TAB_GRAPHICS
+
+    def action_select_tab_physics(self) -> None:
+        self.tabs.active = TAB_PHYSICS
+
     def action_select_tab_event(self) -> None:
         self.tabs.active = TAB_EVENT
+
+    def action_select_tab_inbound(self) -> None:
+        self.tabs.active = TAB_INBOUND
 
     def action_select_tab_stats(self) -> None:
         self.tabs.active = TAB_STATS
 
-    def action_toggle_mock(self) -> None:
-        self.mock_enabled = not self.mock_enabled
-        if self.mock_enabled:
-            self._start_mock_sim()
-            self.notify("Mock Telemetry Transmitter Started (@ 100Hz)", title="Simulation Active")
-        else:
-            self._stop_mock_sim()
-            self.notify("Mock Telemetry Transmitter Stopped", title="Simulation Inactive")
+    def action_inbound_pit_up(self) -> None:
+        self.engine.send_hw_control("PitMenuUp", 1.0, 50)
+        self.notify("Sent PitMenuUp command", title="Inbound Control")
+        if self.active_tab == TAB_INBOUND:
+            self._rebuild_table_rows()
+
+    def action_inbound_pit_down(self) -> None:
+        self.engine.send_hw_control("PitMenuDown", 1.0, 50)
+        self.notify("Sent PitMenuDown command", title="Inbound Control")
+        if self.active_tab == TAB_INBOUND:
+            self._rebuild_table_rows()
+
+    def action_inbound_pit_prev(self) -> None:
+        self.engine.send_hw_control("PitMenuPrev", 1.0, 50)
+        self.notify("Sent PitMenuPrev command", title="Inbound Control")
+        if self.active_tab == TAB_INBOUND:
+            self._rebuild_table_rows()
+
+    def action_inbound_pit_next(self) -> None:
+        self.engine.send_hw_control("PitMenuNext", 1.0, 50)
+        self.notify("Sent PitMenuNext command", title="Inbound Control")
+        if self.active_tab == TAB_INBOUND:
+            self._rebuild_table_rows()
+
+    def action_inbound_pit_select(self) -> None:
+        self.engine.send_hw_control("PitMenuSelect", 1.0, 50)
+        self.notify("Sent PitMenuSelect command", title="Inbound Control")
+        if self.active_tab == TAB_INBOUND:
+            self._rebuild_table_rows()
+
+    def action_inbound_rain_toggle(self) -> None:
+        current_rain = self.engine.latest_weather.origin_raining if self.engine.latest_weather else 0.0
+        new_rain = 0.0 if current_rain > 0.3 else 0.85
+        self.engine.send_weather_override(ambient_temp=25.0, raining=new_rain)
+        self.notify(f"Injected Weather: Rain={new_rain * 100:.0f}%", title="Weather Override")
+        if self.active_tab == TAB_INBOUND:
+            self._rebuild_table_rows()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-copy-json":
             self.action_copy_json()
         elif event.button.id == "btn-copy-table":
             self.action_copy_table()
-        elif event.button.id == "btn-mock":
-            self.action_toggle_mock()
 
     # ── Data Extraction Helpers ────────────────────────────────────────────────
 
@@ -1252,8 +1404,16 @@ class IsiMotorBenchmarkApp(App):
             return extract_pit_menu_rows(self.engine.latest_pit_menu, self.engine.stats[PKT_PIT_MENU])
         elif self.active_tab == TAB_WEATHER:
             return extract_weather_rows(self.engine.latest_weather, self.engine.stats[PKT_WEATHER])
+        elif self.active_tab == TAB_FFB:
+            return extract_ffb_rows(self.engine.latest_force_feedback, self.engine.stats[PKT_FORCE_FEEDBACK])
+        elif self.active_tab == TAB_GRAPHICS:
+            return extract_graphics_rows(self.engine.latest_graphics, self.engine.stats[PKT_GRAPHICS])
+        elif self.active_tab == TAB_PHYSICS:
+            return extract_physics_rows(self.engine.latest_extended_state, self.engine.stats[PKT_EXTENDED_STATE])
         elif self.active_tab == TAB_EVENT:
             return extract_event_rows(self.engine.latest_event, self.engine.stats[PKT_SYSTEM_EVENT], self.engine.latest_event_time)
+        elif self.active_tab == TAB_INBOUND:
+            return extract_inbound_rows(self.engine)
         elif self.active_tab == TAB_STATS:
             return extract_stats_rows(self.engine)
         return []
@@ -1335,6 +1495,48 @@ class IsiMotorBenchmarkApp(App):
                     "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
                 }
                 return d
+            return {"status": "No Weather packet received yet"}
+        elif self.active_tab == TAB_FFB:
+            st = self.engine.stats[PKT_FORCE_FEEDBACK]
+            if self.engine.latest_force_feedback:
+                d = model_to_clean_dict(self.engine.latest_force_feedback)
+                d["percentage"] = self.engine.latest_force_feedback.percentage
+                d["_channel_diagnostics"] = {
+                    "frequency_hz": round(st.current_freq, 2),
+                    "packets_count": st.count,
+                    "avg_delay_ms": round(st.avg_interval_ms, 2),
+                    "jitter_ms": round(st.jitter_ms, 2),
+                    "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
+                }
+                return d
+            return {"status": "No ForceFeedback packet received yet"}
+        elif self.active_tab == TAB_GRAPHICS:
+            st = self.engine.stats[PKT_GRAPHICS]
+            if self.engine.latest_graphics:
+                d = model_to_clean_dict(self.engine.latest_graphics)
+                d["camera_type_str"] = self.engine.latest_graphics.camera_type_str
+                d["is_cockpit_view"] = self.engine.latest_graphics.is_cockpit_view
+                d["_channel_diagnostics"] = {
+                    "frequency_hz": round(st.current_freq, 2),
+                    "packets_count": st.count,
+                    "avg_delay_ms": round(st.avg_interval_ms, 2),
+                    "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
+                }
+                return d
+            return {"status": "No Graphics packet received yet"}
+        elif self.active_tab == TAB_PHYSICS:
+            st = self.engine.stats[PKT_EXTENDED_STATE]
+            if self.engine.latest_extended_state:
+                d = model_to_clean_dict(self.engine.latest_extended_state)
+                d["pit_speed_limit_kmh"] = self.engine.latest_extended_state.current_pit_speed_limit_kmh
+                d["_channel_diagnostics"] = {
+                    "frequency_hz": round(st.current_freq, 2),
+                    "packets_count": st.count,
+                    "avg_delay_ms": round(st.avg_interval_ms, 2),
+                    "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
+                }
+                return d
+            return {"status": "No ExtendedState packet received yet"}
         elif self.active_tab == TAB_EVENT:
             st = self.engine.stats[PKT_SYSTEM_EVENT]
             if self.engine.latest_event:
@@ -1347,6 +1549,9 @@ class IsiMotorBenchmarkApp(App):
                 }
                 return d
             return {"status": "No SystemEvent packet received yet"}
+        elif self.active_tab == TAB_INBOUND:
+            rows = extract_inbound_rows(self.engine)
+            return {k: raw for k, raw, _, _ in rows}
         elif self.active_tab == TAB_STATS:
             rows = extract_stats_rows(self.engine)
             return {k: raw for k, raw, _, _ in rows}
@@ -1462,10 +1667,29 @@ class IsiMotorBenchmarkApp(App):
             self.lbl_channel_freq.update(
                 f"📶 [bold cyan]Weather:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
             )
+        elif self.active_tab == TAB_FFB:
+            st = self.engine.stats[PKT_FORCE_FEEDBACK]
+            self.lbl_channel_freq.update(
+                f"📶 [bold cyan]FFB (400Hz):[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+            )
+        elif self.active_tab == TAB_GRAPHICS:
+            st = self.engine.stats[PKT_GRAPHICS]
+            self.lbl_channel_freq.update(
+                f"📶 [bold cyan]Graphics:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+            )
+        elif self.active_tab == TAB_PHYSICS:
+            st = self.engine.stats[PKT_EXTENDED_STATE]
+            self.lbl_channel_freq.update(
+                f"📶 [bold cyan]Physics & Aids:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+            )
         elif self.active_tab == TAB_EVENT:
             st = self.engine.stats[PKT_SYSTEM_EVENT]
             self.lbl_channel_freq.update(
                 f"📶 [bold cyan]Events:[/] [bold yellow]{st.count}[/] [dim]pkts[/dim]"
+            )
+        elif self.active_tab == TAB_INBOUND:
+            self.lbl_channel_freq.update(
+                f"📶 [bold cyan]Inbound:[/] [bold yellow]{self.engine.inbound_target_host}:{self.engine.inbound_target_port}[/]"
             )
         elif self.active_tab == TAB_STATS:
             self.lbl_channel_freq.update(
@@ -1484,7 +1708,6 @@ class IsiMotorBenchmarkApp(App):
                     pass
 
     def on_unmount(self) -> None:
-        self._stop_mock_sim()
         self.engine.stop()
 
 
@@ -1492,10 +1715,9 @@ def main():
     parser = argparse.ArgumentParser(description="isiMotor UDP Raw Telemetry Explorer & Benchmark (Textual)")
     parser.add_argument("--host", default="0.0.0.0", help="UDP listening host (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=5000, help="UDP listening port (default: 5000)")
-    parser.add_argument("--mock", action="store_true", help="Start with simulated mock telemetry stream enabled")
     args = parser.parse_args()
 
-    app = IsiMotorBenchmarkApp(host=args.host, port=args.port, mock=args.mock)
+    app = IsiMotorBenchmarkApp(host=args.host, port=args.port)
     app.run()
 
 

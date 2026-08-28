@@ -24,12 +24,13 @@ target_include_directories(isiMotor_RawUDP PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/i
 target_link_libraries(isiMotor_RawUDP PRIVATE ws2_32)
 
 # --- Static linking for zero-dependency standalone DLL ---
-if(MINGW)
-    target_link_options(isiMotor_RawUDP PRIVATE -static -static-libgcc -static-libstdc++)
-elseif(MSVC)
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     foreach(flag_var CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_DEBUG)
         string(REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
     endforeach()
+elseif(MINGW)
+    target_link_options(isiMotor_RawUDP PRIVATE -static -static-libgcc -static-libstdc++)
 endif()
 
 # Remove 'lib' prefix on Windows DLL (produces isiMotor_RawUDP.dll instead of libisiMotor_RawUDP.dll)
@@ -38,5 +39,9 @@ set_target_properties(isiMotor_RawUDP PROPERTIES PREFIX "")
 # Output directory for built binaries
 set_target_properties(isiMotor_RawUDP PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/bin"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_CURRENT_SOURCE_DIR}/bin"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/bin"
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_CURRENT_SOURCE_DIR}/bin"
 )
