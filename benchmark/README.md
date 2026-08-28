@@ -10,8 +10,8 @@ Modern, interactive terminal raw data inspector built with **[Textual](https://t
   * Live inspection of all 100+ native struct fields with high-contrast formatting and units.
   * Real-time cell updates at 30 FPS without table flickering or selection jumping.
 * **Packet Type Selector Menu (Tabs):**
-  * `🏎️ TelemInfo (1904 B)` : Full physical vehicle telemetry (kinematics, engine, driver inputs, 4 wheels matrix, hybrid battery/MGU, aero).
-  * `⏱️ CompactScoring (176 B)` : Timing, session status, lap counters, sector splits (S1/S2/S3), and personal bests.
+  * `🏎️ TelemInfo (1888 B)` : Full physical vehicle telemetry (kinematics, engine, driver inputs, 4 wheels matrix, hybrid battery/MGU, aero).
+  * `⏱️ CompactScoring (168 B)` : Timing, session status, lap counters, sector splits (S1/S2/S3), and personal bests.
   * `🔔 SystemEvent (6 B)` : System state transitions (Enter/Exit Realtime, Start/End Session).
   * `📊 Stream Rates` : Real-time reception frequency (Hz), average delay (ms), jitter (±ms), and bandwidth (KB/s).
 * **Search & Filter Bar:**

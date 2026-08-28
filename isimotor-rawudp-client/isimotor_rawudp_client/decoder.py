@@ -6,8 +6,8 @@ import struct
 from typing import Optional, Union, Tuple
 from .models import TelemInfo, TelemWheel, TelemVect3, CompactScoring, SystemEvent
 
-TELEMINFO_SIZE = 1904
-COMPACT_SCORING_SIZE = 176
+TELEMINFO_SIZE = 1888
+COMPACT_SCORING_SIZE = 168
 SYSTEM_EVENT_SIZE = 6
 
 def _decode_string(raw_bytes: bytes) -> str:
@@ -81,113 +81,113 @@ def decode_wheel(data: bytes, offset: int) -> TelemWheel:
     )
 
 def decode_telemetry(data: bytes) -> Optional[TelemInfo]:
-    """Decodes a 1904-byte native TelemInfoV01 memory dump."""
+    """Decodes a 1888-byte native TelemInfoV01 memory dump."""
     if len(data) < TELEMINFO_SIZE:
         return None
 
     slot_id = struct.unpack_from("<i", data, 0)[0]
-    dt = struct.unpack_from("<d", data, 8)[0]
-    elapsed = struct.unpack_from("<d", data, 16)[0]
-    lap_num = struct.unpack_from("<i", data, 24)[0]
-    lap_start_et = struct.unpack_from("<d", data, 32)[0]
-    veh_name = _decode_string(data[40:104])
-    track_name = _decode_string(data[104:168])
+    dt = struct.unpack_from("<d", data, 4)[0]
+    elapsed = struct.unpack_from("<d", data, 12)[0]
+    lap_num = struct.unpack_from("<i", data, 20)[0]
+    lap_start_et = struct.unpack_from("<d", data, 24)[0]
+    veh_name = _decode_string(data[32:96])
+    track_name = _decode_string(data[96:160])
 
-    px, py, pz = struct.unpack_from("<ddd", data, 168)
+    px, py, pz = struct.unpack_from("<ddd", data, 160)
     pos = TelemVect3(px, py, pz)
 
-    vx, vy, vz = struct.unpack_from("<ddd", data, 192)
+    vx, vy, vz = struct.unpack_from("<ddd", data, 184)
     local_vel = TelemVect3(vx, vy, vz)
 
-    ax, ay, az = struct.unpack_from("<ddd", data, 216)
+    ax, ay, az = struct.unpack_from("<ddd", data, 208)
     local_accel = TelemVect3(ax, ay, az)
 
     # Orientation matrix 3x3
-    r0 = TelemVect3(*struct.unpack_from("<ddd", data, 240))
-    r1 = TelemVect3(*struct.unpack_from("<ddd", data, 264))
-    r2 = TelemVect3(*struct.unpack_from("<ddd", data, 288))
+    r0 = TelemVect3(*struct.unpack_from("<ddd", data, 232))
+    r1 = TelemVect3(*struct.unpack_from("<ddd", data, 256))
+    r2 = TelemVect3(*struct.unpack_from("<ddd", data, 280))
     ori = (r0, r1, r2)
 
-    rx, ry, rz = struct.unpack_from("<ddd", data, 312)
+    rx, ry, rz = struct.unpack_from("<ddd", data, 304)
     local_rot = TelemVect3(rx, ry, rz)
 
-    rax, ray, raz = struct.unpack_from("<ddd", data, 336)
+    rax, ray, raz = struct.unpack_from("<ddd", data, 328)
     local_rot_accel = TelemVect3(rax, ray, raz)
 
-    gear = struct.unpack_from("<i", data, 360)[0]
-    engine_rpm = struct.unpack_from("<d", data, 368)[0]
-    water_temp = struct.unpack_from("<d", data, 376)[0]
-    oil_temp = struct.unpack_from("<d", data, 384)[0]
-    clutch_rpm = struct.unpack_from("<d", data, 392)[0]
+    gear = struct.unpack_from("<i", data, 352)[0]
+    engine_rpm = struct.unpack_from("<d", data, 356)[0]
+    water_temp = struct.unpack_from("<d", data, 364)[0]
+    oil_temp = struct.unpack_from("<d", data, 372)[0]
+    clutch_rpm = struct.unpack_from("<d", data, 380)[0]
 
-    unf_throttle = struct.unpack_from("<d", data, 400)[0]
-    unf_brake = struct.unpack_from("<d", data, 408)[0]
-    unf_steer = struct.unpack_from("<d", data, 416)[0]
-    unf_clutch = struct.unpack_from("<d", data, 424)[0]
+    unf_throttle = struct.unpack_from("<d", data, 388)[0]
+    unf_brake = struct.unpack_from("<d", data, 396)[0]
+    unf_steer = struct.unpack_from("<d", data, 404)[0]
+    unf_clutch = struct.unpack_from("<d", data, 412)[0]
 
-    fil_throttle = struct.unpack_from("<d", data, 432)[0]
-    fil_brake = struct.unpack_from("<d", data, 440)[0]
-    fil_steer = struct.unpack_from("<d", data, 448)[0]
-    fil_clutch = struct.unpack_from("<d", data, 456)[0]
+    fil_throttle = struct.unpack_from("<d", data, 420)[0]
+    fil_brake = struct.unpack_from("<d", data, 428)[0]
+    fil_steer = struct.unpack_from("<d", data, 436)[0]
+    fil_clutch = struct.unpack_from("<d", data, 444)[0]
 
-    steering_shaft_torque = struct.unpack_from("<d", data, 464)[0]
-    front_3rd_defl = struct.unpack_from("<d", data, 472)[0]
-    rear_3rd_defl = struct.unpack_from("<d", data, 480)[0]
+    steering_shaft_torque = struct.unpack_from("<d", data, 452)[0]
+    front_3rd_defl = struct.unpack_from("<d", data, 460)[0]
+    rear_3rd_defl = struct.unpack_from("<d", data, 468)[0]
 
-    front_wing_h = struct.unpack_from("<d", data, 488)[0]
-    front_ride_h = struct.unpack_from("<d", data, 496)[0]
-    rear_ride_h = struct.unpack_from("<d", data, 504)[0]
-    drag = struct.unpack_from("<d", data, 512)[0]
-    front_downforce = struct.unpack_from("<d", data, 520)[0]
-    rear_downforce = struct.unpack_from("<d", data, 528)[0]
+    front_wing_h = struct.unpack_from("<d", data, 476)[0]
+    front_ride_h = struct.unpack_from("<d", data, 484)[0]
+    rear_ride_h = struct.unpack_from("<d", data, 492)[0]
+    drag = struct.unpack_from("<d", data, 500)[0]
+    front_downforce = struct.unpack_from("<d", data, 508)[0]
+    rear_downforce = struct.unpack_from("<d", data, 516)[0]
 
-    fuel = struct.unpack_from("<d", data, 536)[0]
-    max_rpm = struct.unpack_from("<d", data, 544)[0]
-    scheduled_stops = data[552]
-    overheating = bool(data[553])
-    detached = bool(data[554])
-    headlights = bool(data[555])
-    dent_severity = tuple(data[556:564])
+    fuel = struct.unpack_from("<d", data, 524)[0]
+    max_rpm = struct.unpack_from("<d", data, 532)[0]
+    scheduled_stops = data[540]
+    overheating = bool(data[541])
+    detached = bool(data[542])
+    headlights = bool(data[543])
+    dent_severity = tuple(data[544:552])
 
-    last_impact_et = struct.unpack_from("<d", data, 568)[0]
-    last_impact_magnitude = struct.unpack_from("<d", data, 576)[0]
-    ix, iy, iz = struct.unpack_from("<ddd", data, 584)
+    last_impact_et = struct.unpack_from("<d", data, 552)[0]
+    last_impact_magnitude = struct.unpack_from("<d", data, 560)[0]
+    ix, iy, iz = struct.unpack_from("<ddd", data, 568)
     last_impact_pos = TelemVect3(ix, iy, iz)
 
-    engine_torque = struct.unpack_from("<d", data, 608)[0]
-    current_sector = struct.unpack_from("<i", data, 616)[0]
-    speed_limiter = data[620]
-    max_gears = data[621]
-    front_tire_compound_idx = data[622]
-    rear_tire_compound_idx = data[623]
-    fuel_capacity = struct.unpack_from("<d", data, 624)[0]
-    front_flap_act = data[632]
-    rear_flap_act = data[633]
-    rear_flap_status = data[634]
-    ignition_starter = data[635]
-    front_compound_name = _decode_string(data[636:654])
-    rear_compound_name = _decode_string(data[654:672])
+    engine_torque = struct.unpack_from("<d", data, 592)[0]
+    current_sector = struct.unpack_from("<i", data, 600)[0]
+    speed_limiter = data[604]
+    max_gears = data[605]
+    front_tire_compound_idx = data[606]
+    rear_tire_compound_idx = data[607]
+    fuel_capacity = struct.unpack_from("<d", data, 608)[0]
+    front_flap_act = data[616]
+    rear_flap_act = data[617]
+    rear_flap_status = data[618]
+    ignition_starter = data[619]
+    front_compound_name = _decode_string(data[620:638])
+    rear_compound_name = _decode_string(data[638:656])
 
-    speed_limiter_avail = data[672]
-    anti_stall_act = data[673]
-    visual_steer_range = struct.unpack_from("<f", data, 676)[0]
-    rear_brake_bias = struct.unpack_from("<d", data, 680)[0]
-    turbo_boost = struct.unpack_from("<d", data, 688)[0]
-    p2g_offset = struct.unpack_from("<fff", data, 696)
-    physical_steer_range = struct.unpack_from("<f", data, 708)[0]
-    battery_charge = struct.unpack_from("<d", data, 712)[0]
+    speed_limiter_avail = data[656]
+    anti_stall_act = data[657]
+    visual_steer_range = struct.unpack_from("<f", data, 660)[0]
+    rear_brake_bias = struct.unpack_from("<d", data, 664)[0]
+    turbo_boost = struct.unpack_from("<d", data, 672)[0]
+    p2g_offset = struct.unpack_from("<fff", data, 680)
+    physical_steer_range = struct.unpack_from("<f", data, 692)[0]
+    battery_charge = struct.unpack_from("<d", data, 696)[0]
 
-    eb_torque = struct.unpack_from("<d", data, 720)[0]
-    eb_rpm = struct.unpack_from("<d", data, 728)[0]
-    eb_temp = struct.unpack_from("<d", data, 736)[0]
-    eb_water_temp = struct.unpack_from("<d", data, 744)[0]
-    eb_state = data[752]
+    eb_torque = struct.unpack_from("<d", data, 704)[0]
+    eb_rpm = struct.unpack_from("<d", data, 712)[0]
+    eb_temp = struct.unpack_from("<d", data, 720)[0]
+    eb_water_temp = struct.unpack_from("<d", data, 728)[0]
+    eb_state = data[736]
 
-    # Wheels (FL: 864, FR: 1124, RL: 1384, RR: 1644)
-    w_fl = decode_wheel(data, 864)
-    w_fr = decode_wheel(data, 1124)
-    w_rl = decode_wheel(data, 1384)
-    w_rr = decode_wheel(data, 1644)
+    # Wheels (FL: 848, FR: 1108, RL: 1368, RR: 1628)
+    w_fl = decode_wheel(data, 848)
+    w_fr = decode_wheel(data, 1108)
+    w_rl = decode_wheel(data, 1368)
+    w_rr = decode_wheel(data, 1628)
 
     return TelemInfo(
         slot_id=slot_id,
@@ -265,29 +265,29 @@ def decode_telemetry(data: bytes) -> Optional[TelemInfo]:
     )
 
 def decode_compact_scoring(data: bytes) -> Optional[CompactScoring]:
-    """Decodes a 176-byte SIMP Type 2 compact scoring packet."""
+    """Decodes a 168-byte SIMP Type 2 compact scoring packet."""
     if len(data) < COMPACT_SCORING_SIZE or not data.startswith(b"SIMP") or data[4] != 2:
         return None
 
     track = _decode_string(data[5:69])
     session = struct.unpack_from("<i", data, 72)[0]
-    current_et = struct.unpack_from("<d", data, 80)[0]
-    lap_dist = struct.unpack_from("<d", data, 88)[0]
-    max_laps = struct.unpack_from("<i", data, 96)[0]
-    in_rt = bool(data[104])
-    total_laps = struct.unpack_from("<h", data, 106)[0]
-    sector = struct.unpack_from("<b", data, 108)[0]
-    in_garage = bool(data[109])
-    count_lap_flag = data[110]
+    current_et = struct.unpack_from("<d", data, 76)[0]
+    lap_dist = struct.unpack_from("<d", data, 84)[0]
+    max_laps = struct.unpack_from("<i", data, 92)[0]
+    in_rt = bool(data[96])
+    total_laps = struct.unpack_from("<h", data, 98)[0]
+    sector = struct.unpack_from("<b", data, 100)[0]
+    in_garage = bool(data[101])
+    count_lap_flag = data[102]
 
-    cur_s1 = struct.unpack_from("<d", data, 112)[0]
-    cur_s2 = struct.unpack_from("<d", data, 120)[0]
-    last_s1 = struct.unpack_from("<d", data, 128)[0]
-    last_s2 = struct.unpack_from("<d", data, 136)[0]
-    last_lap = struct.unpack_from("<d", data, 144)[0]
-    best_s1 = struct.unpack_from("<d", data, 152)[0]
-    best_s2 = struct.unpack_from("<d", data, 160)[0]
-    best_lap = struct.unpack_from("<d", data, 168)[0]
+    cur_s1 = struct.unpack_from("<d", data, 104)[0]
+    cur_s2 = struct.unpack_from("<d", data, 112)[0]
+    last_s1 = struct.unpack_from("<d", data, 120)[0]
+    last_s2 = struct.unpack_from("<d", data, 128)[0]
+    last_lap = struct.unpack_from("<d", data, 136)[0]
+    best_s1 = struct.unpack_from("<d", data, 144)[0]
+    best_s2 = struct.unpack_from("<d", data, 152)[0]
+    best_lap = struct.unpack_from("<d", data, 160)[0]
 
     return CompactScoring(
         track_name=track,

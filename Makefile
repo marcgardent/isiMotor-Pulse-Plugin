@@ -16,6 +16,7 @@ help:
 	@echo "  make                - Display this help menu"
 	@echo "  make cross          - Cross-compile DLL using MinGW-w64 (on Linux)"
 	@echo "  make build          - Native compile DLL (on Windows MSVC / MinGW)"
+	@echo "  make test           - Run full C++ mock & golden dataset integration tests"
 	@echo "  make benchmark      - Run live Textual UDP packet sniffer & frequency benchmark"
 	@echo "  make benchmark-mock - Run benchmark in simulation mode (with mock telemetry)"
 	@echo "  make info           - Display UDP packet structures & memory layout"
@@ -23,6 +24,12 @@ help:
 	@echo "=================================================================="
 
 all: help
+
+test:
+	@echo "==> Building C++ mock host and running integration tests..."
+	@make -C tests/cpp_mock --silent
+	@./tests/cpp_mock/isi_mock_host --dump-truth tests/golden
+	@PYTHONPATH=isimotor-rawudp-client $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v
 
 cross:
 	@echo "==> Cross-compiling isiMotor_RawUDP.dll with MinGW..."
@@ -51,12 +58,12 @@ info:
 	@echo "  📡 UDP Binary Protocol Specifications (Port 5000)"
 	@echo "=================================================================="
 	@echo "  1. Telemetry Packet (TelemInfoV01):"
-	@echo "     • Size: 1904 bytes"
+	@echo "     • Size: 1888 bytes"
 	@echo "     • Rate: 60Hz - 100Hz (per physics tick)"
 	@echo "     • Format: Direct struct dump (#pragma pack(4))"
 	@echo ""
 	@echo "  2. Compact Scoring Packet (SIMP Type 2):"
-	@echo "     • Size: 176 bytes"
+	@echo "     • Size: 168 bytes"
 	@echo "     • Rate: 1Hz - 5Hz"
 	@echo "     • Format: Magic 'SIMP' + Type 2 + Timing/Sector Data"
 	@echo ""

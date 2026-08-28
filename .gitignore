@@ -1,4 +1,4 @@
-# Build output
+# Build output & Binaries
 build/
 bin/
 *.dll
@@ -8,15 +8,27 @@ bin/
 *.lib
 *.obj
 *.o
+*.exe
+tests/cpp_mock/isi_mock_host
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 *.egg-info/
+dist/
 .venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local game / test runtime configurations
+*.ini
+!default_config/
 
 # IDEs & Editor configs
 .vscode/
 .idea/
 *.swp
 *~
+.DS_Store

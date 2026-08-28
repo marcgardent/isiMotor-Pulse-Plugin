@@ -527,9 +527,112 @@ def model_to_clean_dict(obj: Any) -> Dict[str, Any]:
             elif isinstance(val, (list, tuple)):
                 res[f] = [model_to_clean_dict(x) if hasattr(x, "__dataclass_fields__") else x for x in val]
             else:
-                res[f] = val
+res[f] = val
         return res
     return dict(obj)
+
+
+        self.stats: Dict[str, PacketStats] = {
+            PKT_RAW_TELEMETRY: PacketStats(PKT_RAW_TELEMETRY, "Binary Struct", "1888 B"),
+            PKT_COMPACT_SCORING: PacketStats(PKT_COMPACT_SCORING, "Binary SIMP", "168 B"),
+            PKT_SYSTEM_EVENT: PacketStats(PKT_SYSTEM_EVENT, "Binary SIMP", "6 B"),
+            PKT_FOREIGN: PacketStats(PKT_FOREIGN, "Raw/Other", "Variable"),
+        }
+
+        self.latest_telemetry: Optional[TelemInfo] = None
+        self.latest_scoring: Optional[CompactScoring] = None
+        self.latest_event: Optional[SystemEvent] = None
+        self.latest_event_time: float = 0.0
+
+    def start(self):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.socket.setblocking(False)
+        self.socket.bind((self.host, self.port))
+        self.running = True
+
+    def stop(self):
+        self.running = False
+        if self.socket:
+            try:
+                self.socket.close()
+            except Exception:
+                pass
+            self.socket = None
+
+    def poll(self):
+        """Drains pending packets from the socket."""
+        if not self.socket or not self.running:
+            return
+
+        while True:
+            r, _, _ = select.select([self.socket], [], [], 0.001)
+            if not r:
+                break
+            try:
+                data, addr = self.socket.recvfrom(65535)
+                self._process_packet(data, addr)
+            except (BlockingIOError, socket.error):
+                break
+
+    def _process_packet(self, data: bytes, addr: Tuple[str, int]):
+        now = time.time()
+        size = len(data)
+        self.total_packets += 1
+        self.total_bytes += size
+
+        # 1. Native Binary Telemetry (1888 bytes)
+        if size == 1888:
+            pkt_type = PKT_RAW_TELEMETRY
+            telem = decode_telemetry(data)
+            if telem:
+                self.latest_telemetry = telem
+
+        # 2. Compact Scoring (SIMP Type 2, 168 bytes)
+        elif data.startswith(b"SIMP") and len(data) >= 5 and data[4] == 2:
+            pkt_type = PKT_COMPACT_SCORING
+            scoring = decode_compact_scoring(data)
+            if scoring:
+                self.latest_scoring = scoring
+
+        # 3. System Event (SIMP Type 3, 6 bytes)
+        elif data.startswith(b"SIMP") and len(data) >= 5 and data[4] == 3:
+            pkt_type = PKT_SYSTEM_EVENT
+            ev = decode_system_event(data)
+            if ev:
+                self.latest_event = ev
+                self.latest_event_time = now
+        else:
+            pkt_type = PKT_FOREIGN
+
+        self.stats[pkt_type].record(size, now)
+
+    def reset_stats(self):
+        self.total_packets = 0
+        self.total_bytes = 0
+        self.start_time = time.time()
+        for s in self.stats.values():
+            s.reset()
+
+
+# ── Field Extractors (Key, Value, Desc) ────────────────────────────────────────
+
+def format_value(val: Any) -> str:
+    """Formats Python values cleanly for UI table presentation."""
+    if val is None:
+        return "[dim]-[/dim]"
+    if isinstance(val, bool):
+        return f"[bold {'#3fb950' if val else '#f85149'}]{val}[/]"
+    if isinstance(val, float):
+        return f"[bold #e3b341]{val:.4f}[/]"
+    if isinstance(val, int):
+        return f"[bold #58a6ff]{val}[/]"
+    if isinstance(val, str):
+        return f"[#a5d6ff]\"{val}\"[/]" if val else "[dim]\"\"[/dim]"
+    if isinstance(val, (list, tuple)):
+        items_str = ", ".join(f"{x:.2f}" if isinstance(x, float) else str(x) for x in val)
+        return f"({items_str})"
+    return str(val)
 
 
 # ── Mock Data Generator ────────────────────────────────────────────────────────
@@ -539,8 +642,8 @@ def mock_transmitter_loop(port: int, stop_flag: threading.Event):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     dest = ("127.0.0.1", port)
 
-    buf_telemetry = bytearray(1904)
-    buf_scoring = bytearray(176)
+    buf_telemetry = bytearray(1888)
+    buf_scoring = bytearray(168)
     buf_event = bytearray(6)
 
     # Initial scoring header
@@ -549,29 +652,31 @@ def mock_transmitter_loop(port: int, stop_flag: threading.Event):
     track_b = b"Circuit de Spa-Francorchamps\x00"
     buf_scoring[5:5+len(track_b)] = track_b
     struct.pack_into("<i", buf_scoring, 72, 11)   # Race session
-    struct.pack_into("<d", buf_scoring, 88, 7004.0) # Lap dist
-    struct.pack_into("<i", buf_scoring, 96, 25)    # Max laps
-    buf_scoring[104] = 1                           # in_realtime
-    struct.pack_into("<h", buf_scoring, 106, 6)    # Total laps
-    struct.pack_into("<b", buf_scoring, 108, 2)    # Sector 2
-    buf_scoring[110] = 2                           # Valid lap
-    struct.pack_into("<d", buf_scoring, 112, 38.420)
-    struct.pack_into("<d", buf_scoring, 120, 94.850)
-    struct.pack_into("<d", buf_scoring, 128, 38.512)
-    struct.pack_into("<d", buf_scoring, 136, 94.901)
-    struct.pack_into("<d", buf_scoring, 144, 138.452)
-    struct.pack_into("<d", buf_scoring, 152, 38.310)
-    struct.pack_into("<d", buf_scoring, 160, 94.400)
-    struct.pack_into("<d", buf_scoring, 168, 137.910)
+    struct.pack_into("<d", buf_scoring, 76, 120.0) # currentET
+    struct.pack_into("<d", buf_scoring, 84, 7004.0) # Lap dist
+    struct.pack_into("<i", buf_scoring, 92, 25)    # Max laps
+    buf_scoring[96] = 1                            # in_realtime
+    struct.pack_into("<h", buf_scoring, 98, 6)     # Total laps
+    struct.pack_into("<b", buf_scoring, 100, 2)    # Sector 2
+    buf_scoring[101] = 0                           # inGarageStall
+    buf_scoring[102] = 2                           # Valid lap
+    struct.pack_into("<d", buf_scoring, 104, 38.420)
+    struct.pack_into("<d", buf_scoring, 112, 94.850)
+    struct.pack_into("<d", buf_scoring, 120, 38.512)
+    struct.pack_into("<d", buf_scoring, 128, 94.901)
+    struct.pack_into("<d", buf_scoring, 136, 138.452)
+    struct.pack_into("<d", buf_scoring, 144, 38.310)
+    struct.pack_into("<d", buf_scoring, 152, 94.400)
+    struct.pack_into("<d", buf_scoring, 160, 137.910)
 
     # Telemetry static strings
     veh_b = b"Ferrari 499P Hypercar #51\x00"
-    buf_telemetry[40:40+len(veh_b)] = veh_b
-    buf_telemetry[104:104+len(track_b)] = track_b
+    buf_telemetry[32:32+len(veh_b)] = veh_b
+    buf_telemetry[96:96+len(track_b)] = track_b
     f_comp = b"Michelin Medium Wet\x00"
     r_comp = b"Michelin Medium Wet\x00"
-    buf_telemetry[636:636+len(f_comp)] = f_comp
-    buf_telemetry[654:654+len(r_comp)] = r_comp
+    buf_telemetry[620:620+len(f_comp)] = f_comp
+    buf_telemetry[638:638+len(r_comp)] = r_comp
 
     t = 0.0
     while not stop_flag.is_set():
@@ -579,80 +684,76 @@ def mock_transmitter_loop(port: int, stop_flag: threading.Event):
 
         # Session & timing
         struct.pack_into("<i", buf_telemetry, 0, 1)          # slot_id
-        struct.pack_into("<d", buf_telemetry, 8, 0.010)      # delta_time
-        struct.pack_into("<d", buf_telemetry, 16, t)         # elapsed_time
-        struct.pack_into("<i", buf_telemetry, 24, 6)         # lap_number
-        struct.pack_into("<d", buf_telemetry, 32, 120.0)     # lap_start_et
+        struct.pack_into("<d", buf_telemetry, 4, 0.010)      # delta_time
+        struct.pack_into("<d", buf_telemetry, 12, t)         # elapsed_time
+        struct.pack_into("<i", buf_telemetry, 20, 6)         # lap_number
+        struct.pack_into("<d", buf_telemetry, 24, 120.0)     # lap_start_et
 
         # Physics
         spd = 65.0 + 25.0 * math.sin(t * 0.5)
         rpm = 5200.0 + 2400.0 * math.sin(t * 1.5)
-        struct.pack_into("<ddd", buf_telemetry, 168, 1420.5, 320.1, -450.2) # pos
-        struct.pack_into("<ddd", buf_telemetry, 192, 0.2 * math.sin(t), 0.0, -spd) # local_vel
-        struct.pack_into("<ddd", buf_telemetry, 216, 2.5 * math.sin(t), 0.0, -1.2) # local_accel
+        struct.pack_into("<ddd", buf_telemetry, 160, 1420.5, 320.1, -450.2) # pos
+        struct.pack_into("<ddd", buf_telemetry, 184, 0.2 * math.sin(t), 0.0, -spd) # local_vel
+        struct.pack_into("<ddd", buf_telemetry, 208, 2.5 * math.sin(t), 0.0, -1.2) # local_accel
 
         # Orientation
-        struct.pack_into("<ddd", buf_telemetry, 240, 1.0, 0.0, 0.0)
-        struct.pack_into("<ddd", buf_telemetry, 264, 0.0, 1.0, 0.0)
-        struct.pack_into("<ddd", buf_telemetry, 288, 0.0, 0.0, 1.0)
-        struct.pack_into("<ddd", buf_telemetry, 312, 0.02 * math.sin(t), 0.05 * math.cos(t), 0.01)
+        struct.pack_into("<ddd", buf_telemetry, 232, 1.0, 0.0, 0.0)
+        struct.pack_into("<ddd", buf_telemetry, 256, 0.0, 1.0, 0.0)
+        struct.pack_into("<ddd", buf_telemetry, 280, 0.0, 0.0, 1.0)
+        struct.pack_into("<ddd", buf_telemetry, 304, 0.02 * math.sin(t), 0.05 * math.cos(t), 0.01)
+        struct.pack_into("<ddd", buf_telemetry, 328, 0.0, 0.0, 0.0)
 
         # Engine & controls
         gear_num = 4 if spd < 75 else 5
-        struct.pack_into("<i", buf_telemetry, 360, gear_num)
-        struct.pack_into("<d", buf_telemetry, 368, rpm)
-        struct.pack_into("<d", buf_telemetry, 376, 88.5)     # water_temp
-        struct.pack_into("<d", buf_telemetry, 384, 96.2)     # oil_temp
-        struct.pack_into("<d", buf_telemetry, 392, rpm)      # clutch_rpm
-        struct.pack_into("<d", buf_telemetry, 544, 8600.0)   # max_rpm
-        struct.pack_into("<d", buf_telemetry, 608, 560.0)    # torque
+        struct.pack_into("<i", buf_telemetry, 352, gear_num)
+        struct.pack_into("<d", buf_telemetry, 356, rpm)
+        struct.pack_into("<d", buf_telemetry, 364, 88.5)     # water_temp
+        struct.pack_into("<d", buf_telemetry, 372, 96.2)     # oil_temp
+        struct.pack_into("<d", buf_telemetry, 380, rpm)      # clutch_rpm
 
         thr = 0.5 + 0.5 * math.sin(t * 2)
         brk = max(0.0, -math.sin(t * 2))
         steer = 0.25 * math.sin(t * 0.8)
-        struct.pack_into("<d", buf_telemetry, 400, thr)      # unf_thr
-        struct.pack_into("<d", buf_telemetry, 408, brk)      # unf_brk
-        struct.pack_into("<d", buf_telemetry, 416, steer)    # unf_str
-        struct.pack_into("<d", buf_telemetry, 424, 0.0)      # unf_clutch
-        struct.pack_into("<d", buf_telemetry, 432, thr * 0.98) # fil_thr
-        struct.pack_into("<d", buf_telemetry, 440, brk * 0.95) # fil_brk
-        struct.pack_into("<d", buf_telemetry, 448, steer)
-        struct.pack_into("<d", buf_telemetry, 464, steer * 15.0) # shaft torque
+        struct.pack_into("<d", buf_telemetry, 388, thr)      # unf_thr
+        struct.pack_into("<d", buf_telemetry, 396, brk)      # unf_brk
+        struct.pack_into("<d", buf_telemetry, 404, steer)    # unf_str
+        struct.pack_into("<d", buf_telemetry, 412, 0.0)      # unf_clutch
+        struct.pack_into("<d", buf_telemetry, 420, thr * 0.98) # fil_thr
+        struct.pack_into("<d", buf_telemetry, 428, brk * 0.95) # fil_brk
+        struct.pack_into("<d", buf_telemetry, 436, steer)
+        struct.pack_into("<d", buf_telemetry, 444, 0.0)
+        struct.pack_into("<d", buf_telemetry, 452, steer * 15.0) # shaft torque
 
         # Aero & chassis
-        struct.pack_into("<d", buf_telemetry, 472, 0.015 + 0.003 * math.sin(t)) # f_3rd
-        struct.pack_into("<d", buf_telemetry, 480, 0.018 + 0.004 * math.cos(t)) # r_3rd
-        struct.pack_into("<d", buf_telemetry, 488, 0.045)     # f_wing
-        struct.pack_into("<d", buf_telemetry, 496, 0.038)     # f_ride
-        struct.pack_into("<d", buf_telemetry, 504, 0.052)     # r_ride
-        struct.pack_into("<d", buf_telemetry, 512, 850.0)     # drag
-        struct.pack_into("<d", buf_telemetry, 520, 1450.0)    # f_df
-        struct.pack_into("<d", buf_telemetry, 528, 2100.0)    # r_df
-        struct.pack_into("<d", buf_telemetry, 536, max(1.0, 50.0 - t * 0.05)) # fuel
-        struct.pack_into("<d", buf_telemetry, 624, 105.0)     # fuel_capacity
-        struct.pack_into("<d", buf_telemetry, 680, 0.46)      # rear_brake_bias
-        struct.pack_into("<d", buf_telemetry, 688, 142.5)     # turbo_boost
-        struct.pack_into("<f", buf_telemetry, 676, 450.0)     # visual_steer_range
-        struct.pack_into("<f", buf_telemetry, 708, 450.0)     # physical_steer_range
-        buf_telemetry[555] = 1                                # headlights
-        struct.pack_into("<i", buf_telemetry, 616, 2)         # sector 2
+        struct.pack_into("<d", buf_telemetry, 460, 0.015 + 0.003 * math.sin(t)) # f_3rd
+        struct.pack_into("<d", buf_telemetry, 468, 0.018 + 0.004 * math.cos(t)) # r_3rd
+        struct.pack_into("<d", buf_telemetry, 476, 0.045)     # f_wing
+        struct.pack_into("<d", buf_telemetry, 484, 0.038)     # f_ride
+        struct.pack_into("<d", buf_telemetry, 492, 0.052)     # r_ride
+        struct.pack_into("<d", buf_telemetry, 500, 850.0)     # drag
+        struct.pack_into("<d", buf_telemetry, 508, 1450.0)    # f_df
+        struct.pack_into("<d", buf_telemetry, 516, 2100.0)    # r_df
+        struct.pack_into("<d", buf_telemetry, 524, max(1.0, 50.0 - t * 0.05)) # fuel
+        struct.pack_into("<d", buf_telemetry, 532, 8600.0)   # max_rpm
+        buf_telemetry[543] = 1                                # headlights
+        struct.pack_into("<d", buf_telemetry, 592, 560.0)    # torque
+        struct.pack_into("<i", buf_telemetry, 600, 2)         # sector 2
+        struct.pack_into("<d", buf_telemetry, 608, 105.0)     # fuel_capacity
+        struct.pack_into("<f", buf_telemetry, 660, 450.0)     # visual_steer_range
+        struct.pack_into("<d", buf_telemetry, 664, 0.46)      # rear_brake_bias
+        struct.pack_into("<d", buf_telemetry, 672, 142.5)     # turbo_boost
+        struct.pack_into("<f", buf_telemetry, 692, 450.0)     # physical_steer_range
 
         # Hybrid
-        struct.pack_into("<d", buf_telemetry, 712, 0.76)      # battery SoC
-        struct.pack_into("<d", buf_telemetry, 720, 180.0)     # eb_torque
-        struct.pack_into("<d", buf_telemetry, 728, rpm * 1.3) # eb_rpm
-        struct.pack_into("<d", buf_telemetry, 736, 68.5)      # eb_temp
-        struct.pack_into("<d", buf_telemetry, 744, 46.2)      # eb_water_temp
-        buf_telemetry[752] = 2                                # propulsion
+        struct.pack_into("<d", buf_telemetry, 696, 0.76)      # battery SoC
+        struct.pack_into("<d", buf_telemetry, 704, 180.0)     # eb_torque
+        struct.pack_into("<d", buf_telemetry, 712, rpm * 1.3) # eb_rpm
+        struct.pack_into("<d", buf_telemetry, 720, 68.5)      # eb_temp
+        struct.pack_into("<d", buf_telemetry, 728, 46.2)      # eb_water_temp
+        buf_telemetry[736] = 2                                # propulsion
 
         # 4 Wheels
         for i in range(4):
-            base = 864 + i * 260
-            struct.pack_into("<d", buf_telemetry, base + 0, 0.022 + 0.005 * math.sin(t * 4 + i)) # defl
-            struct.pack_into("<d", buf_telemetry, base + 8, 0.045) # ride_h
-            struct.pack_into("<d", buf_telemetry, base + 16, 4800.0 + 500.0 * math.sin(t + i)) # force
-            struct.pack_into("<d", buf_telemetry, base + 24, 420.0 + 30.0 * i) # brake_temp
-            struct.pack_into("<d", buf_telemetry, base + 32, brk) # brake_press
             struct.pack_into("<d", buf_telemetry, base + 40, spd / 0.33) # rot
             struct.pack_into("<d", buf_telemetry, base + 56, spd + 1.2 * math.sin(t * 6 + i)) # patch_spd
             struct.pack_into("<d", buf_telemetry, base + 72, spd) # ground_spd
@@ -806,8 +907,8 @@ class IsiMotorBenchmarkApp(App):
         self.lbl_visible_rows = Static("🔍 Fields: [bold cyan]0 / 0[/]", classes="metric-box")
 
         self.tabs = Tabs(
-            Tab("🏎️ TelemInfo (1904 B)", id=TAB_TELEM),
-            Tab("⏱️ CompactScoring (176 B)", id=TAB_SCORING),
+            Tab("🏎️ TelemInfo (1888 B)", id=TAB_TELEM),
+            Tab("⏱️ CompactScoring (168 B)", id=TAB_SCORING),
             Tab("🔔 SystemEvent (6 B)", id=TAB_EVENT),
             Tab("📊 Stream Rates", id=TAB_STATS),
             id="packet-tabs"

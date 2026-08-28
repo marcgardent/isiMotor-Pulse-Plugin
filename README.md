@@ -131,7 +131,7 @@ make build
 | **External Dependencies** | `nlohmann/json`, `std::string`, `Boost` | **0 dependencies** (native Winsock2 only) |
 | **Allocations / Tick** | Multiple heap allocations (`malloc`/`new`) | **0 allocations** (stack / static buffers) |
 | **CPU Time per Tick** | ~0.2 ms - 0.8 ms | **< 0.001 ms (sub-microsecond)** |
-| **Payload Size** | ~4 - 8 KB / packet (verbose text) | **1904 bytes fixed** (native binary struct) |
+| **Payload Size** | ~4 - 8 KB / packet (verbose text) | **1888 bytes fixed** (native binary struct) |
 | **Streaming Rate** | ~60 Hz | **120 Hz to 400 Hz+ (zero jitter)** |
 
 ## ⚙️ Configuration File (`isiMotor_RawUDP.ini`)
@@ -150,9 +150,9 @@ TargetIP=127.0.0.1
 TargetPort=5000
 
 [Streams]
-; Raw Telemetry binary stream (1904 bytes @ 60-100Hz): 1=Enabled, 0=Disabled
+; Raw Telemetry binary stream (1888 bytes @ 60-100Hz): 1=Enabled, 0=Disabled
 EnableTelemetry=1
-; Compact Scoring binary stream (176 bytes @ 1-5Hz): 1=Enabled, 0=Disabled
+; Compact Scoring binary stream (168 bytes @ 1-5Hz): 1=Enabled, 0=Disabled
 EnableScoring=1
 ; System Events notification (6 bytes on state transitions): 1=Enabled, 0=Disabled
 EnableSystemEvents=1
@@ -172,7 +172,7 @@ EnableSystemEvents=1
 ## 📡 UDP Protocol Specification
 
 ### 1. Raw Telemetry Packet (`TelemInfoV01`)
-* **Size:** `1904 bytes` | **Rate:** 60 Hz – 100 Hz (per physics tick)
+* **Size:** `1888 bytes` | **Rate:** 60 Hz – 100 Hz (per physics tick)
 * **Alignment:** `#pragma pack(push, 4)`
 * **Transmitted Fields:**
   * Contact patch (LPV) & ground velocities (LGV) for 4 wheels
@@ -184,7 +184,7 @@ EnableSystemEvents=1
   * Session time, delta time, lap number, lap start ET
 
 ### 2. Compact Scoring Packet (`SIMP` Type 2)
-* **Size:** `176 bytes` | **Rate:** 1 Hz – 5 Hz
+* **Size:** `168 bytes` | **Rate:** 1 Hz – 5 Hz
 * **Header:** Magic `SIMP`, Packet Type `2`
 * **Transmitted Fields:**
   * Track Name, Session ID, Total Lap Distance, Session Max Laps
@@ -193,6 +193,23 @@ EnableSystemEvents=1
 
 ### 3. System Event Packet (`SIMP` Type 3)
 * **Size:** `6 bytes` | **Header:** Magic `SIMP`, Packet Type `3`
+* **Events:** `1` = EnterRealtime, `2` = ExitRealtime, `3` = StartSession, `4` = EndSession
+
+---
+
+## 🧪 Integration Testing & Ground-Truth Validation
+
+The project includes an end-to-end testing harness that cross-validates Python decoders against native C++ ground truth:
+
+```bash
+make test
+```
+
+This command automatically:
+1. Compiles the native C++ test mock host ([`tests/cpp_mock/isi_mock_host.cpp`](tests/cpp_mock/isi_mock_host.cpp)).
+2. Dumps raw memory binary files and JSON truth references from C++.
+3. Runs unit tests verifying byte-for-byte decoding accuracy across all 199+ fields.
+4. Spawns a live C++ UDP server sending 100 Hz packets over `127.0.0.1` and asserts real-time socket reception.
 * **Events:** `1` (EnterRealtime), `2` (ExitRealtime), `3` (StartSession), `4` (EndSession)
 
 ---

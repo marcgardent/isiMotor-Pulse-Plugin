@@ -1,0 +1,67 @@
+{
+  "struct_size": 1888,
+  "slot_id": 42,
+  "delta_time": 0.016667,
+  "elapsed_time": 125.456000,
+  "lap_number": 7,
+  "lap_start_et": 45.123000,
+  "vehicle_name": "Ferrari 499P #51",
+  "track_name": "Circuit de la Sarthe - Le Mans",
+  "pos": [-1250.500000, 45.250000, 3420.750000],
+  "local_vel": [-1.500000, 0.200000, -78.500000],
+  "local_accel": [-2.400000, 9.810000, 14.200000],
+  "gear": 5,
+  "engine_rpm": 8450.500000,
+  "engine_water_temp": 88.500000,
+  "engine_oil_temp": 104.200000,
+  "unfiltered_throttle": 0.950000,
+  "unfiltered_brake": 0.000000,
+  "unfiltered_steering": -0.125000,
+  "fuel": 42.500000,
+  "fuel_capacity": 68.000000,
+  "battery_charge_fraction": 0.785000,
+  "electric_boost_motor_torque": 180.000000,
+  "electric_boost_motor_rpm": 16500.000000,
+  "wheels": [
+    {
+      "suspension_deflection": 0.025000,
+      "ride_height": 0.040000,
+      "susp_force": 4500.000000,
+      "brake_temp": 420.000000,
+      "pressure": 172.500000,
+      "wear": 0.050000,
+      "terrain_name": "FL_Asphalt",
+      "temp_celsius": [92.000000, 95.000000, 90.000000]
+    },
+    {
+      "suspension_deflection": 0.027000,
+      "ride_height": 0.041000,
+      "susp_force": 4750.000000,
+      "brake_temp": 435.000000,
+      "pressure": 174.000000,
+      "wear": 0.060000,
+      "terrain_name": "FR_Asphalt",
+      "temp_celsius": [92.000000, 95.000000, 90.000000]
+    },
+    {
+      "suspension_deflection": 0.029000,
+      "ride_height": 0.042000,
+      "susp_force": 5000.000000,
+      "brake_temp": 450.000000,
+      "pressure": 175.500000,
+      "wear": 0.070000,
+      "terrain_name": "RL_Asphalt",
+      "temp_celsius": [92.000000, 95.000000, 90.000000]
+    },
+    {
+      "suspension_deflection": 0.031000,
+      "ride_height": 0.043000,
+      "susp_force": 5250.000000,
+      "brake_temp": 465.000000,
+      "pressure": 177.000000,
+      "wear": 0.080000,
+      "terrain_name": "RR_Asphalt",
+      "temp_celsius": [92.000000, 95.000000, 90.000000]
+    }
+  ]
+}

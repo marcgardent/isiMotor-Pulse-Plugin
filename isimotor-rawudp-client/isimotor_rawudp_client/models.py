@@ -115,7 +115,7 @@ class TelemInfo:
     """
     Complete physical vehicle telemetry frame (TelemInfoV01).
     Direct native memory dump from isiMotor / LMU / rFactor 2.
-    Struct size: 1904 bytes (#pragma pack(4)).
+    Struct size: 1888 bytes (#pragma pack(4)).
     """
     # Time & Session
     slot_id: int = 0                       # slot ID (can be re-used in multiplayer)
@@ -269,7 +269,7 @@ class TelemInfo:
 @dataclass
 class CompactScoring:
     """
-    Compact scoring and timing update (SIMP Type 2, 176 bytes).
+    Compact scoring and timing update (SIMP Type 2, 168 bytes).
     Updated at 1-5 Hz.
     """
     track_name: str = ""                   # Track name string
