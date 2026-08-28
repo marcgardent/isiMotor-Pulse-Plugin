@@ -5,8 +5,19 @@ Validates Python decoder against ground-truth datasets dumped by native C++ isi_
 
 import json
 import os
+import struct
 import unittest
-from isimotor_rawudp_client.decoder import decode_telemetry, decode_compact_scoring, decode_system_event
+from isimotor_rawudp_client.models import RawUdpHeader
+from isimotor_rawudp_client.decoder import (
+    decode_header,
+    decode_telemetry,
+    decode_compact_scoring,
+    decode_full_scoring,
+    decode_system_event,
+    decode_packet,
+    HEADER_SIZE,
+)
+from isimotor_rawudp_client.client import IsiMotorClient
 
 GOLDEN_DIR = os.path.join(os.path.dirname(__file__), "golden")
 
@@ -105,6 +116,115 @@ class TestGoldenTruth(unittest.TestCase):
         self.assertEqual(s.sector, truth["sector"])
         self.assertAlmostEqual(s.last_lap_time, truth["last_lap_time"], places=3)
         self.assertAlmostEqual(s.best_lap_time, truth["best_lap_time"], places=3)
+
+    def test_full_scoring_golden_decoding(self):
+        bin_path = os.path.join(GOLDEN_DIR, "full_scoring_golden.bin")
+        json_path = os.path.join(GOLDEN_DIR, "full_scoring_golden.json")
+
+        self.assertTrue(os.path.exists(bin_path), f"Golden bin missing at {bin_path}")
+        self.assertTrue(os.path.exists(json_path), f"Golden json missing at {json_path}")
+
+        with open(bin_path, "rb") as f:
+            data = f.read()
+        with open(json_path, "r", encoding="utf-8") as f:
+            truth = json.load(f)
+
+        expected_size = 284 + 3 * 584
+        self.assertEqual(len(data), expected_size, f"Expected {expected_size} bytes, got {len(data)}")
+
+        fs = decode_full_scoring(data)
+        self.assertIsNotNone(fs, "Full scoring decode returned None")
+
+        self.assertEqual(fs.track_name, truth["track_name"])
+        self.assertEqual(fs.session, truth["session"])
+        self.assertAlmostEqual(fs.current_et, truth["current_et"], places=3)
+        self.assertAlmostEqual(fs.end_et, truth["end_et"], places=1)
+        self.assertEqual(fs.max_laps, truth["max_laps"])
+        self.assertAlmostEqual(fs.lap_dist, truth["lap_dist"], places=1)
+        self.assertEqual(fs.num_vehicles, 3)
+        self.assertAlmostEqual(fs.ambient_temp, truth["ambient_temp"], places=1)
+        self.assertAlmostEqual(fs.track_temp, truth["track_temp"], places=1)
+
+        # Validate Grid Vehicles
+        self.assertEqual(len(fs.vehicles), 3)
+
+        # Car 1 (Player)
+        v0 = fs.vehicles[0]
+        self.assertEqual(v0.id, 51)
+        self.assertEqual(v0.driver_name, "Marc Gardent")
+        self.assertEqual(v0.vehicle_name, "Ferrari 499P #51")
+        self.assertEqual(v0.vehicle_class, "Hypercar")
+        self.assertEqual(v0.place, 1)
+        self.assertTrue(v0.is_player)
+        self.assertFalse(v0.in_pits)
+        self.assertAlmostEqual(v0.best_lap_time, 204.850, places=3)
+
+        # Car 2
+        v1 = fs.vehicles[1]
+        self.assertEqual(v1.id, 7)
+        self.assertEqual(v1.driver_name, "Kamui Kobayashi")
+        self.assertEqual(v1.place, 2)
+        self.assertFalse(v1.is_player)
+        self.assertAlmostEqual(v1.time_behind_leader, 1.450, places=3)
+
+        # Car 3 (In Pits)
+        v2 = fs.vehicles[2]
+        self.assertEqual(v2.id, 6)
+        self.assertEqual(v2.driver_name, "Kevin Estre")
+        self.assertEqual(v2.place, 3)
+        self.assertTrue(v2.in_pits)
+        self.assertEqual(v2.pit_state, 3)
+        self.assertEqual(v2.num_pitstops, 2)
+
+        # Validate Leaderboard helper
+        leaderboard = fs.leaderboard
+        self.assertEqual([c.place for c in leaderboard], [1, 2, 3])
+        self.assertEqual(fs.player_vehicle.id, 51)
+
+    def test_header_decoding(self):
+        # Pack sample 24-byte header
+        hdr_bytes = struct.pack("<4sBBHIdBBH", b"SIMP", 1, 4, 1200, 105, 1250.5, 0, 2, 3)
+        self.assertEqual(len(hdr_bytes), HEADER_SIZE)
+
+        hdr = decode_header(hdr_bytes)
+        self.assertIsNotNone(hdr)
+        self.assertEqual(hdr.magic, b"SIMP")
+        self.assertEqual(hdr.protocol_version, 1)
+        self.assertEqual(hdr.packet_type, 4)
+        self.assertEqual(hdr.payload_size, 1200)
+        self.assertEqual(hdr.sequence_number, 105)
+        self.assertAlmostEqual(hdr.session_et, 1250.5, places=1)
+        self.assertEqual(hdr.chunk_index, 0)
+        self.assertEqual(hdr.total_chunks, 2)
+        self.assertEqual(hdr.sub_type_or_id, 3)
+
+    def test_chunk_slicing_and_reassembly(self):
+        bin_path = os.path.join(GOLDEN_DIR, "full_scoring_golden.bin")
+        with open(bin_path, "rb") as f:
+            full_data = f.read()
+
+        client = IsiMotorClient()
+        chunk_size = 1200
+        total_chunks = (len(full_data) + chunk_size - 1) // chunk_size
+
+        chunk0_payload = full_data[0:chunk_size]
+        hdr0 = struct.pack("<4sBBHIdBBH", b"SIMP", 1, 4, len(chunk0_payload), 42, 100.0, 0, total_chunks, 3)
+        pkt0 = hdr0 + chunk0_payload
+
+        chunk1_payload = full_data[chunk_size:]
+        hdr1 = struct.pack("<4sBBHIdBBH", b"SIMP", 1, 4, len(chunk1_payload), 42, 100.0, 1, total_chunks, 3)
+        pkt1 = hdr1 + chunk1_payload
+
+        # Process chunk 0 (incomplete)
+        res0 = client._process_chunk(pkt0, 1000.0)
+        self.assertIsNone(res0, "Expected None while chunks are incomplete")
+
+        # Process chunk 1 (complete)
+        res1 = client._process_chunk(pkt1, 1000.0)
+        self.assertIsNotNone(res1, "Expected FullScoringSession upon assembling all chunks")
+        self.assertEqual(res1.num_vehicles, 3)
+        self.assertEqual(res1.track_name, "Circuit de la Sarthe - Le Mans")
+        self.assertEqual(len(res1.vehicles), 3)
 
     def test_event_golden_decoding(self):
         bin_path = os.path.join(GOLDEN_DIR, "event_golden.bin")

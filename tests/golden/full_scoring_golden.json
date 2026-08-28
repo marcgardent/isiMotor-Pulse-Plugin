@@ -1,0 +1,54 @@
+{
+  "session_header_size": 284,
+  "vehicle_struct_size": 584,
+  "track_name": "Circuit de la Sarthe - Le Mans",
+  "session": 10,
+  "current_et": 1250.456000,
+  "end_et": 86400.000000,
+  "max_laps": 24,
+  "lap_dist": 13626.000000,
+  "num_vehicles": 3,
+  "ambient_temp": 24.500000,
+  "track_temp": 32.800000,
+  "vehicles": [
+    {
+      "id": 51,
+      "driver_name": "Marc Gardent",
+      "vehicle_name": "Ferrari 499P #51",
+      "vehicle_class": "Hypercar",
+      "total_laps": 8,
+      "place": 1,
+      "is_player": true,
+      "in_pits": false,
+      "time_behind_leader": 0.000000,
+      "best_lap_time": 204.850000,
+      "last_lap_time": 205.420000
+    },
+    {
+      "id": 7,
+      "driver_name": "Kamui Kobayashi",
+      "vehicle_name": "Toyota GR010 #7",
+      "vehicle_class": "Hypercar",
+      "total_laps": 8,
+      "place": 2,
+      "is_player": false,
+      "in_pits": false,
+      "time_behind_leader": 1.450000,
+      "best_lap_time": 205.110000,
+      "last_lap_time": 205.650000
+    },
+    {
+      "id": 6,
+      "driver_name": "Kevin Estre",
+      "vehicle_name": "Porsche 963 #6",
+      "vehicle_class": "Hypercar",
+      "total_laps": 7,
+      "place": 3,
+      "is_player": false,
+      "in_pits": true,
+      "time_behind_leader": 4.650000,
+      "best_lap_time": 205.350000,
+      "last_lap_time": 206.100000
+    }
+  ]
+}

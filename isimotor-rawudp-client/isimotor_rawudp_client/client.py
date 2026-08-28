@@ -6,20 +6,35 @@ import socket
 import select
 import threading
 import time
-from typing import Optional, Callable, Generator, List, Union
-from .models import TelemInfo, CompactScoring, SystemEvent
-from .decoder import decode_packet, decode_telemetry, decode_compact_scoring, decode_system_event
+from typing import Optional, Callable, Dict, List, Union
+from .models import (
+    RawUdpHeader,
+    TelemInfo,
+    CompactScoring,
+    FullScoringSession,
+    SystemEvent,
+)
+from .decoder import (
+    decode_header,
+    decode_packet,
+    decode_telemetry,
+    decode_compact_scoring,
+    decode_full_scoring,
+    decode_system_event,
+    HEADER_SIZE,
+)
 
 
 class IsiMotorClient:
     """
     Thread-safe UDP Client for isiMotor-RawUDP-Plugin.
-    
+
     Usage Examples:
-    
+
     1. Callback-based:
         client = IsiMotorClient(port=5000)
         client.on_telemetry = lambda t: print(f"RPM: {t.engine_rpm}, Speed: {t.speed_kmh:.1f}")
+        client.on_full_scoring = lambda s: print(f"Leader: {s.leaderboard[0].driver_name}")
         client.start()
         ...
         client.stop()
@@ -28,14 +43,10 @@ class IsiMotorClient:
         with IsiMotorClient(port=5000) as client:
             while True:
                 telem = client.get_latest_telemetry()
+                scoring = client.get_latest_full_scoring()
                 if telem:
                     print(telem.gear_str, telem.speed_kmh)
                 time.sleep(0.01)
-
-    3. Generator Stream:
-        client = IsiMotorClient(port=5000)
-        for telemetry in client.stream_telemetry():
-            print(telemetry.speed_kmh)
     """
 
     def __init__(self, host: str = "0.0.0.0", port: int = 5000):
@@ -50,15 +61,33 @@ class IsiMotorClient:
         # Cached latest frames
         self._latest_telemetry: Optional[TelemInfo] = None
         self._latest_scoring: Optional[CompactScoring] = None
+        self._latest_full_scoring: Optional[FullScoringSession] = None
         self._latest_system_event: Optional[SystemEvent] = None
         self._last_packet_time: float = 0.0
         self._packet_count: int = 0
 
+        # Chunk reassembly buffer: (packet_type, sequence_number) -> dict
+        self._reassembly_buffers: Dict[tuple, dict] = {}
+        self._last_reassembly_cleanup: float = 0.0
+
         # Callbacks
         self.on_telemetry: Optional[Callable[[TelemInfo], None]] = None
         self.on_scoring: Optional[Callable[[CompactScoring], None]] = None
+        self.on_full_scoring: Optional[Callable[[FullScoringSession], None]] = None
         self.on_system_event: Optional[Callable[[SystemEvent], None]] = None
-        self.on_packet: Optional[Callable[[Union[TelemInfo, CompactScoring, SystemEvent]], None]] = None
+        self.on_packet: Optional[
+            Callable[
+                [Union[TelemInfo, CompactScoring, FullScoringSession, SystemEvent]],
+                None,
+            ]
+        ] = None
+
+    def __enter__(self) -> "IsiMotorClient":
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.stop()
 
     def start(self) -> "IsiMotorClient":
         """Starts the background receiver thread."""
@@ -71,7 +100,9 @@ class IsiMotorClient:
         self._socket.setblocking(False)
         self._socket.bind((self.host, self.port))
 
-        self._thread = threading.Thread(target=self._listen_loop, daemon=True, name="IsiMotorUdpReceiver")
+        self._thread = threading.Thread(
+            target=self._listen_loop, daemon=True, name="IsiMotorUdpReceiver"
+        )
         self._thread.start()
         return self
 
@@ -89,6 +120,61 @@ class IsiMotorClient:
                 pass
             self._socket = None
 
+    def _cleanup_old_reassemblies(self, now: float) -> None:
+        """Prunes incomplete multipart frames older than 1.0 second."""
+        if now - self._last_reassembly_cleanup < 0.5:
+            return
+        self._last_reassembly_cleanup = now
+        stale_keys = [
+            k
+            for k, v in self._reassembly_buffers.items()
+            if now - v.get("timestamp", 0) > 1.0
+        ]
+        for k in stale_keys:
+            del self._reassembly_buffers[k]
+
+    def _process_chunk(self, data: bytes, now: float) -> Optional[FullScoringSession]:
+        """Handles sliced multipart packet reassembly."""
+        if len(data) < HEADER_SIZE:
+            return None
+
+        hdr = decode_header(data)
+        if not hdr:
+            return None
+
+        payload = data[HEADER_SIZE : HEADER_SIZE + hdr.payload_size]
+
+        if hdr.total_chunks == 1:
+            if hdr.packet_type == 4:
+                return decode_full_scoring(payload)
+            return None
+
+        key = (hdr.packet_type, hdr.sequence_number)
+        if key not in self._reassembly_buffers:
+            self._reassembly_buffers[key] = {
+                "total_chunks": hdr.total_chunks,
+                "chunks": {},
+                "timestamp": now,
+            }
+
+        buf = self._reassembly_buffers[key]
+        buf["chunks"][hdr.chunk_index] = payload
+
+        if len(buf["chunks"]) == buf["total_chunks"]:
+            # All slices received in full
+            ordered_slices = [
+                buf["chunks"][i]
+                for i in range(buf["total_chunks"])
+                if i in buf["chunks"]
+            ]
+            del self._reassembly_buffers[key]
+            assembled_payload = b"".join(ordered_slices)
+
+            if hdr.packet_type == 4:
+                return decode_full_scoring(assembled_payload)
+
+        return None
+
     def _listen_loop(self) -> None:
         """Internal ultra-low latency receive loop."""
         while self._running:
@@ -103,7 +189,22 @@ class IsiMotorClient:
                         try:
                             data, _ = self._socket.recvfrom(65535)
                             now = time.time()
-                            pkt = decode_packet(data)
+                            self._cleanup_old_reassemblies(now)
+
+                            # Handle sliced / chunked packets
+                            pkt = None
+                            if (
+                                data.startswith(b"SIMP")
+                                and len(data) >= HEADER_SIZE
+                                and data[4] == 1
+                            ):
+                                hdr = decode_header(data)
+                                if hdr and hdr.total_chunks > 1:
+                                    pkt = self._process_chunk(data, now)
+                                else:
+                                    pkt = decode_packet(data)
+                            else:
+                                pkt = decode_packet(data)
 
                             if pkt is not None:
                                 with self._lock:
@@ -114,6 +215,8 @@ class IsiMotorClient:
                                         self._latest_telemetry = pkt
                                     elif isinstance(pkt, CompactScoring):
                                         self._latest_scoring = pkt
+                                    elif isinstance(pkt, FullScoringSession):
+                                        self._latest_full_scoring = pkt
                                     elif isinstance(pkt, SystemEvent):
                                         self._latest_system_event = pkt
 
@@ -121,11 +224,25 @@ class IsiMotorClient:
                                 if self.on_packet:
                                     self.on_packet(pkt)
 
-                                if isinstance(pkt, TelemInfo) and self.on_telemetry:
+                                if (
+                                    isinstance(pkt, TelemInfo)
+                                    and self.on_telemetry
+                                ):
                                     self.on_telemetry(pkt)
-                                elif isinstance(pkt, CompactScoring) and self.on_scoring:
+                                elif (
+                                    isinstance(pkt, CompactScoring)
+                                    and self.on_scoring
+                                ):
                                     self.on_scoring(pkt)
-                                elif isinstance(pkt, SystemEvent) and self.on_system_event:
+                                elif (
+                                    isinstance(pkt, FullScoringSession)
+                                    and self.on_full_scoring
+                                ):
+                                    self.on_full_scoring(pkt)
+                                elif (
+                                    isinstance(pkt, SystemEvent)
+                                    and self.on_system_event
+                                ):
                                     self.on_system_event(pkt)
 
                         except (BlockingIOError, socket.error):
@@ -144,41 +261,22 @@ class IsiMotorClient:
         with self._lock:
             return self._latest_scoring
 
+    def get_latest_full_scoring(self) -> Optional[FullScoringSession]:
+        """Returns the most recently received FullScoringSession frame thread-safely."""
+        with self._lock:
+            return self._latest_full_scoring
+
     def get_latest_system_event(self) -> Optional[SystemEvent]:
         """Returns the most recently received SystemEvent thread-safely."""
         with self._lock:
             return self._latest_system_event
 
-    def is_connected(self, timeout: float = 1.0) -> bool:
-        """Returns True if a valid packet was received within the timeout."""
-        with self._lock:
-            return (time.time() - self._last_packet_time) < timeout if self._last_packet_time > 0 else False
-
     @property
     def packet_count(self) -> int:
-        """Total number of packets received."""
         with self._lock:
             return self._packet_count
 
-    def stream_telemetry(self, poll_interval: float = 0.005) -> Generator[TelemInfo, None, None]:
-        """Generator yielding new telemetry frames as they arrive."""
-        if not self._running:
-            self.start()
-
-        last_ts = 0.0
-        while self._running:
-            with self._lock:
-                telem = self._latest_telemetry
-                ts = self._last_packet_time
-
-            if telem and ts != last_ts:
-                last_ts = ts
-                yield telem
-            time.sleep(poll_interval)
-
-    def __enter__(self) -> "IsiMotorClient":
-        self.start()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.stop()
+    @property
+    def last_packet_time(self) -> float:
+        with self._lock:
+            return self._last_packet_time

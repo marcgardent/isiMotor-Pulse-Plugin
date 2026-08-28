@@ -3,16 +3,53 @@ High-performance binary decoder for isiMotor / LMU / rFactor 2 raw UDP packets.
 """
 
 import struct
-from typing import Optional, Union, Tuple
-from .models import TelemInfo, TelemWheel, TelemVect3, CompactScoring, SystemEvent
+from typing import Optional, Union, Tuple, List
+from .models import (
+    RawUdpHeader,
+    TelemInfo,
+    TelemWheel,
+    TelemVect3,
+    CompactScoring,
+    FullScoringSession,
+    VehicleScoring,
+    SystemEvent,
+)
+
+HEADER_SIZE = 24
+HEADER_STRUCT = "<4sBBHIdBBH"
 
 TELEMINFO_SIZE = 1888
 COMPACT_SCORING_SIZE = 168
+FULL_SCORING_SESSION_SIZE = 284
+VEHICLE_SCORING_SIZE = 584
 SYSTEM_EVENT_SIZE = 6
+
 
 def _decode_string(raw_bytes: bytes) -> str:
     """Decodes null-terminated C string."""
     return raw_bytes.split(b"\x00", 1)[0].decode("utf-8", errors="ignore")
+
+
+def decode_header(data: bytes) -> Optional[RawUdpHeader]:
+    """Decodes 24-byte standardized SIMP protocol header."""
+    if len(data) < HEADER_SIZE or not data.startswith(b"SIMP"):
+        return None
+
+    magic, ver, pkt_type, payload_sz, seq, session_et, chunk_idx, total_chunks, sub_id = (
+        struct.unpack_from(HEADER_STRUCT, data, 0)
+    )
+    return RawUdpHeader(
+        magic=magic,
+        protocol_version=ver,
+        packet_type=pkt_type,
+        payload_size=payload_sz,
+        sequence_number=seq,
+        session_et=session_et,
+        chunk_index=chunk_idx,
+        total_chunks=total_chunks,
+        sub_type_or_id=sub_id,
+    )
+
 
 def decode_wheel(data: bytes, offset: int) -> TelemWheel:
     """Decodes a 260-byte TelemWheelV01 struct at specified offset."""
@@ -80,114 +117,115 @@ def decode_wheel(data: bytes, offset: int) -> TelemWheel:
         tire_inner_layer_temperature=(it0, it1, it2),
     )
 
-def decode_telemetry(data: bytes) -> Optional[TelemInfo]:
+
+def decode_telemetry(data: bytes, offset: int = 0) -> Optional[TelemInfo]:
     """Decodes a 1888-byte native TelemInfoV01 memory dump."""
-    if len(data) < TELEMINFO_SIZE:
+    if len(data) - offset < TELEMINFO_SIZE:
         return None
 
-    slot_id = struct.unpack_from("<i", data, 0)[0]
-    dt = struct.unpack_from("<d", data, 4)[0]
-    elapsed = struct.unpack_from("<d", data, 12)[0]
-    lap_num = struct.unpack_from("<i", data, 20)[0]
-    lap_start_et = struct.unpack_from("<d", data, 24)[0]
-    veh_name = _decode_string(data[32:96])
-    track_name = _decode_string(data[96:160])
+    slot_id = struct.unpack_from("<i", data, offset + 0)[0]
+    dt = struct.unpack_from("<d", data, offset + 4)[0]
+    elapsed = struct.unpack_from("<d", data, offset + 12)[0]
+    lap_num = struct.unpack_from("<i", data, offset + 20)[0]
+    lap_start_et = struct.unpack_from("<d", data, offset + 24)[0]
+    veh_name = _decode_string(data[offset + 32 : offset + 96])
+    track_name = _decode_string(data[offset + 96 : offset + 160])
 
-    px, py, pz = struct.unpack_from("<ddd", data, 160)
+    px, py, pz = struct.unpack_from("<ddd", data, offset + 160)
     pos = TelemVect3(px, py, pz)
 
-    vx, vy, vz = struct.unpack_from("<ddd", data, 184)
+    vx, vy, vz = struct.unpack_from("<ddd", data, offset + 184)
     local_vel = TelemVect3(vx, vy, vz)
 
-    ax, ay, az = struct.unpack_from("<ddd", data, 208)
+    ax, ay, az = struct.unpack_from("<ddd", data, offset + 208)
     local_accel = TelemVect3(ax, ay, az)
 
     # Orientation matrix 3x3
-    r0 = TelemVect3(*struct.unpack_from("<ddd", data, 232))
-    r1 = TelemVect3(*struct.unpack_from("<ddd", data, 256))
-    r2 = TelemVect3(*struct.unpack_from("<ddd", data, 280))
+    r0 = TelemVect3(*struct.unpack_from("<ddd", data, offset + 232))
+    r1 = TelemVect3(*struct.unpack_from("<ddd", data, offset + 256))
+    r2 = TelemVect3(*struct.unpack_from("<ddd", data, offset + 280))
     ori = (r0, r1, r2)
 
-    rx, ry, rz = struct.unpack_from("<ddd", data, 304)
+    rx, ry, rz = struct.unpack_from("<ddd", data, offset + 304)
     local_rot = TelemVect3(rx, ry, rz)
 
-    rax, ray, raz = struct.unpack_from("<ddd", data, 328)
+    rax, ray, raz = struct.unpack_from("<ddd", data, offset + 328)
     local_rot_accel = TelemVect3(rax, ray, raz)
 
-    gear = struct.unpack_from("<i", data, 352)[0]
-    engine_rpm = struct.unpack_from("<d", data, 356)[0]
-    water_temp = struct.unpack_from("<d", data, 364)[0]
-    oil_temp = struct.unpack_from("<d", data, 372)[0]
-    clutch_rpm = struct.unpack_from("<d", data, 380)[0]
+    gear = struct.unpack_from("<i", data, offset + 352)[0]
+    engine_rpm = struct.unpack_from("<d", data, offset + 356)[0]
+    water_temp = struct.unpack_from("<d", data, offset + 364)[0]
+    oil_temp = struct.unpack_from("<d", data, offset + 372)[0]
+    clutch_rpm = struct.unpack_from("<d", data, offset + 380)[0]
 
-    unf_throttle = struct.unpack_from("<d", data, 388)[0]
-    unf_brake = struct.unpack_from("<d", data, 396)[0]
-    unf_steer = struct.unpack_from("<d", data, 404)[0]
-    unf_clutch = struct.unpack_from("<d", data, 412)[0]
+    unf_throttle = struct.unpack_from("<d", data, offset + 388)[0]
+    unf_brake = struct.unpack_from("<d", data, offset + 396)[0]
+    unf_steer = struct.unpack_from("<d", data, offset + 404)[0]
+    unf_clutch = struct.unpack_from("<d", data, offset + 412)[0]
 
-    fil_throttle = struct.unpack_from("<d", data, 420)[0]
-    fil_brake = struct.unpack_from("<d", data, 428)[0]
-    fil_steer = struct.unpack_from("<d", data, 436)[0]
-    fil_clutch = struct.unpack_from("<d", data, 444)[0]
+    fil_throttle = struct.unpack_from("<d", data, offset + 420)[0]
+    fil_brake = struct.unpack_from("<d", data, offset + 428)[0]
+    fil_steer = struct.unpack_from("<d", data, offset + 436)[0]
+    fil_clutch = struct.unpack_from("<d", data, offset + 444)[0]
 
-    steering_shaft_torque = struct.unpack_from("<d", data, 452)[0]
-    front_3rd_defl = struct.unpack_from("<d", data, 460)[0]
-    rear_3rd_defl = struct.unpack_from("<d", data, 468)[0]
+    steering_shaft_torque = struct.unpack_from("<d", data, offset + 452)[0]
+    front_3rd_defl = struct.unpack_from("<d", data, offset + 460)[0]
+    rear_3rd_defl = struct.unpack_from("<d", data, offset + 468)[0]
 
-    front_wing_h = struct.unpack_from("<d", data, 476)[0]
-    front_ride_h = struct.unpack_from("<d", data, 484)[0]
-    rear_ride_h = struct.unpack_from("<d", data, 492)[0]
-    drag = struct.unpack_from("<d", data, 500)[0]
-    front_downforce = struct.unpack_from("<d", data, 508)[0]
-    rear_downforce = struct.unpack_from("<d", data, 516)[0]
+    front_wing_h = struct.unpack_from("<d", data, offset + 476)[0]
+    front_ride_h = struct.unpack_from("<d", data, offset + 484)[0]
+    rear_ride_h = struct.unpack_from("<d", data, offset + 492)[0]
+    drag = struct.unpack_from("<d", data, offset + 500)[0]
+    front_downforce = struct.unpack_from("<d", data, offset + 508)[0]
+    rear_downforce = struct.unpack_from("<d", data, offset + 516)[0]
 
-    fuel = struct.unpack_from("<d", data, 524)[0]
-    max_rpm = struct.unpack_from("<d", data, 532)[0]
-    scheduled_stops = data[540]
-    overheating = bool(data[541])
-    detached = bool(data[542])
-    headlights = bool(data[543])
-    dent_severity = tuple(data[544:552])
+    fuel = struct.unpack_from("<d", data, offset + 524)[0]
+    max_rpm = struct.unpack_from("<d", data, offset + 532)[0]
+    scheduled_stops = data[offset + 540]
+    overheating = bool(data[offset + 541])
+    detached = bool(data[offset + 542])
+    headlights = bool(data[offset + 543])
+    dent_severity = tuple(data[offset + 544 : offset + 552])
 
-    last_impact_et = struct.unpack_from("<d", data, 552)[0]
-    last_impact_magnitude = struct.unpack_from("<d", data, 560)[0]
-    ix, iy, iz = struct.unpack_from("<ddd", data, 568)
+    last_impact_et = struct.unpack_from("<d", data, offset + 552)[0]
+    last_impact_magnitude = struct.unpack_from("<d", data, offset + 560)[0]
+    ix, iy, iz = struct.unpack_from("<ddd", data, offset + 568)
     last_impact_pos = TelemVect3(ix, iy, iz)
 
-    engine_torque = struct.unpack_from("<d", data, 592)[0]
-    current_sector = struct.unpack_from("<i", data, 600)[0]
-    speed_limiter = data[604]
-    max_gears = data[605]
-    front_tire_compound_idx = data[606]
-    rear_tire_compound_idx = data[607]
-    fuel_capacity = struct.unpack_from("<d", data, 608)[0]
-    front_flap_act = data[616]
-    rear_flap_act = data[617]
-    rear_flap_status = data[618]
-    ignition_starter = data[619]
-    front_compound_name = _decode_string(data[620:638])
-    rear_compound_name = _decode_string(data[638:656])
+    engine_torque = struct.unpack_from("<d", data, offset + 592)[0]
+    current_sector = struct.unpack_from("<i", data, offset + 600)[0]
+    speed_limiter = data[offset + 604]
+    max_gears = data[offset + 605]
+    front_tire_compound_idx = data[offset + 606]
+    rear_tire_compound_idx = data[offset + 607]
+    fuel_capacity = struct.unpack_from("<d", data, offset + 608)[0]
+    front_flap_act = data[offset + 616]
+    rear_flap_act = data[offset + 617]
+    rear_flap_status = data[offset + 618]
+    ignition_starter = data[offset + 619]
+    front_compound_name = _decode_string(data[offset + 620 : offset + 638])
+    rear_compound_name = _decode_string(data[offset + 638 : offset + 656])
 
-    speed_limiter_avail = data[656]
-    anti_stall_act = data[657]
-    visual_steer_range = struct.unpack_from("<f", data, 660)[0]
-    rear_brake_bias = struct.unpack_from("<d", data, 664)[0]
-    turbo_boost = struct.unpack_from("<d", data, 672)[0]
-    p2g_offset = struct.unpack_from("<fff", data, 680)
-    physical_steer_range = struct.unpack_from("<f", data, 692)[0]
-    battery_charge = struct.unpack_from("<d", data, 696)[0]
+    speed_limiter_avail = data[offset + 656]
+    anti_stall_act = data[offset + 657]
+    visual_steer_range = struct.unpack_from("<f", data, offset + 660)[0]
+    rear_brake_bias = struct.unpack_from("<d", data, offset + 664)[0]
+    turbo_boost = struct.unpack_from("<d", data, offset + 672)[0]
+    p2g_offset = struct.unpack_from("<fff", data, offset + 680)
+    physical_steer_range = struct.unpack_from("<f", data, offset + 692)[0]
+    battery_charge = struct.unpack_from("<d", data, offset + 696)[0]
 
-    eb_torque = struct.unpack_from("<d", data, 704)[0]
-    eb_rpm = struct.unpack_from("<d", data, 712)[0]
-    eb_temp = struct.unpack_from("<d", data, 720)[0]
-    eb_water_temp = struct.unpack_from("<d", data, 728)[0]
-    eb_state = data[736]
+    eb_torque = struct.unpack_from("<d", data, offset + 704)[0]
+    eb_rpm = struct.unpack_from("<d", data, offset + 712)[0]
+    eb_temp = struct.unpack_from("<d", data, offset + 720)[0]
+    eb_water_temp = struct.unpack_from("<d", data, offset + 728)[0]
+    eb_state = data[offset + 736]
 
     # Wheels (FL: 848, FR: 1108, RL: 1368, RR: 1628)
-    w_fl = decode_wheel(data, 848)
-    w_fr = decode_wheel(data, 1108)
-    w_rl = decode_wheel(data, 1368)
-    w_rr = decode_wheel(data, 1628)
+    w_fl = decode_wheel(data, offset + 848)
+    w_fr = decode_wheel(data, offset + 1108)
+    w_rl = decode_wheel(data, offset + 1368)
+    w_rr = decode_wheel(data, offset + 1628)
 
     return TelemInfo(
         slot_id=slot_id,
@@ -264,30 +302,55 @@ def decode_telemetry(data: bytes) -> Optional[TelemInfo]:
         wheels=(w_fl, w_fr, w_rl, w_rr),
     )
 
-def decode_compact_scoring(data: bytes) -> Optional[CompactScoring]:
+
+def decode_compact_scoring(data: bytes, offset: int = 0) -> Optional[CompactScoring]:
     """Decodes a 168-byte SIMP Type 2 compact scoring packet."""
-    if len(data) < COMPACT_SCORING_SIZE or not data.startswith(b"SIMP") or data[4] != 2:
+    if len(data) - offset < COMPACT_SCORING_SIZE:
         return None
 
-    track = _decode_string(data[5:69])
-    session = struct.unpack_from("<i", data, 72)[0]
-    current_et = struct.unpack_from("<d", data, 76)[0]
-    lap_dist = struct.unpack_from("<d", data, 84)[0]
-    max_laps = struct.unpack_from("<i", data, 92)[0]
-    in_rt = bool(data[96])
-    total_laps = struct.unpack_from("<h", data, 98)[0]
-    sector = struct.unpack_from("<b", data, 100)[0]
-    in_garage = bool(data[101])
-    count_lap_flag = data[102]
+    # Check magic if starting at 0
+    if offset == 0 and data.startswith(b"SIMP") and len(data) >= 5 and data[4] == 2:
+        # Legacy SIMP Type 2 layout
+        track = _decode_string(data[5:69])
+        session = struct.unpack_from("<i", data, 72)[0]
+        current_et = struct.unpack_from("<d", data, 76)[0]
+        lap_dist = struct.unpack_from("<d", data, 84)[0]
+        max_laps = struct.unpack_from("<i", data, 92)[0]
+        in_rt = bool(data[96])
+        total_laps = struct.unpack_from("<h", data, 98)[0]
+        sector = struct.unpack_from("<b", data, 100)[0]
+        in_garage = bool(data[101])
+        count_lap_flag = data[102]
 
-    cur_s1 = struct.unpack_from("<d", data, 104)[0]
-    cur_s2 = struct.unpack_from("<d", data, 112)[0]
-    last_s1 = struct.unpack_from("<d", data, 120)[0]
-    last_s2 = struct.unpack_from("<d", data, 128)[0]
-    last_lap = struct.unpack_from("<d", data, 136)[0]
-    best_s1 = struct.unpack_from("<d", data, 144)[0]
-    best_s2 = struct.unpack_from("<d", data, 152)[0]
-    best_lap = struct.unpack_from("<d", data, 160)[0]
+        cur_s1 = struct.unpack_from("<d", data, 104)[0]
+        cur_s2 = struct.unpack_from("<d", data, 112)[0]
+        last_s1 = struct.unpack_from("<d", data, 120)[0]
+        last_s2 = struct.unpack_from("<d", data, 128)[0]
+        last_lap = struct.unpack_from("<d", data, 136)[0]
+        best_s1 = struct.unpack_from("<d", data, 144)[0]
+        best_s2 = struct.unpack_from("<d", data, 152)[0]
+        best_lap = struct.unpack_from("<d", data, 160)[0]
+    else:
+        # Standard payload unpacking
+        track = _decode_string(data[offset + 5 : offset + 69])
+        session = struct.unpack_from("<i", data, offset + 72)[0]
+        current_et = struct.unpack_from("<d", data, offset + 76)[0]
+        lap_dist = struct.unpack_from("<d", data, offset + 84)[0]
+        max_laps = struct.unpack_from("<i", data, offset + 92)[0]
+        in_rt = bool(data[offset + 96])
+        total_laps = struct.unpack_from("<h", data, offset + 98)[0]
+        sector = struct.unpack_from("<b", data, offset + 100)[0]
+        in_garage = bool(data[offset + 101])
+        count_lap_flag = data[offset + 102]
+
+        cur_s1 = struct.unpack_from("<d", data, offset + 104)[0]
+        cur_s2 = struct.unpack_from("<d", data, offset + 112)[0]
+        last_s1 = struct.unpack_from("<d", data, offset + 120)[0]
+        last_s2 = struct.unpack_from("<d", data, offset + 128)[0]
+        last_lap = struct.unpack_from("<d", data, offset + 136)[0]
+        best_s1 = struct.unpack_from("<d", data, offset + 144)[0]
+        best_s2 = struct.unpack_from("<d", data, offset + 152)[0]
+        best_lap = struct.unpack_from("<d", data, offset + 160)[0]
 
     return CompactScoring(
         track_name=track,
@@ -310,27 +373,238 @@ def decode_compact_scoring(data: bytes) -> Optional[CompactScoring]:
         best_lap_time=best_lap,
     )
 
-def decode_system_event(data: bytes) -> Optional[SystemEvent]:
-    """Decodes a 6-byte SIMP Type 3 system event packet."""
-    if len(data) < SYSTEM_EVENT_SIZE or not data.startswith(b"SIMP") or data[4] != 3:
-        return None
-    return SystemEvent(event_id=data[5])
 
-def decode_packet(data: bytes) -> Optional[Union[TelemInfo, CompactScoring, SystemEvent]]:
+def decode_vehicle_scoring(data: bytes, offset: int = 0) -> VehicleScoring:
+    """Decodes a 584-byte VehicleScoringInfoV01 record."""
+    v_id = struct.unpack_from("<i", data, offset + 0)[0]
+    driver_name = _decode_string(data[offset + 4 : offset + 36])
+    veh_name = _decode_string(data[offset + 36 : offset + 100])
+    total_laps = struct.unpack_from("<h", data, offset + 100)[0]
+    sector = struct.unpack_from("<b", data, offset + 102)[0]
+    finish_status = struct.unpack_from("<b", data, offset + 103)[0]
+    lap_dist = struct.unpack_from("<d", data, offset + 104)[0]
+    path_lateral = struct.unpack_from("<d", data, offset + 112)[0]
+    track_edge = struct.unpack_from("<d", data, offset + 120)[0]
+
+    best_s1 = struct.unpack_from("<d", data, offset + 128)[0]
+    best_s2 = struct.unpack_from("<d", data, offset + 136)[0]
+    best_lap = struct.unpack_from("<d", data, offset + 144)[0]
+    last_s1 = struct.unpack_from("<d", data, offset + 152)[0]
+    last_s2 = struct.unpack_from("<d", data, offset + 160)[0]
+    last_lap = struct.unpack_from("<d", data, offset + 168)[0]
+    cur_s1 = struct.unpack_from("<d", data, offset + 176)[0]
+    cur_s2 = struct.unpack_from("<d", data, offset + 184)[0]
+
+    num_pitstops = struct.unpack_from("<h", data, offset + 192)[0]
+    num_penalties = struct.unpack_from("<h", data, offset + 194)[0]
+    is_player = bool(data[offset + 196])
+    control = struct.unpack_from("<b", data, offset + 197)[0]
+    in_pits = bool(data[offset + 198])
+    place = data[offset + 199]
+    veh_class = _decode_string(data[offset + 200 : offset + 232])
+
+    time_behind_next = struct.unpack_from("<d", data, offset + 232)[0]
+    laps_behind_next = struct.unpack_from("<i", data, offset + 240)[0]
+    time_behind_leader = struct.unpack_from("<d", data, offset + 244)[0]
+    laps_behind_leader = struct.unpack_from("<i", data, offset + 252)[0]
+    lap_start_et = struct.unpack_from("<d", data, offset + 256)[0]
+
+    pos = TelemVect3(*struct.unpack_from("<ddd", data, offset + 264))
+    local_vel = TelemVect3(*struct.unpack_from("<ddd", data, offset + 288))
+    local_accel = TelemVect3(*struct.unpack_from("<ddd", data, offset + 312))
+
+    r0 = TelemVect3(*struct.unpack_from("<ddd", data, offset + 336))
+    r1 = TelemVect3(*struct.unpack_from("<ddd", data, offset + 360))
+    r2 = TelemVect3(*struct.unpack_from("<ddd", data, offset + 384))
+    ori = (r0, r1, r2)
+
+    local_rot = TelemVect3(*struct.unpack_from("<ddd", data, offset + 408))
+    local_rot_accel = TelemVect3(*struct.unpack_from("<ddd", data, offset + 432))
+
+    headlights = data[offset + 456]
+    pit_state = data[offset + 457]
+    server_scored = data[offset + 458]
+    individual_phase = data[offset + 459]
+    qualification = struct.unpack_from("<i", data, offset + 460)[0]
+    time_into_lap = struct.unpack_from("<d", data, offset + 464)[0]
+    estimated_lap_time = struct.unpack_from("<d", data, offset + 472)[0]
+
+    pit_group = _decode_string(data[offset + 480 : offset + 504])
+    flag = data[offset + 504]
+    under_yellow = bool(data[offset + 505])
+    count_lap_flag = data[offset + 506]
+    in_garage = bool(data[offset + 507])
+    pit_lap_dist = struct.unpack_from("<f", data, offset + 524)[0]
+    best_lap_s1 = struct.unpack_from("<f", data, offset + 528)[0]
+    best_lap_s2 = struct.unpack_from("<f", data, offset + 532)[0]
+
+    return VehicleScoring(
+        id=v_id,
+        driver_name=driver_name,
+        vehicle_name=veh_name,
+        total_laps=total_laps,
+        sector=sector,
+        finish_status=finish_status,
+        lap_dist=lap_dist,
+        path_lateral=path_lateral,
+        track_edge=track_edge,
+        best_sector1=best_s1,
+        best_sector2=best_s2,
+        best_lap_time=best_lap,
+        last_sector1=last_s1,
+        last_sector2=last_s2,
+        last_lap_time=last_lap,
+        cur_sector1=cur_s1,
+        cur_sector2=cur_s2,
+        num_pitstops=num_pitstops,
+        num_penalties=num_penalties,
+        is_player=is_player,
+        control=control,
+        in_pits=in_pits,
+        place=place,
+        vehicle_class=veh_class,
+        time_behind_next=time_behind_next,
+        laps_behind_next=laps_behind_next,
+        time_behind_leader=time_behind_leader,
+        laps_behind_leader=laps_behind_leader,
+        lap_start_et=lap_start_et,
+        pos=pos,
+        local_vel=local_vel,
+        local_accel=local_accel,
+        ori=ori,
+        local_rot=local_rot,
+        local_rot_accel=local_rot_accel,
+        headlights=headlights,
+        pit_state=pit_state,
+        server_scored=server_scored,
+        individual_phase=individual_phase,
+        qualification=qualification,
+        time_into_lap=time_into_lap,
+        estimated_lap_time=estimated_lap_time,
+        pit_group=pit_group,
+        flag=flag,
+        under_yellow=under_yellow,
+        count_lap_flag=count_lap_flag,
+        in_garage_stall=in_garage,
+        pit_lap_dist=pit_lap_dist,
+        best_lap_sector1=best_lap_s1,
+        best_lap_sector2=best_lap_s2,
+    )
+
+
+def decode_full_scoring(data: bytes, offset: int = 0) -> Optional[FullScoringSession]:
+    """Decodes a FullScoringSession packet along with all embedded vehicle records."""
+    if len(data) - offset < FULL_SCORING_SESSION_SIZE:
+        return None
+
+    track_name = _decode_string(data[offset + 0 : offset + 64])
+    session = struct.unpack_from("<i", data, offset + 64)[0]
+    current_et = struct.unpack_from("<d", data, offset + 68)[0]
+    end_et = struct.unpack_from("<d", data, offset + 76)[0]
+    max_laps = struct.unpack_from("<i", data, offset + 84)[0]
+    lap_dist = struct.unpack_from("<d", data, offset + 88)[0]
+    num_vehicles = struct.unpack_from("<i", data, offset + 96)[0]
+    game_phase = data[offset + 100]
+    yellow_flag_state = struct.unpack_from("<b", data, offset + 101)[0]
+    sector_flags = struct.unpack_from("<bbb", data, offset + 102)
+    start_light = data[offset + 105]
+    num_red_lights = data[offset + 106]
+    in_realtime = bool(data[offset + 107])
+    player_name = _decode_string(data[offset + 108 : offset + 140])
+    plr_file_name = _decode_string(data[offset + 140 : offset + 204])
+
+    dark_cloud = struct.unpack_from("<d", data, offset + 204)[0]
+    raining = struct.unpack_from("<d", data, offset + 212)[0]
+    ambient_temp = struct.unpack_from("<d", data, offset + 220)[0]
+    track_temp = struct.unpack_from("<d", data, offset + 228)[0]
+    wind = TelemVect3(*struct.unpack_from("<ddd", data, offset + 236))
+    min_path_wetness = struct.unpack_from("<d", data, offset + 260)[0]
+    max_path_wetness = struct.unpack_from("<d", data, offset + 268)[0]
+    avg_path_wetness = struct.unpack_from("<d", data, offset + 276)[0]
+
+    vehicles: List[VehicleScoring] = []
+    v_base = offset + FULL_SCORING_SESSION_SIZE
+    for i in range(num_vehicles):
+        v_offset = v_base + (i * VEHICLE_SCORING_SIZE)
+        if len(data) - v_offset < VEHICLE_SCORING_SIZE:
+            break
+        vehicles.append(decode_vehicle_scoring(data, v_offset))
+
+    return FullScoringSession(
+        track_name=track_name,
+        session=session,
+        current_et=current_et,
+        end_et=end_et,
+        max_laps=max_laps,
+        lap_dist=lap_dist,
+        num_vehicles=len(vehicles),
+        game_phase=game_phase,
+        yellow_flag_state=yellow_flag_state,
+        sector_flags=sector_flags,
+        start_light=start_light,
+        num_red_lights=num_red_lights,
+        in_realtime=in_realtime,
+        player_name=player_name,
+        plr_file_name=plr_file_name,
+        dark_cloud=dark_cloud,
+        raining=raining,
+        ambient_temp=ambient_temp,
+        track_temp=track_temp,
+        wind=wind,
+        min_path_wetness=min_path_wetness,
+        max_path_wetness=max_path_wetness,
+        avg_path_wetness=avg_path_wetness,
+        vehicles=vehicles,
+    )
+
+
+def decode_system_event(data: bytes, offset: int = 0) -> Optional[SystemEvent]:
+    """Decodes a 6-byte SIMP Type 3 system event packet."""
+    if len(data) - offset < 2:
+        return None
+    event_id = data[offset + 5] if (offset == 0 and data.startswith(b"SIMP")) else data[offset]
+    return SystemEvent(event_id=event_id)
+
+
+def decode_packet(
+    data: bytes,
+) -> Optional[Union[TelemInfo, CompactScoring, FullScoringSession, SystemEvent]]:
     """
     Main decoder entrypoint. Identifies and parses any supported isiMotor UDP packet.
+    Supports both legacy raw/SIMP packets and new standardized 24-byte header packets.
     """
     if not data:
         return None
 
-    if len(data) >= TELEMINFO_SIZE:
-        return decode_telemetry(data)
+    # 1. Check for standardized 24-byte RawUdpHeader (protocolVersion == 1)
+    if data.startswith(b"SIMP") and len(data) >= HEADER_SIZE:
+        proto_ver = data[4]
+        if proto_ver == 1:
+            hdr = decode_header(data)
+            if hdr:
+                payload = data[HEADER_SIZE : HEADER_SIZE + hdr.payload_size]
+                if hdr.packet_type == 1:
+                    return decode_telemetry(payload)
+                elif hdr.packet_type == 2:
+                    return decode_compact_scoring(payload)
+                elif hdr.packet_type == 3:
+                    return decode_system_event(payload)
+                elif hdr.packet_type == 4:
+                    if hdr.total_chunks == 1:
+                        return decode_full_scoring(payload)
+                    # Sliced chunks are reassembled in IsiMotorClient
+                    return None
 
+    # 2. Legacy SIMP Packet Types (CompactScoring=2, SystemEvent=3)
     if data.startswith(b"SIMP") and len(data) >= 5:
         pkt_type = data[4]
         if pkt_type == 2:
             return decode_compact_scoring(data)
         elif pkt_type == 3:
             return decode_system_event(data)
+
+    # 3. Legacy Raw Telemetry (1888 bytes without SIMP header)
+    if len(data) >= TELEMINFO_SIZE:
+        return decode_telemetry(data)
 
     return None

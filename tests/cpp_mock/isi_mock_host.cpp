@@ -2,7 +2,7 @@
  * isiMotor C++ Mock Host & Struct Layout Introspector
  * 
  * Provides:
- * 1. Exact memory layout & offset dumping for C++ structs (TelemInfoV01, CompactScoring, SystemEvent).
+ * 1. Exact memory layout & offset dumping for C++ structs (TelemInfoV01, CompactScoring, SystemEvent, FullScoring).
  * 2. Golden Binary Dataset Generator (dumps exact C++ memory buffers and corresponding JSON truth).
  * 3. Live UDP Mock Server (streams native C++ struct memory dumps over 127.0.0.1 for end-to-end integration tests).
  */
@@ -18,6 +18,7 @@
 #include <chrono>
 #include <thread>
 #include <vector>
+#include <algorithm>
 
 // POSIX socket headers for Linux
 #include <sys/socket.h>
@@ -36,6 +37,19 @@ typedef void* HWND;
 #undef long
 
 #pragma pack(push, 4)
+
+struct RawUdpHeader {
+    char          magic[4];          // "SIMP"
+    uint8_t       protocolVersion;   // 1
+    uint8_t       packetType;        // 1=Telemetry, 2=CompactScoring, 3=SystemEvent, 4=FullScoring
+    uint16_t      payloadSize;       // Size of chunk payload following header
+    uint32_t      sequenceNumber;    // Monotonic stream sequence counter
+    double        sessionET;         // Current session elapsed time in seconds
+    uint8_t       chunkIndex;        // 0-based chunk index
+    uint8_t       totalChunks;       // Total chunks count
+    uint16_t      subTypeOrId;       // Active vehicle count or slot ID
+};
+
 struct CompactScoringPacket {
     char magic[4];           // "SIMP"
     uint8_t packetType;      // 2 = Scoring
@@ -64,6 +78,33 @@ struct SystemEventPacket {
     uint8_t packetType;      // 3 = System Event
     uint8_t eventType;       // 1 = EnterRealtime, 2 = ExitRealtime, 3 = StartSession, 4 = EndSession
 };
+
+struct FullScoringSessionPacket {
+    char          trackName[64];       // Track/circuit name
+    int32_t       session;             // 0=testday, 1-4=practice, 5-8=qual, 9=warmup, 10-13=race
+    double        currentET;           // Current session elapsed time in seconds
+    double        endET;               // Ending session elapsed time
+    int32_t       maxLaps;             // Maximum laps for session
+    double        lapDist;             // Track lap distance in meters
+    int32_t       numVehicles;         // Number of active vehicles in grid (0..128)
+    uint8_t       gamePhase;           // 0=Garage..5=GreenFlag, 6=FCY..8=SessionOver
+    int8_t        yellowFlagState;     // -1=Invalid, 0=None, 1=Pending, 2=PitClosed, 3=PitLeadLap, 4=PitOpen, 5=LastLap, 6=Resume
+    int8_t        sectorFlag[3];       // Local yellow flags in S3, S1, S2
+    uint8_t       startLight;          // Start light frame
+    uint8_t       numRedLights;        // Red lights in start sequence
+    bool          inRealtime;          // 1 if in realtime driving mode
+    char          playerName[32];      // Player name
+    char          plrFileName[64];     // Player profile filename
+    double        darkCloud;           // Cloud darkness (0.0 - 1.0)
+    double        raining;             // Rain intensity (0.0 - 1.0)
+    double        ambientTemp;         // Air temperature (°C)
+    double        trackTemp;           // Track temperature (°C)
+    TelemVect3    wind;                // Wind velocity vector (x, y, z)
+    double        minPathWetness;      // Track minimum wetness (0.0 - 1.0)
+    double        maxPathWetness;      // Track maximum wetness (0.0 - 1.0)
+    double        avgPathWetness;      // Track average wetness (0.0 - 1.0)
+};
+
 #pragma pack(pop)
 
 // ── Populate Golden Test Vectors ─────────────────────────────────────────────
@@ -222,6 +263,132 @@ void populate_golden_scoring(CompactScoringPacket &s) {
     s.bestLapTime = 204.850;
 }
 
+void populate_golden_full_scoring(FullScoringSessionPacket &sess, std::vector<VehicleScoringInfoV01> &vehicles) {
+    std::memset(&sess, 0, sizeof(sess));
+    std::strncpy(sess.trackName, "Circuit de la Sarthe - Le Mans", sizeof(sess.trackName) - 1);
+    sess.session = 10; // Race 1
+    sess.currentET = 1250.456;
+    sess.endET = 86400.0;
+    sess.maxLaps = 24;
+    sess.lapDist = 13626.0;
+    sess.numVehicles = 3;
+    sess.gamePhase = 5; // GreenFlag
+    sess.yellowFlagState = 0; // None
+    sess.sectorFlag[0] = 0; sess.sectorFlag[1] = 0; sess.sectorFlag[2] = 0;
+    sess.startLight = 0;
+    sess.numRedLights = 0;
+    sess.inRealtime = true;
+    std::strncpy(sess.playerName, "Marc Gardent", sizeof(sess.playerName) - 1);
+    std::strncpy(sess.plrFileName, "Marc_Gardent.plr", sizeof(sess.plrFileName) - 1);
+    sess.darkCloud = 0.15;
+    sess.raining = 0.0;
+    sess.ambientTemp = 24.5;
+    sess.trackTemp = 32.8;
+    sess.wind.Set(2.5, 0.0, 1.2);
+    sess.minPathWetness = 0.0;
+    sess.maxPathWetness = 0.0;
+    sess.avgPathWetness = 0.0;
+
+    vehicles.resize(3);
+    for (size_t i = 0; i < 3; ++i) {
+        std::memset(&vehicles[i], 0, sizeof(VehicleScoringInfoV01));
+    }
+
+    // Car 1 (Player - Ferrari 499P #51 - P1)
+    vehicles[0].mID = 51;
+    std::strncpy(vehicles[0].mDriverName, "Marc Gardent", sizeof(vehicles[0].mDriverName) - 1);
+    std::strncpy(vehicles[0].mVehicleName, "Ferrari 499P #51", sizeof(vehicles[0].mVehicleName) - 1);
+    std::strncpy(vehicles[0].mVehicleClass, "Hypercar", sizeof(vehicles[0].mVehicleClass) - 1);
+    vehicles[0].mTotalLaps = 8;
+    vehicles[0].mSector = 2;
+    vehicles[0].mFinishStatus = 0; // Running
+    vehicles[0].mLapDist = 8450.0;
+    vehicles[0].mPathLateral = -0.25;
+    vehicles[0].mTrackEdge = 7.5;
+    vehicles[0].mBestSector1 = 40.820;
+    vehicles[0].mBestSector2 = 123.500;
+    vehicles[0].mBestLapTime = 204.850;
+    vehicles[0].mLastSector1 = 40.950;
+    vehicles[0].mLastSector2 = 123.850;
+    vehicles[0].mLastLapTime = 205.420;
+    vehicles[0].mCurSector1 = 41.250;
+    vehicles[0].mCurSector2 = 124.500;
+    vehicles[0].mNumPitstops = 1;
+    vehicles[0].mNumPenalties = 0;
+    vehicles[0].mIsPlayer = true;
+    vehicles[0].mControl = 0; // Player
+    vehicles[0].mInPits = false;
+    vehicles[0].mPlace = 1;
+    vehicles[0].mTimeBehindNext = 0.0;
+    vehicles[0].mLapsBehindNext = 0;
+    vehicles[0].mTimeBehindLeader = 0.0;
+    vehicles[0].mLapsBehindLeader = 0;
+    vehicles[0].mLapStartET = 1045.0;
+    vehicles[0].mPos.Set(-1250.5, 45.25, 3420.75);
+    vehicles[0].mLocalVel.Set(-1.5, 0.2, -78.5);
+    vehicles[0].mLocalAccel.Set(-2.4, 9.81, 14.2);
+    vehicles[0].mOri[0].Set(1.0, 0.0, 0.0);
+    vehicles[0].mOri[1].Set(0.0, 1.0, 0.0);
+    vehicles[0].mOri[2].Set(0.0, 0.0, 1.0);
+    vehicles[0].mHeadlights = 1;
+    vehicles[0].mPitState = 0;
+    vehicles[0].mServerScored = 1;
+    vehicles[0].mQualification = 1;
+    vehicles[0].mTimeIntoLap = 205.456;
+    vehicles[0].mEstimatedLapTime = 205.0;
+    std::strncpy(vehicles[0].mPitGroup, "AF Corse", sizeof(vehicles[0].mPitGroup) - 1);
+    vehicles[0].mCountLapFlag = 2;
+
+    // Car 2 (Toyota GR010 #7 - P2)
+    vehicles[1].mID = 7;
+    std::strncpy(vehicles[1].mDriverName, "Kamui Kobayashi", sizeof(vehicles[1].mDriverName) - 1);
+    std::strncpy(vehicles[1].mVehicleName, "Toyota GR010 #7", sizeof(vehicles[1].mVehicleName) - 1);
+    std::strncpy(vehicles[1].mVehicleClass, "Hypercar", sizeof(vehicles[1].mVehicleClass) - 1);
+    vehicles[1].mTotalLaps = 8;
+    vehicles[1].mSector = 2;
+    vehicles[1].mFinishStatus = 0;
+    vehicles[1].mLapDist = 8320.0;
+    vehicles[1].mBestSector1 = 40.910;
+    vehicles[1].mBestSector2 = 123.650;
+    vehicles[1].mBestLapTime = 205.110;
+    vehicles[1].mLastLapTime = 205.650;
+    vehicles[1].mNumPitstops = 1;
+    vehicles[1].mIsPlayer = false;
+    vehicles[1].mControl = 2; // Remote / AI
+    vehicles[1].mPlace = 2;
+    vehicles[1].mTimeBehindNext = 1.450;
+    vehicles[1].mLapsBehindNext = 0;
+    vehicles[1].mTimeBehindLeader = 1.450;
+    vehicles[1].mLapsBehindLeader = 0;
+    vehicles[1].mPos.Set(-1265.0, 45.10, 3310.5);
+    vehicles[1].mLocalVel.Set(-1.2, 0.1, -78.1);
+    vehicles[1].mPlace = 2;
+
+    // Car 3 (Porsche 963 #6 - P3, in pits)
+    vehicles[2].mID = 6;
+    std::strncpy(vehicles[2].mDriverName, "Kevin Estre", sizeof(vehicles[2].mDriverName) - 1);
+    std::strncpy(vehicles[2].mVehicleName, "Porsche 963 #6", sizeof(vehicles[2].mVehicleName) - 1);
+    std::strncpy(vehicles[2].mVehicleClass, "Hypercar", sizeof(vehicles[2].mVehicleClass) - 1);
+    vehicles[2].mTotalLaps = 7;
+    vehicles[2].mSector = 0;
+    vehicles[2].mFinishStatus = 0;
+    vehicles[2].mLapDist = 120.0;
+    vehicles[2].mBestLapTime = 205.350;
+    vehicles[2].mLastLapTime = 206.100;
+    vehicles[2].mNumPitstops = 2;
+    vehicles[2].mIsPlayer = false;
+    vehicles[2].mControl = 2;
+    vehicles[2].mInPits = true;
+    vehicles[2].mPitState = 3; // Stopped in box
+    vehicles[2].mPlace = 3;
+    vehicles[2].mTimeBehindNext = 3.200;
+    vehicles[2].mLapsBehindNext = 1;
+    vehicles[2].mTimeBehindLeader = 4.650;
+    vehicles[2].mLapsBehindLeader = 1;
+    vehicles[2].mPos.Set(45.0, 12.0, 150.0);
+    vehicles[2].mLocalVel.Set(0.0, 0.0, 0.0);
+}
+
 void populate_golden_event(SystemEventPacket &ev, uint8_t type = 1) {
     std::memset(&ev, 0, sizeof(ev));
     ev.magic[0] = 'S'; ev.magic[1] = 'I'; ev.magic[2] = 'M'; ev.magic[3] = 'P';
@@ -233,6 +400,7 @@ void populate_golden_event(SystemEventPacket &ev, uint8_t type = 1) {
 
 void dump_truth(const std::string &bin_telem_path, const std::string &json_telem_path,
                 const std::string &bin_scoring_path, const std::string &json_scoring_path,
+                const std::string &bin_full_scoring_path, const std::string &json_full_scoring_path,
                 const std::string &bin_event_path, const std::string &json_event_path) {
     // 1. Telemetry
     TelemInfoV01 t;
@@ -285,7 +453,7 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
     fj_t << "}\n";
     fj_t.close();
 
-    // 2. Scoring
+    // 2. Compact Scoring
     CompactScoringPacket s;
     populate_golden_scoring(s);
     std::ofstream fb_s(bin_scoring_path, std::ios::binary);
@@ -309,7 +477,52 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
     fj_s << "}\n";
     fj_s.close();
 
-    // 3. Event
+    // 3. Full Scoring (Session Header + 3 Vehicles)
+    FullScoringSessionPacket fs_sess;
+    std::vector<VehicleScoringInfoV01> fs_vehs;
+    populate_golden_full_scoring(fs_sess, fs_vehs);
+
+    std::ofstream fb_fs(bin_full_scoring_path, std::ios::binary);
+    fb_fs.write(reinterpret_cast<const char*>(&fs_sess), sizeof(fs_sess));
+    fb_fs.write(reinterpret_cast<const char*>(fs_vehs.data()), fs_vehs.size() * sizeof(VehicleScoringInfoV01));
+    fb_fs.close();
+
+    std::ofstream fj_fs(json_full_scoring_path);
+    fj_fs << std::setprecision(6) << std::fixed;
+    fj_fs << "{\n";
+    fj_fs << "  \"session_header_size\": " << sizeof(fs_sess) << ",\n";
+    fj_fs << "  \"vehicle_struct_size\": " << sizeof(VehicleScoringInfoV01) << ",\n";
+    fj_fs << "  \"track_name\": \"" << fs_sess.trackName << "\",\n";
+    fj_fs << "  \"session\": " << fs_sess.session << ",\n";
+    fj_fs << "  \"current_et\": " << fs_sess.currentET << ",\n";
+    fj_fs << "  \"end_et\": " << fs_sess.endET << ",\n";
+    fj_fs << "  \"max_laps\": " << fs_sess.maxLaps << ",\n";
+    fj_fs << "  \"lap_dist\": " << fs_sess.lapDist << ",\n";
+    fj_fs << "  \"num_vehicles\": " << fs_sess.numVehicles << ",\n";
+    fj_fs << "  \"ambient_temp\": " << fs_sess.ambientTemp << ",\n";
+    fj_fs << "  \"track_temp\": " << fs_sess.trackTemp << ",\n";
+    fj_fs << "  \"vehicles\": [\n";
+    for (size_t i = 0; i < fs_vehs.size(); ++i) {
+        const auto &v = fs_vehs[i];
+        fj_fs << "    {\n";
+        fj_fs << "      \"id\": " << v.mID << ",\n";
+        fj_fs << "      \"driver_name\": \"" << v.mDriverName << "\",\n";
+        fj_fs << "      \"vehicle_name\": \"" << v.mVehicleName << "\",\n";
+        fj_fs << "      \"vehicle_class\": \"" << v.mVehicleClass << "\",\n";
+        fj_fs << "      \"total_laps\": " << v.mTotalLaps << ",\n";
+        fj_fs << "      \"place\": " << static_cast<int>(v.mPlace) << ",\n";
+        fj_fs << "      \"is_player\": " << (v.mIsPlayer ? "true" : "false") << ",\n";
+        fj_fs << "      \"in_pits\": " << (v.mInPits ? "true" : "false") << ",\n";
+        fj_fs << "      \"time_behind_leader\": " << v.mTimeBehindLeader << ",\n";
+        fj_fs << "      \"best_lap_time\": " << v.mBestLapTime << ",\n";
+        fj_fs << "      \"last_lap_time\": " << v.mLastLapTime << "\n";
+        fj_fs << "    }" << (i + 1 < fs_vehs.size() ? "," : "") << "\n";
+    }
+    fj_fs << "  ]\n";
+    fj_fs << "}\n";
+    fj_fs.close();
+
+    // 4. Event
     SystemEventPacket ev;
     populate_golden_event(ev, 1);
     std::ofstream fb_e(bin_event_path, std::ios::binary);
@@ -326,6 +539,40 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
 }
 
 // ── Live UDP Server Mock ──────────────────────────────────────────────────────
+
+void send_sliced_udp_mock(int sock, const sockaddr_in &dest, unsigned char packetType, unsigned short subId, const void* payload, size_t totalPayloadSize, double sessionET, unsigned int &seq) {
+    const size_t MAX_CHUNK = 1200;
+    const char* src = reinterpret_cast<const char*>(payload);
+    size_t offset = 0;
+    unsigned char totalChunks = static_cast<unsigned char>((totalPayloadSize + MAX_CHUNK - 1) / MAX_CHUNK);
+    if (totalChunks == 0) totalChunks = 1;
+    unsigned char chunkIdx = 0;
+    seq++;
+
+    char buffer[sizeof(RawUdpHeader) + MAX_CHUNK];
+
+    while (offset < totalPayloadSize) {
+        size_t chunkSize = (totalPayloadSize - offset > MAX_CHUNK) ? MAX_CHUNK : (totalPayloadSize - offset);
+
+        RawUdpHeader* hdr = reinterpret_cast<RawUdpHeader*>(buffer);
+        hdr->magic[0] = 'S'; hdr->magic[1] = 'I'; hdr->magic[2] = 'M'; hdr->magic[3] = 'P';
+        hdr->protocolVersion = 1;
+        hdr->packetType = packetType;
+        hdr->payloadSize = static_cast<unsigned short>(chunkSize);
+        hdr->sequenceNumber = seq;
+        hdr->sessionET = sessionET;
+        hdr->chunkIndex = chunkIdx++;
+        hdr->totalChunks = totalChunks;
+        hdr->subTypeOrId = subId;
+
+        std::memcpy(buffer + sizeof(RawUdpHeader), src + offset, chunkSize);
+
+        sendto(sock, buffer, sizeof(RawUdpHeader) + chunkSize, 0,
+               reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+
+        offset += chunkSize;
+    }
+}
 
 void run_live_udp_server(int port, int hz, int duration_sec) {
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -345,15 +592,26 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
     CompactScoringPacket scoring;
     populate_golden_scoring(scoring);
 
+    FullScoringSessionPacket full_sess;
+    std::vector<VehicleScoringInfoV01> full_vehs;
+    populate_golden_full_scoring(full_sess, full_vehs);
+
+    // Buffer for full scoring serialization
+    std::vector<char> full_scoring_buf(sizeof(full_sess) + full_vehs.size() * sizeof(VehicleScoringInfoV01));
+    std::memcpy(full_scoring_buf.data(), &full_sess, sizeof(full_sess));
+    std::memcpy(full_scoring_buf.data() + sizeof(full_sess), full_vehs.data(), full_vehs.size() * sizeof(VehicleScoringInfoV01));
+
     SystemEventPacket ev;
     populate_golden_event(ev, 1);
+
+    unsigned int full_scoring_seq = 0;
 
     // Send initial system event
     sendto(sock, reinterpret_cast<const char*>(&ev), sizeof(ev), 0,
            reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
 
     int total_frames = hz * duration_sec;
-    int scoring_divider = std::max(1, hz / 2); // 2Hz scoring
+    int scoring_divider = std::max(1, hz / 5); // 5Hz scoring
     auto frame_delay = std::chrono::microseconds(1000000 / hz);
 
     std::cout << "[C++ Mock Host] Streaming UDP packets to 127.0.0.1:" << port
@@ -369,11 +627,16 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
         sendto(sock, reinterpret_cast<const char*>(&telem), sizeof(telem), 0,
                reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
 
-        // Send scoring (168 bytes @ 2Hz)
+        // Send scoring (Compact + Full Sliced @ 5Hz)
         if (frame % scoring_divider == 0) {
             scoring.currentET = 1250.0 + sim_time;
             sendto(sock, reinterpret_cast<const char*>(&scoring), sizeof(scoring), 0,
                    reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
+
+            full_sess.currentET = 1250.0 + sim_time;
+            std::memcpy(full_scoring_buf.data(), &full_sess, sizeof(full_sess));
+            send_sliced_udp_mock(sock, dest, 4, static_cast<unsigned short>(full_vehs.size()),
+                                full_scoring_buf.data(), full_scoring_buf.size(), full_sess.currentET, full_scoring_seq);
         }
 
         std::this_thread::sleep_for(frame_delay);
@@ -395,9 +658,12 @@ int main(int argc, char** argv) {
     std::string mode = argv[1];
 
     if (mode == "--sizes") {
+        std::cout << "RawUdpHeader: " << sizeof(RawUdpHeader) << " bytes" << std::endl;
         std::cout << "TelemInfoV01: " << sizeof(TelemInfoV01) << " bytes" << std::endl;
         std::cout << "TelemWheelV01: " << sizeof(TelemWheelV01) << " bytes" << std::endl;
         std::cout << "CompactScoringPacket: " << sizeof(CompactScoringPacket) << " bytes" << std::endl;
+        std::cout << "FullScoringSessionPacket: " << sizeof(FullScoringSessionPacket) << " bytes" << std::endl;
+        std::cout << "VehicleScoringInfoV01: " << sizeof(VehicleScoringInfoV01) << " bytes" << std::endl;
         std::cout << "SystemEventPacket: " << sizeof(SystemEventPacket) << " bytes" << std::endl;
         return 0;
     }
@@ -407,6 +673,7 @@ int main(int argc, char** argv) {
         dump_truth(
             dir + "/telemetry_golden.bin", dir + "/telemetry_golden.json",
             dir + "/scoring_golden.bin", dir + "/scoring_golden.json",
+            dir + "/full_scoring_golden.bin", dir + "/full_scoring_golden.json",
             dir + "/event_golden.bin", dir + "/event_golden.json"
         );
         std::cout << "[C++ Mock Host] Golden datasets successfully dumped to " << dir << std::endl;

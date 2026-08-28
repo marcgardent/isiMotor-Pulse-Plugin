@@ -35,13 +35,27 @@ except ImportError:
     print("      cd benchmark && uv venv && uv pip install -e ../isimotor-rawudp-client textual rich\n")
     sys.exit(1)
 
-from isimotor_rawudp_client.models import TelemInfo, CompactScoring, SystemEvent
-from isimotor_rawudp_client.decoder import decode_telemetry, decode_compact_scoring, decode_system_event
+from isimotor_rawudp_client.models import (
+    TelemInfo,
+    CompactScoring,
+    FullScoringSession,
+    VehicleScoring,
+    SystemEvent,
+)
+from isimotor_rawudp_client.decoder import (
+    decode_telemetry,
+    decode_compact_scoring,
+    decode_full_scoring,
+    decode_system_event,
+    decode_header,
+    HEADER_SIZE,
+)
 
 
 # ── Packet Stream Definitions ──────────────────────────────────────────────────
 PKT_RAW_TELEMETRY   = "TelemInfoV01 (Raw Binary)"
 PKT_COMPACT_SCORING = "CompactScoring (SIMP v2)"
+PKT_FULL_SCORING    = "FullScoring (SIMP v4 Sliced)"
 PKT_SYSTEM_EVENT    = "SystemEvent (SIMP v3)"
 PKT_FOREIGN         = "Foreign / Unknown"
 
@@ -127,16 +141,20 @@ class TelemetryEngine:
         self.socket: Optional[socket.socket] = None
 
         self.stats: Dict[str, PacketStats] = {
-            PKT_RAW_TELEMETRY: PacketStats(PKT_RAW_TELEMETRY, "Binary Struct", "1904 B"),
-            PKT_COMPACT_SCORING: PacketStats(PKT_COMPACT_SCORING, "Binary SIMP", "176 B"),
+            PKT_RAW_TELEMETRY: PacketStats(PKT_RAW_TELEMETRY, "Binary Struct", "1888/1904 B"),
+            PKT_COMPACT_SCORING: PacketStats(PKT_COMPACT_SCORING, "Binary SIMP", "168 B"),
+            PKT_FULL_SCORING: PacketStats(PKT_FULL_SCORING, "Sliced SIMP", "Multi-KB"),
             PKT_SYSTEM_EVENT: PacketStats(PKT_SYSTEM_EVENT, "Binary SIMP", "6 B"),
             PKT_FOREIGN: PacketStats(PKT_FOREIGN, "Raw/Other", "Variable"),
         }
 
         self.latest_telemetry: Optional[TelemInfo] = None
         self.latest_scoring: Optional[CompactScoring] = None
+        self.latest_full_scoring: Optional[FullScoringSession] = None
         self.latest_event: Optional[SystemEvent] = None
         self.latest_event_time: float = 0.0
+        self.reassembly_buffers: Dict[tuple, dict] = {}
+        self.last_cleanup_time: float = 0.0
 
     def start(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -175,29 +193,80 @@ class TelemetryEngine:
         self.total_packets += 1
         self.total_bytes += size
 
-        # 1. Native Binary Telemetry (1904 bytes)
-        if size == 1904:
+        # Cleanup stale multipart frame fragments
+        if now - self.last_cleanup_time > 1.0:
+            self.last_cleanup_time = now
+            stale = [k for k, v in self.reassembly_buffers.items() if now - v.get("timestamp", 0) > 1.0]
+            for k in stale:
+                del self.reassembly_buffers[k]
+
+        pkt_type = PKT_FOREIGN
+
+        # 1. Standardized 24-byte Header
+        if data.startswith(b"SIMP") and size >= HEADER_SIZE and data[4] == 1:
+            hdr = decode_header(data)
+            if hdr:
+                payload = data[HEADER_SIZE : HEADER_SIZE + hdr.payload_size]
+                if hdr.packet_type == 1:
+                    pkt_type = PKT_RAW_TELEMETRY
+                    telem = decode_telemetry(payload)
+                    if telem:
+                        self.latest_telemetry = telem
+                elif hdr.packet_type == 2:
+                    pkt_type = PKT_COMPACT_SCORING
+                    scoring = decode_compact_scoring(payload)
+                    if scoring:
+                        self.latest_scoring = scoring
+                elif hdr.packet_type == 3:
+                    pkt_type = PKT_SYSTEM_EVENT
+                    ev = decode_system_event(payload)
+                    if ev:
+                        self.latest_event = ev
+                        self.latest_event_time = now
+                elif hdr.packet_type == 4:
+                    pkt_type = PKT_FULL_SCORING
+                    if hdr.total_chunks == 1:
+                        fs = decode_full_scoring(payload)
+                        if fs:
+                            self.latest_full_scoring = fs
+                    else:
+                        key = (hdr.packet_type, hdr.sequence_number)
+                        if key not in self.reassembly_buffers:
+                            self.reassembly_buffers[key] = {
+                                "total_chunks": hdr.total_chunks,
+                                "chunks": {},
+                                "timestamp": now,
+                            }
+                        buf = self.reassembly_buffers[key]
+                        buf["chunks"][hdr.chunk_index] = payload
+                        if len(buf["chunks"]) == buf["total_chunks"]:
+                            ordered = [buf["chunks"][i] for i in range(buf["total_chunks"]) if i in buf["chunks"]]
+                            del self.reassembly_buffers[key]
+                            fs = decode_full_scoring(b"".join(ordered))
+                            if fs:
+                                self.latest_full_scoring = fs
+
+        # 2. Legacy Raw Telemetry
+        elif size >= 1888:
             pkt_type = PKT_RAW_TELEMETRY
             telem = decode_telemetry(data)
             if telem:
                 self.latest_telemetry = telem
 
-        # 2. Compact Scoring (SIMP Type 2, 176 bytes)
-        elif data.startswith(b"SIMP") and len(data) >= 5 and data[4] == 2:
+        # 3. Legacy Compact Scoring (168/176 bytes)
+        elif data.startswith(b"SIMP") and size >= 5 and data[4] == 2:
             pkt_type = PKT_COMPACT_SCORING
             scoring = decode_compact_scoring(data)
             if scoring:
                 self.latest_scoring = scoring
 
-        # 3. System Event (SIMP Type 3, 6 bytes)
-        elif data.startswith(b"SIMP") and len(data) >= 5 and data[4] == 3:
+        # 4. Legacy System Event (6 bytes)
+        elif data.startswith(b"SIMP") and size >= 5 and data[4] == 3:
             pkt_type = PKT_SYSTEM_EVENT
             ev = decode_system_event(data)
             if ev:
                 self.latest_event = ev
                 self.latest_event_time = now
-        else:
-            pkt_type = PKT_FOREIGN
 
         self.stats[pkt_type].record(size, now)
 
@@ -396,10 +465,14 @@ def extract_telemetry_rows(t: Optional[TelemInfo], st: Optional[PacketStats] = N
     return rows
 
 
-def extract_scoring_rows(s: Optional[CompactScoring], st: Optional[PacketStats] = None) -> List[Tuple[str, Any, str, str]]:
+def extract_scoring_rows(
+    s: Optional[CompactScoring],
+    fs: Optional[FullScoringSession] = None,
+    st: Optional[PacketStats] = None,
+) -> List[Tuple[str, Any, str, str]]:
     """
     Returns list of (key, raw_value, formatted_string, description)
-    for CompactScoring packet.
+    for CompactScoring and FullScoringSession streams.
     """
     rows = []
 
@@ -408,50 +481,78 @@ def extract_scoring_rows(s: Optional[CompactScoring], st: Optional[PacketStats] 
         freq_str = f"[bold #e3b341]{st.current_freq:5.1f} Hz[/]"
         delay_str = f"{st.avg_interval_ms:4.1f} ms" if st.intervals else "-"
         rows.extend([
-            ("_channel.frequency_hz", st.current_freq, freq_str, "Real-time reception frequency of CompactScoring packet stream"),
-            ("_channel.packets_count", st.count, f"{st.count:,}", "Total CompactScoring packets received on this channel"),
-            ("_channel.avg_delay_ms", st.avg_interval_ms, delay_str, "Average arrival delay between consecutive CompactScoring packets"),
-            ("_channel.bandwidth_kb_s", st.bandwidth_kb_s, f"{st.bandwidth_kb_s:5.1f} KB/s", "Instantaneous bandwidth for CompactScoring stream"),
+            ("_channel.frequency_hz", st.current_freq, freq_str, "Real-time reception frequency of Scoring stream"),
+            ("_channel.packets_count", st.count, f"{st.count:,}", "Total Scoring packets received on this channel"),
+            ("_channel.avg_delay_ms", st.avg_interval_ms, delay_str, "Average arrival delay between consecutive Scoring packets"),
+            ("_channel.bandwidth_kb_s", st.bandwidth_kb_s, f"{st.bandwidth_kb_s:5.1f} KB/s", "Instantaneous bandwidth for Scoring stream"),
         ])
-
-    if s is None:
-        rows.append(
-            ("status", "Waiting for packets", "[dim]No CompactScoring packet received yet[/dim]", "Scoring packets are sent at 1-5 Hz")
-        )
-        return rows
 
     session_names = {
         0: "Test Day", 1: "Practice 1", 2: "Practice 2", 3: "Practice 3", 4: "Practice 4",
         5: "Qualifying 1", 6: "Qualifying 2", 7: "Qualifying 3", 8: "Qualifying 4",
         9: "Warmup", 10: "Race 1", 11: "Race 2", 12: "Race 3", 13: "Race 4"
     }
-    session_label = session_names.get(s.session, f"Session({s.session})")
 
-    rows.extend([
-        ("track_name", s.track_name, format_value(s.track_name), "Track / circuit identification string"),
-        ("session", s.session, format_value(s.session), "Session numeric code (0=test, 1-4=prac, 5-8=qual, 9=warmup, 10-13=race)"),
-        ("session_type", session_label, f"[bold #58a6ff]{session_label}[/]", "Decoded human-readable session type"),
-        ("current_et", s.current_et, f"{s.current_et:.3f} s", "Current session elapsed time (seconds)"),
-        ("lap_dist", s.lap_dist, f"{s.lap_dist:.1f} m", "Total circuit lap distance / perimeter (meters)"),
-        ("max_laps", s.max_laps, format_value(s.max_laps), "Session scheduled total lap limit (0 if timed session)"),
-        ("in_realtime", s.in_realtime, format_value(s.in_realtime), "Real-time driving active state on track"),
-        ("total_laps", s.total_laps, format_value(s.total_laps), "Completed lap count for player vehicle"),
-        ("sector", s.sector, format_value(s.sector), "Current active sector (0=Sector 3, 1=Sector 1, 2=Sector 2)"),
-        ("in_garage_stall", s.in_garage_stall, format_value(s.in_garage_stall), "Vehicle inside pit garage stall flag"),
-        ("count_lap_flag", s.count_lap_flag, format_value(s.count_lap_flag), "Lap validity flag (0=invalid, 1=count only, 2=valid timing)"),
-        ("cur_sector1", s.cur_sector1, f"{s.cur_sector1:.3f} s" if s.cur_sector1 > 0 else "[dim]-[/dim]", "Current in-progress lap Sector 1 split time (seconds)"),
-        ("cur_sector2", s.cur_sector2, f"{s.cur_sector2:.3f} s" if s.cur_sector2 > 0 else "[dim]-[/dim]", "Current in-progress lap Sector 2 cumulative time (S1 + S2, s)"),
-        ("cur_sector2_individual", s.cur_sector2_individual, f"{s.cur_sector2_individual:.3f} s" if s.cur_sector2_individual > 0 else "[dim]-[/dim]", "Current in-progress lap Sector 2 standalone split duration (s)"),
-        ("last_sector1", s.last_sector1, f"{s.last_sector1:.3f} s" if s.last_sector1 > 0 else "[dim]-[/dim]", "Last completed lap Sector 1 split time (seconds)"),
-        ("last_sector2", s.last_sector2, f"{s.last_sector2:.3f} s" if s.last_sector2 > 0 else "[dim]-[/dim]", "Last completed lap Sector 2 cumulative time (s)"),
-        ("last_sector2_individual", s.last_sector2_individual, f"{s.last_sector2_individual:.3f} s" if s.last_sector2_individual > 0 else "[dim]-[/dim]", "Last completed lap Sector 2 standalone split duration (s)"),
-        ("last_sector3_individual", s.last_sector3_individual, f"{s.last_sector3_individual:.3f} s" if s.last_sector3_individual > 0 else "[dim]-[/dim]", "Last completed lap Sector 3 standalone split duration (s)"),
-        ("last_lap_time", s.last_lap_time, f"[bold #3fb950]{s.last_lap_time:.3f} s[/]" if s.last_lap_time > 0 else "[dim]-[/dim]", "Last completed lap total lap time (seconds)"),
-        ("best_sector1", s.best_sector1, f"{s.best_sector1:.3f} s" if s.best_sector1 > 0 else "[dim]-[/dim]", "Personal best Sector 1 split time (seconds)"),
-        ("best_sector2", s.best_sector2, f"{s.best_sector2:.3f} s" if s.best_sector2 > 0 else "[dim]-[/dim]", "Personal best Sector 2 cumulative time (s)"),
-        ("best_lap_time", s.best_lap_time, f"[bold #bc8cff]{s.best_lap_time:.3f} s[/]" if s.best_lap_time > 0 else "[dim]-[/dim]", "Personal best total lap time (seconds)"),
-    ])
+    # 1. Full Multi-Car Grid Scoring (SIMP Type 4)
+    if fs is not None:
+        session_label = session_names.get(fs.session, f"Session({fs.session})")
+        rows.extend([
+            ("grid.track_name", fs.track_name, format_value(fs.track_name), "Track / circuit identification string"),
+            ("grid.session_type", session_label, f"[bold #58a6ff]{session_label}[/]", "Current session type"),
+            ("grid.game_phase", fs.game_phase_str, f"[bold #3fb950]{fs.game_phase_str}[/]", "Session game phase (Garage, Warmup, GreenFlag, FCY...)"),
+            ("grid.current_et", fs.current_et, f"{fs.current_et:.3f} s", "Session elapsed time"),
+            ("grid.end_et", fs.end_et, f"{fs.end_et:.1f} s", "Session end elapsed time"),
+            ("grid.num_vehicles", fs.num_vehicles, f"[bold #f1e05a]{fs.num_vehicles}[/]", "Active vehicles in session / grid"),
+            ("grid.ambient_temp", fs.ambient_temp, f"{fs.ambient_temp:.1f} °C", "Ambient air temperature"),
+            ("grid.track_temp", fs.track_temp, f"{fs.track_temp:.1f} °C", "Track surface temperature"),
+            ("grid.raining", fs.raining, f"{fs.raining * 100:.1f} %", "Rain intensity"),
+            ("grid.dark_cloud", fs.dark_cloud, f"{fs.dark_cloud * 100:.1f} %", "Cloud cover darkness"),
+        ])
 
+        # Leaderboard entries
+        for rank, v in enumerate(fs.leaderboard, start=1):
+            tag = f"car[{rank:02d}]"
+            player_marker = " [bold #3fb950](PLAYER)[/]" if v.is_player else ""
+            pit_str = f" [bold #f85149][PIT - {v.pit_state_str}][/]" if v.in_pits else ""
+            gap_str = f"+{v.time_behind_leader:.3f} s" if (v.time_behind_leader > 0 and rank > 1) else ("LEADER" if rank == 1 else "-")
+            best_lap_str = f"{v.best_lap_time:.3f} s" if v.best_lap_time > 0 else "-"
+            last_lap_str = f"{v.last_lap_time:.3f} s" if v.last_lap_time > 0 else "-"
+
+            rows.extend([
+                (f"{tag}.driver", v.driver_name, f"[bold]{v.driver_name}[/]{player_marker}{pit_str}", f"P{v.place} | {v.vehicle_name} ({v.vehicle_class})"),
+                (f"{tag}.position", v.place, f"P{v.place}", f"Current race position"),
+                (f"{tag}.laps", v.total_laps, format_value(v.total_laps), f"Completed laps | Sector {v.sector}"),
+                (f"{tag}.gap_leader", v.time_behind_leader, gap_str, "Gap to session leader (seconds)"),
+                (f"{tag}.best_lap", v.best_lap_time, best_lap_str, "Personal best lap time"),
+                (f"{tag}.last_lap", v.last_lap_time, last_lap_str, "Last completed lap time"),
+            ])
+        return rows
+
+    # 2. Compact Scoring Fallback (SIMP Type 2)
+    if s is not None:
+        session_label = session_names.get(s.session, f"Session({s.session})")
+        rows.extend([
+            ("track_name", s.track_name, format_value(s.track_name), "Track / circuit identification string"),
+            ("session", s.session, format_value(s.session), "Session numeric code"),
+            ("session_type", session_label, f"[bold #58a6ff]{session_label}[/]", "Decoded session type"),
+            ("current_et", s.current_et, f"{s.current_et:.3f} s", "Current session elapsed time (seconds)"),
+            ("lap_dist", s.lap_dist, f"{s.lap_dist:.1f} m", "Total circuit lap distance (meters)"),
+            ("max_laps", s.max_laps, format_value(s.max_laps), "Session scheduled lap limit"),
+            ("in_realtime", s.in_realtime, format_value(s.in_realtime), "Real-time driving active state on track"),
+            ("total_laps", s.total_laps, format_value(s.total_laps), "Completed lap count for player vehicle"),
+            ("sector", s.sector, format_value(s.sector), "Current active sector"),
+            ("in_garage_stall", s.in_garage_stall, format_value(s.in_garage_stall), "Vehicle inside pit garage stall flag"),
+            ("count_lap_flag", s.count_lap_flag, format_value(s.count_lap_flag), "Lap validity flag"),
+            ("cur_sector1", s.cur_sector1, f"{s.cur_sector1:.3f} s" if s.cur_sector1 > 0 else "[dim]-[/dim]", "Current lap S1 split time"),
+            ("cur_sector2", s.cur_sector2, f"{s.cur_sector2:.3f} s" if s.cur_sector2 > 0 else "[dim]-[/dim]", "Current lap S2 split time"),
+            ("last_lap_time", s.last_lap_time, f"[bold #3fb950]{s.last_lap_time:.3f} s[/]" if s.last_lap_time > 0 else "[dim]-[/dim]", "Last lap total time"),
+            ("best_lap_time", s.best_lap_time, f"[bold #bc8cff]{s.best_lap_time:.3f} s[/]" if s.best_lap_time > 0 else "[dim]-[/dim]", "Personal best lap time"),
+        ])
+        return rows
+
+    rows.append(
+        ("status", "Waiting for packets", "[dim]No Scoring packet received yet[/dim]", "Scoring packets are streamed at 1-5 Hz")
+    )
     return rows
 
 
@@ -1036,7 +1137,8 @@ class IsiMotorBenchmarkApp(App):
         if self.active_tab == TAB_TELEM:
             return extract_telemetry_rows(self.engine.latest_telemetry, self.engine.stats[PKT_RAW_TELEMETRY])
         elif self.active_tab == TAB_SCORING:
-            return extract_scoring_rows(self.engine.latest_scoring, self.engine.stats[PKT_COMPACT_SCORING])
+            st = self.engine.stats.get(PKT_FULL_SCORING) if self.engine.latest_full_scoring else self.engine.stats[PKT_COMPACT_SCORING]
+            return extract_scoring_rows(self.engine.latest_scoring, self.engine.latest_full_scoring, st)
         elif self.active_tab == TAB_EVENT:
             return extract_event_rows(self.engine.latest_event, self.engine.stats[PKT_SYSTEM_EVENT], self.engine.latest_event_time)
         elif self.active_tab == TAB_STATS:
@@ -1064,8 +1166,18 @@ class IsiMotorBenchmarkApp(App):
                 return d
             return {"status": "No TelemInfo packet received yet"}
         elif self.active_tab == TAB_SCORING:
-            st = self.engine.stats[PKT_COMPACT_SCORING]
-            if self.engine.latest_scoring:
+            if self.engine.latest_full_scoring:
+                st = self.engine.stats[PKT_FULL_SCORING]
+                d = model_to_clean_dict(self.engine.latest_full_scoring)
+                d["_channel_diagnostics"] = {
+                    "frequency_hz": round(st.current_freq, 2),
+                    "packets_count": st.count,
+                    "avg_delay_ms": round(st.avg_interval_ms, 2),
+                    "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
+                }
+                return d
+            elif self.engine.latest_scoring:
+                st = self.engine.stats[PKT_COMPACT_SCORING]
                 d = model_to_clean_dict(self.engine.latest_scoring)
                 d["_channel_diagnostics"] = {
                     "frequency_hz": round(st.current_freq, 2),
@@ -1079,7 +1191,7 @@ class IsiMotorBenchmarkApp(App):
                     "last_sector3_individual": self.engine.latest_scoring.last_sector3_individual,
                 }
                 return d
-            return {"status": "No CompactScoring packet received yet"}
+            return {"status": "No Scoring packet received yet"}
         elif self.active_tab == TAB_EVENT:
             st = self.engine.stats[PKT_SYSTEM_EVENT]
             if self.engine.latest_event:

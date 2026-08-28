@@ -1,5 +1,5 @@
 """
-Data models and wrapped structures for isiMotor-RawUDP-Plugin telemetry.
+Data models and wrapped structures for isiMotor-RawUDP-Plugin telemetry & scoring.
 
 COORDINATE SYSTEM NOTES (from isiMotor SDK InternalsPlugin.hpp):
 ================================================================
@@ -22,8 +22,8 @@ words:
   - a -z rotation in rFactor/LMU is a -x rotation in ISO
 """
 
-from dataclasses import dataclass
-from typing import Tuple, Optional
+from dataclasses import dataclass, field
+from typing import Tuple, List, Optional
 import math
 
 
@@ -41,6 +41,22 @@ class TelemVect3:
 
     def as_tuple(self) -> Tuple[float, float, float]:
         return (self.x, self.y, self.z)
+
+
+@dataclass(frozen=True)
+class RawUdpHeader:
+    """
+    Standard 24-byte UDP packet header (SIMP protocol).
+    """
+    magic: bytes = b"SIMP"
+    protocol_version: int = 1
+    packet_type: int = 0
+    payload_size: int = 0
+    sequence_number: int = 0
+    session_et: float = 0.0
+    chunk_index: int = 0
+    total_chunks: int = 1
+    sub_type_or_id: int = 0
 
 
 @dataclass
@@ -98,102 +114,83 @@ class TelemWheel:
         """Longitudinal contact patch speed in km/h."""
         return self.longitudinal_patch_vel * 3.6
 
-    @property
-    def ground_speed_kmh(self) -> float:
-        """Longitudinal ground speed in km/h."""
-        return self.longitudinal_ground_vel * 3.6
-
-    @property
-    def slip_ratio(self) -> float:
-        """Longitudinal slip ratio ((patch_vel - ground_vel) / max(ground_vel, 1.0))."""
-        denom = max(abs(self.longitudinal_ground_vel), 1.0)
-        return (self.longitudinal_patch_vel - self.longitudinal_ground_vel) / denom
-
 
 @dataclass
 class TelemInfo:
     """
-    Complete physical vehicle telemetry frame (TelemInfoV01).
-    Direct native memory dump from isiMotor / LMU / rFactor 2.
-    Struct size: 1888 bytes (#pragma pack(4)).
+    High-frequency raw physics and vehicle telemetry (TelemInfoV01).
+    Total binary size: 1888 bytes (#pragma pack(4)).
     """
-    # Time & Session
-    slot_id: int = 0                       # slot ID (can be re-used in multiplayer)
-    delta_time: float = 0.0                # time since last update in seconds
-    elapsed_time: float = 0.0              # game session time in seconds
-    lap_number: int = 0                    # current lap number
-    lap_start_et: float = 0.0              # session time this lap was started
-    vehicle_name: str = ""                 # current vehicle name
-    track_name: str = ""                   # current track name
+    slot_id: int = 0                       # Vehicle slot ID (mID)
+    delta_time: float = 0.0                # Time passed since last update
+    elapsed_time: float = 0.0              # Current session elapsed time
+    lap_number: int = 0                    # Current lap number
+    lap_start_et: float = 0.0              # Time at start of current lap
+    vehicle_name: str = ""                 # Vehicle name (up to 64 chars)
+    track_name: str = ""                   # Track name (up to 64 chars)
 
-    # Position and derivatives (isiMotor coordinate system)
-    pos: TelemVect3 = TelemVect3()         # world position in meters
-    local_vel: TelemVect3 = TelemVect3()   # velocity (m/s) in local vehicle coordinates (+x left, +y up, +z rear)
-    local_accel: TelemVect3 = TelemVect3() # acceleration (m/s^2) in local vehicle coordinates
+    pos: TelemVect3 = field(default_factory=TelemVect3)           # World position (meters)
+    local_vel: TelemVect3 = field(default_factory=TelemVect3)     # Local velocity (m/s)
+    local_accel: TelemVect3 = field(default_factory=TelemVect3)   # Local acceleration (m/s^2)
+    ori: Tuple[TelemVect3, TelemVect3, TelemVect3] = (            # 3x3 Orientation Matrix
+        TelemVect3(1, 0, 0), TelemVect3(0, 1, 0), TelemVect3(0, 0, 1)
+    )
+    local_rot: TelemVect3 = field(default_factory=TelemVect3)     # Rotation (rad/s)
+    local_rot_accel: TelemVect3 = field(default_factory=TelemVect3) # Rotational acceleration (rad/s^2)
 
-    # Orientation and derivatives
-    ori: Tuple[TelemVect3, TelemVect3, TelemVect3] = (TelemVect3(), TelemVect3(), TelemVect3()) # 3x3 orientation matrix
-    local_rot: TelemVect3 = TelemVect3()       # rotation (rad/s) in local coordinates (+x pitch up, +y yaw right, +z roll right)
-    local_rot_accel: TelemVect3 = TelemVect3() # rotational acceleration (rad/s^2)
-
-    # Vehicle status
-    gear: int = 0                          # -1=reverse, 0=neutral, 1+=forward gears
-    engine_rpm: float = 0.0                # engine RPM
+    gear: int = 0                          # -1=Reverse, 0=Neutral, 1+=Forward
+    engine_rpm: float = 0.0                # Engine RPM
     engine_water_temp: float = 0.0         # Celsius
     engine_oil_temp: float = 0.0           # Celsius
-    clutch_rpm: float = 0.0                # clutch RPM
+    clutch_rpm: float = 0.0                # Clutch RPM
 
-    # Driver input (unfiltered)
-    unfiltered_throttle: float = 0.0       # 0.0 to 1.0
-    unfiltered_brake: float = 0.0          # 0.0 to 1.0
-    unfiltered_steering: float = 0.0       # -1.0 to 1.0 (left to right)
-    unfiltered_clutch: float = 0.0         # 0.0 to 1.0
+    unfiltered_throttle: float = 0.0       # 0.0 - 1.0 (raw input)
+    unfiltered_brake: float = 0.0          # 0.0 - 1.0 (raw input)
+    unfiltered_steering: float = 0.0       # -1.0 (full left) to +1.0 (full right)
+    unfiltered_clutch: float = 0.0         # 0.0 - 1.0 (raw input)
 
-    # Filtered input (speed sensitive steering, TC, ABS, etc.)
-    filtered_throttle: float = 0.0         # 0.0 to 1.0
-    filtered_brake: float = 0.0            # 0.0 to 1.0
-    filtered_steering: float = 0.0         # -1.0 to 1.0
-    filtered_clutch: float = 0.0           # 0.0 to 1.0
+    filtered_throttle: float = 0.0         # 0.0 - 1.0 (after driving aids)
+    filtered_brake: float = 0.0            # 0.0 - 1.0 (after driving aids)
+    filtered_steering: float = 0.0         # -1.0 to +1.0 (after driving aids)
+    filtered_clutch: float = 0.0           # 0.0 - 1.0 (after driving aids)
 
-    # Misc mechanics
-    steering_shaft_torque: float = 0.0     # torque around steering shaft
-    front_3rd_deflection: float = 0.0      # deflection at front 3rd spring (m)
-    rear_3rd_deflection: float = 0.0       # deflection at rear 3rd spring (m)
+    steering_shaft_torque: float = 0.0     # Torque on steering shaft (Nm)
+    front_3rd_deflection: float = 0.0      # Front heave / 3rd element deflection (m)
+    rear_3rd_deflection: float = 0.0       # Rear heave / 3rd element deflection (m)
 
-    # Aerodynamics
-    front_wing_height: float = 0.0         # meters
-    front_ride_height: float = 0.0         # meters
-    rear_ride_height: float = 0.0          # meters
-    drag: float = 0.0                      # aerodynamic drag force
-    front_downforce: float = 0.0           # front aerodynamic downforce
-    rear_downforce: float = 0.0            # rear aerodynamic downforce
+    front_wing_height: float = 0.0         # Front wing height (m)
+    front_ride_height: float = 0.0         # Front ride height (m)
+    rear_ride_height: float = 0.0          # Rear ride height (m)
+    drag: float = 0.0                      # Total aerodynamic drag (N)
+    front_downforce: float = 0.0           # Front aerodynamic downforce (N)
+    rear_downforce: float = 0.0            # Rear aerodynamic downforce (N)
 
-    # State & damage info
-    fuel: float = 0.0                      # remaining fuel in liters
-    engine_max_rpm: float = 7500.0         # rev limiter RPM
-    scheduled_stops: int = 0               # number of scheduled pitstops
-    overheating: bool = False              # whether overheating icon is shown
-    detached: bool = False                 # whether any parts are detached
-    headlights: bool = False               # whether headlights are active
-    dent_severity: Tuple[int, ...] = (0, 0, 0, 0, 0, 0, 0, 0) # dent severity at 8 body locations (0=none..2)
-    last_impact_et: float = 0.0            # time of last impact
-    last_impact_magnitude: float = 0.0     # magnitude of last impact
-    last_impact_pos: TelemVect3 = TelemVect3() # location of last impact
+    fuel: float = 0.0                      # Current fuel in liters
+    engine_max_rpm: float = 0.0            # Rev limiter RPM
+    scheduled_stops: int = 0               # Planned pit stops
+    overheating: bool = False              # Engine overheating flag
+    detached: bool = False                 # Severed component flag
+    headlights: bool = False               # Headlights active
+    dent_severity: Tuple[int, ...] = (0, 0, 0, 0, 0, 0, 0, 0) # 8 body sectors
 
-    # Expanded fields
-    engine_torque: float = 0.0             # current engine torque
-    current_sector: int = 0                # current sector (zero-based; pitlane stored in sign bit: 0x80000002)
-    speed_limiter: int = 0                 # speed limiter active flag
-    max_gears: int = 6                     # maximum forward gears
-    front_tire_compound_index: int = 0     # front tire compound index
-    rear_tire_compound_index: int = 0      # rear tire compound index
-    fuel_capacity: float = 100.0           # fuel tank capacity in liters
+    last_impact_et: float = 0.0            # Time of most recent impact (seconds)
+    last_impact_magnitude: float = 0.0     # Impact magnitude (N)
+    last_impact_pos: TelemVect3 = field(default_factory=TelemVect3) # Impact location
+
+    engine_torque: float = 0.0             # Current output torque (Nm)
+    current_sector: int = 1                # 1=Sector 1, 2=Sector 2, 3=Sector 3
+    speed_limiter: int = 0                 # 0=off, 1=on (pit limiter)
+    max_gears: int = 6                     # Forward gear count
+    front_tire_compound_index: int = 0
+    rear_tire_compound_index: int = 0
+    fuel_capacity: float = 0.0             # Fuel tank max capacity (liters)
     front_flap_activated: int = 0
-    rear_flap_activated: int = 0
-    rear_flap_legal_status: int = 0        # 0=disallowed, 1=criteria detected, 2=allowed
+    rear_flap_activated: int = 0           # DRS / active aero
+    rear_flap_legal_status: int = 0        # 0=disallowed, 1=detected, 2=allowed (DRS enabled)
     ignition_starter: int = 0              # 0=off, 1=ignition, 2=ignition+starter
     front_tire_compound_name: str = ""
     rear_tire_compound_name: str = ""
+
     speed_limiter_available: int = 0
     anti_stall_activated: int = 0
     visual_steering_wheel_range: float = 0.0
@@ -316,6 +313,196 @@ class CompactScoring:
     def is_qualifying_session(self) -> bool:
         """True if current session is qualifying."""
         return 5 <= self.session <= 8
+
+
+@dataclass
+class VehicleScoring:
+    """
+    Individual vehicle scoring & timing entry (VehicleScoringInfoV01).
+    Struct size: 584 bytes (#pragma pack(4)).
+    """
+    id: int = 0                            # Slot ID
+    driver_name: str = ""                  # Driver name (up to 32 chars)
+    vehicle_name: str = ""                 # Vehicle / livery name (up to 64 chars)
+    total_laps: int = 0                    # Completed laps
+    sector: int = 0                        # 0=S3, 1=S1, 2=S2
+    finish_status: int = 0                 # 0=none, 1=finished, 2=dnf, 3=dq
+    lap_dist: float = 0.0                  # Track distance along path (meters)
+    path_lateral: float = 0.0              # Lateral distance from path center (+left, -right)
+    track_edge: float = 0.0                # Distance to track edge
+
+    best_sector1: float = 0.0              # Personal best S1
+    best_sector2: float = 0.0              # Personal best S2 (cumulative S1+S2)
+    best_lap_time: float = 0.0             # Personal best lap time
+    last_sector1: float = 0.0              # Last lap S1
+    last_sector2: float = 0.0              # Last lap S2 (cumulative S1+S2)
+    last_lap_time: float = 0.0             # Last lap time
+    cur_sector1: float = 0.0               # Current lap S1
+    cur_sector2: float = 0.0               # Current lap S2 (cumulative S1+S2)
+
+    num_pitstops: int = 0                  # Pit stop count
+    num_penalties: int = 0                 # Outstanding penalties count
+    is_player: bool = False                # 1 if local player car
+    control: int = 0                       # -1=nobody, 0=player, 1=AI, 2=remote, 3=replay
+    in_pits: bool = False                  # Pitting / in pit lane
+    place: int = 1                         # Overall position (1-based)
+    vehicle_class: str = ""                # Car class (e.g. "Hypercar", "LMP2", "LMGT3")
+
+    time_behind_next: float = 0.0          # Time behind car in next higher place
+    laps_behind_next: int = 0              # Laps behind car in next higher place
+    time_behind_leader: float = 0.0        # Time behind race leader
+    laps_behind_leader: int = 0            # Laps behind race leader
+    lap_start_et: float = 0.0              # ET when this lap was started
+
+    pos: TelemVect3 = field(default_factory=TelemVect3)           # World position (meters)
+    local_vel: TelemVect3 = field(default_factory=TelemVect3)     # Local velocity (m/s)
+    local_accel: TelemVect3 = field(default_factory=TelemVect3)   # Local acceleration (m/s^2)
+    ori: Tuple[TelemVect3, TelemVect3, TelemVect3] = (            # 3x3 Orientation Matrix
+        TelemVect3(1, 0, 0), TelemVect3(0, 1, 0), TelemVect3(0, 0, 1)
+    )
+    local_rot: TelemVect3 = field(default_factory=TelemVect3)     # Rotation (rad/s)
+    local_rot_accel: TelemVect3 = field(default_factory=TelemVect3) # Rotational acceleration (rad/s^2)
+
+    headlights: int = 0                    # Headlights state
+    pit_state: int = 0                     # 0=none, 1=request, 2=entering, 3=stopped, 4=exiting
+    server_scored: int = 1
+    individual_phase: int = 0
+    qualification: int = 0                 # Qualifying position (1-based)
+    time_into_lap: float = 0.0             # Estimated time elapsed in current lap
+    estimated_lap_time: float = 0.0        # Estimated full lap time
+
+    pit_group: str = ""                    # Pit stall / team group
+    flag: int = 0                          # Primary flag (0=green, 6=blue)
+    under_yellow: bool = False             # Taken caution flag
+    count_lap_flag: int = 2                # 0=invalid, 1=lap count only, 2=valid lap & time
+    in_garage_stall: bool = False
+    pit_lap_dist: float = 0.0              # Distance of pit stall along lap
+    best_lap_sector1: float = 0.0          # S1 from best overall lap
+    best_lap_sector2: float = 0.0          # S2 from best overall lap
+
+    # Convenience properties
+    @property
+    def speed_mps(self) -> float:
+        """Speed in m/s."""
+        return self.local_vel.magnitude
+
+    @property
+    def speed_kmh(self) -> float:
+        """Speed in km/h."""
+        return self.speed_mps * 3.6
+
+    @property
+    def forward_speed_mps(self) -> float:
+        """Forward speed in m/s (-local_vel.z in isiMotor coordinates)."""
+        return -self.local_vel.z
+
+    @property
+    def forward_speed_kmh(self) -> float:
+        """Forward speed in km/h."""
+        return self.forward_speed_mps * 3.6
+
+    @property
+    def cur_sector2_individual(self) -> float:
+        """Current standalone Sector 2 time."""
+        return max(0.0, self.cur_sector2 - self.cur_sector1) if self.cur_sector2 > 0 and self.cur_sector1 > 0 else 0.0
+
+    @property
+    def last_sector2_individual(self) -> float:
+        """Last lap standalone Sector 2 time."""
+        return max(0.0, self.last_sector2 - self.last_sector1) if self.last_sector2 > 0 and self.last_sector1 > 0 else 0.0
+
+    @property
+    def last_sector3_individual(self) -> float:
+        """Last lap standalone Sector 3 time."""
+        return max(0.0, self.last_lap_time - self.last_sector2) if self.last_lap_time > 0 and self.last_sector2 > 0 else 0.0
+
+    @property
+    def best_sector2_individual(self) -> float:
+        """Best standalone Sector 2 time."""
+        return max(0.0, self.best_sector2 - self.best_sector1) if self.best_sector2 > 0 and self.best_sector1 > 0 else 0.0
+
+    @property
+    def finish_status_str(self) -> str:
+        """Human-readable finish status."""
+        statuses = {0: "Running", 1: "Finished", 2: "DNF", 3: "DQ"}
+        return statuses.get(self.finish_status, "Unknown")
+
+    @property
+    def pit_state_str(self) -> str:
+        """Human-readable pit state."""
+        states = {0: "On Track", 1: "Pit Request", 2: "Entering Pits", 3: "In Pit Box", 4: "Exiting Pits"}
+        return states.get(self.pit_state, "Unknown")
+
+
+@dataclass
+class FullScoringSession:
+    """
+    Full multi-car scoring & session timing update (SIMP Type 4).
+    Contains session weather overview, track conditions, and all active grid vehicles.
+    """
+    track_name: str = ""                   # Track name
+    session: int = 0                       # 0=testday, 1-4=practice, 5-8=qual, 9=warmup, 10-13=race
+    current_et: float = 0.0                # Current session elapsed time in seconds
+    end_et: float = 0.0                    # End session time (seconds)
+    max_laps: int = 0                      # Max session laps
+    lap_dist: float = 0.0                  # Track total lap distance in meters
+    num_vehicles: int = 0                  # Number of active vehicles in grid
+    game_phase: int = 5                    # 0=Garage..5=GreenFlag, 6=FCY..8=SessionOver
+    yellow_flag_state: int = 0             # -1=Invalid, 0=None, 1=Pending, 2=PitClosed, 3=PitLeadLap, 4=PitOpen, 5=LastLap, 6=Resume
+    sector_flags: Tuple[int, int, int] = (0, 0, 0) # Local yellows in S3, S1, S2
+    start_light: int = 0
+    num_red_lights: int = 0
+    in_realtime: bool = True
+    player_name: str = ""
+    plr_file_name: str = ""
+    dark_cloud: float = 0.0
+    raining: float = 0.0
+    ambient_temp: float = 0.0              # Celsius
+    track_temp: float = 0.0                # Celsius
+    wind: TelemVect3 = field(default_factory=TelemVect3)
+    min_path_wetness: float = 0.0
+    max_path_wetness: float = 0.0
+    avg_path_wetness: float = 0.0
+    vehicles: List[VehicleScoring] = field(default_factory=list)
+
+    @property
+    def player_vehicle(self) -> Optional[VehicleScoring]:
+        """Finds the local player vehicle in the grid."""
+        for v in self.vehicles:
+            if v.is_player or v.control == 0:
+                return v
+        return self.vehicles[0] if self.vehicles else None
+
+    @property
+    def leaderboard(self) -> List[VehicleScoring]:
+        """Returns active vehicles sorted by overall place (1st to last)."""
+        return sorted(self.vehicles, key=lambda v: v.place if v.place > 0 else 999)
+
+    @property
+    def is_fcy(self) -> bool:
+        """True if session is currently under Full Course Yellow / Safety Car."""
+        return self.game_phase == 6 or self.yellow_flag_state > 0
+
+    @property
+    def is_race(self) -> bool:
+        """True if current session is race."""
+        return 10 <= self.session <= 13
+
+    @property
+    def game_phase_str(self) -> str:
+        """Human-readable session phase name."""
+        phases = {
+            0: "Garage",
+            1: "WarmUp",
+            2: "GridWalk",
+            3: "Formation",
+            4: "Countdown",
+            5: "GreenFlag",
+            6: "FullCourseYellow",
+            7: "SessionStopped",
+            8: "SessionOver"
+        }
+        return phases.get(self.game_phase, f"Phase_{self.game_phase}")
 
 
 @dataclass(frozen=True)
