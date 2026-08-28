@@ -76,11 +76,18 @@ class PacketStats:
     @property
     def current_freq(self) -> float:
         now = time.time()
-        recent = [t for t in self.timestamps if (now - t) <= 1.0]
-        if len(recent) < 2:
-            return 1.0 if len(recent) == 1 and (now - self.last_timestamp) < 1.0 else 0.0
-        dt = recent[-1] - recent[0]
-        return (len(recent) - 1) / dt if dt > 0 else 0.0
+        if not self.timestamps or (now - self.last_timestamp) > 2.0:
+            return 0.0
+        recent = [t for t in self.timestamps if (now - t) <= 1.5]
+        if len(recent) >= 2:
+            dt = recent[-1] - recent[0]
+            if dt > 0:
+                return (len(recent) - 1) / dt
+        if self.intervals:
+            avg_ms = sum(list(self.intervals)[-10:]) / min(len(self.intervals), 10)
+            if avg_ms > 0:
+                return 1000.0 / avg_ms
+        return 0.0
 
     @property
     def avg_interval_ms(self) -> float:
@@ -222,17 +229,33 @@ def format_value(val: Any) -> str:
     return str(val)
 
 
-def extract_telemetry_rows(t: Optional[TelemInfo]) -> List[Tuple[str, Any, str, str]]:
+def extract_telemetry_rows(t: Optional[TelemInfo], st: Optional[PacketStats] = None) -> List[Tuple[str, Any, str, str]]:
     """
     Returns list of (key, raw_value, formatted_string, description)
     for TelemInfo packet.
     """
-    if t is None:
-        return [
-            ("status", "Waiting for packets", "[dim]No TelemInfo packet received yet[/dim]", "Start game or enable mock simulation mode")
-        ]
+    rows = []
 
-    rows = [
+    # Channel / Stream Diagnostics
+    if st is not None:
+        freq_str = f"[bold #e3b341]{st.current_freq:5.1f} Hz[/]"
+        delay_str = f"{st.avg_interval_ms:4.1f} ms" if st.intervals else "-"
+        jitter_str = f"±{st.jitter_ms:3.1f} ms" if st.intervals else "-"
+        rows.extend([
+            ("_channel.frequency_hz", st.current_freq, freq_str, "Real-time reception frequency of TelemInfo packet stream"),
+            ("_channel.packets_count", st.count, f"{st.count:,}", "Total TelemInfo packets received on this channel"),
+            ("_channel.avg_delay_ms", st.avg_interval_ms, delay_str, "Average arrival delay between consecutive TelemInfo packets"),
+            ("_channel.jitter_ms", st.jitter_ms, jitter_str, "TelemInfo packet arrival jitter variation"),
+            ("_channel.bandwidth_kb_s", st.bandwidth_kb_s, f"{st.bandwidth_kb_s:5.1f} KB/s", "Instantaneous bandwidth for TelemInfo stream"),
+        ])
+
+    if t is None:
+        rows.append(
+            ("status", "Waiting for packets", "[dim]No TelemInfo packet received yet[/dim]", "Start game or enable mock simulation mode")
+        )
+        return rows
+
+    rows.extend([
         # Session & Identity
         ("slot_id", t.slot_id, format_value(t.slot_id), "Player vehicle slot index in session / multiplayer"),
         ("delta_time", t.delta_time, f"{t.delta_time:.4f} s", "Time since last physics update (seconds)"),
@@ -333,7 +356,7 @@ def extract_telemetry_rows(t: Optional[TelemInfo]) -> List[Tuple[str, Any, str, 
         ("electric_boost_motor_temperature", t.electric_boost_motor_temperature, f"{t.electric_boost_motor_temperature:.1f} °C", "Electric hybrid motor stator temperature (°C)"),
         ("electric_boost_water_temperature", t.electric_boost_water_temperature, f"{t.electric_boost_water_temperature:.1f} °C", "Electric hybrid cooling water loop temp (°C)"),
         ("electric_boost_motor_state", t.electric_boost_motor_state, format_value(t.electric_boost_motor_state), "MGU operating state (0=off, 1=idle, 2=propulsion, 3=regen)"),
-    ]
+    ])
 
     # 4 Wheels
     wheel_labels = [("fl", "Front-Left", 0), ("fr", "Front-Right", 1), ("rl", "Rear-Left", 2), ("rr", "Rear-Right", 3)]
@@ -373,15 +396,29 @@ def extract_telemetry_rows(t: Optional[TelemInfo]) -> List[Tuple[str, Any, str, 
     return rows
 
 
-def extract_scoring_rows(s: Optional[CompactScoring]) -> List[Tuple[str, Any, str, str]]:
+def extract_scoring_rows(s: Optional[CompactScoring], st: Optional[PacketStats] = None) -> List[Tuple[str, Any, str, str]]:
     """
     Returns list of (key, raw_value, formatted_string, description)
     for CompactScoring packet.
     """
+    rows = []
+
+    # Channel / Stream Diagnostics
+    if st is not None:
+        freq_str = f"[bold #e3b341]{st.current_freq:5.1f} Hz[/]"
+        delay_str = f"{st.avg_interval_ms:4.1f} ms" if st.intervals else "-"
+        rows.extend([
+            ("_channel.frequency_hz", st.current_freq, freq_str, "Real-time reception frequency of CompactScoring packet stream"),
+            ("_channel.packets_count", st.count, f"{st.count:,}", "Total CompactScoring packets received on this channel"),
+            ("_channel.avg_delay_ms", st.avg_interval_ms, delay_str, "Average arrival delay between consecutive CompactScoring packets"),
+            ("_channel.bandwidth_kb_s", st.bandwidth_kb_s, f"{st.bandwidth_kb_s:5.1f} KB/s", "Instantaneous bandwidth for CompactScoring stream"),
+        ])
+
     if s is None:
-        return [
+        rows.append(
             ("status", "Waiting for packets", "[dim]No CompactScoring packet received yet[/dim]", "Scoring packets are sent at 1-5 Hz")
-        ]
+        )
+        return rows
 
     session_names = {
         0: "Test Day", 1: "Practice 1", 2: "Practice 2", 3: "Practice 3", 4: "Practice 4",
@@ -390,7 +427,7 @@ def extract_scoring_rows(s: Optional[CompactScoring]) -> List[Tuple[str, Any, st
     }
     session_label = session_names.get(s.session, f"Session({s.session})")
 
-    return [
+    rows.extend([
         ("track_name", s.track_name, format_value(s.track_name), "Track / circuit identification string"),
         ("session", s.session, format_value(s.session), "Session numeric code (0=test, 1-4=prac, 5-8=qual, 9=warmup, 10-13=race)"),
         ("session_type", session_label, f"[bold #58a6ff]{session_label}[/]", "Decoded human-readable session type"),
@@ -413,27 +450,40 @@ def extract_scoring_rows(s: Optional[CompactScoring]) -> List[Tuple[str, Any, st
         ("best_sector1", s.best_sector1, f"{s.best_sector1:.3f} s" if s.best_sector1 > 0 else "[dim]-[/dim]", "Personal best Sector 1 split time (seconds)"),
         ("best_sector2", s.best_sector2, f"{s.best_sector2:.3f} s" if s.best_sector2 > 0 else "[dim]-[/dim]", "Personal best Sector 2 cumulative time (s)"),
         ("best_lap_time", s.best_lap_time, f"[bold #bc8cff]{s.best_lap_time:.3f} s[/]" if s.best_lap_time > 0 else "[dim]-[/dim]", "Personal best total lap time (seconds)"),
-    ]
+    ])
+
+    return rows
 
 
-def extract_event_rows(ev: Optional[SystemEvent], event_time: float) -> List[Tuple[str, Any, str, str]]:
+def extract_event_rows(ev: Optional[SystemEvent], st: Optional[PacketStats] = None, event_time: float = 0.0) -> List[Tuple[str, Any, str, str]]:
     """
     Returns list of (key, raw_value, formatted_string, description)
     for SystemEvent packet.
     """
+    rows = []
+
+    if st is not None:
+        rows.extend([
+            ("_channel.packets_count", st.count, f"{st.count:,}", "Total SystemEvent packets received on this channel"),
+            ("_channel.bandwidth_kb_s", st.bandwidth_kb_s, f"{st.bandwidth_kb_s:5.1f} KB/s", "Instantaneous bandwidth for SystemEvent stream"),
+        ])
+
     if ev is None:
-        return [
+        rows.append(
             ("status", "Waiting for events", "[dim]No SystemEvent packet received yet[/dim]", "System events are triggered on state transitions (Enter/Exit Realtime, Session start/end)")
-        ]
+        )
+        return rows
 
     ev_time_str = time.strftime("%H:%M:%S", time.localtime(event_time)) if event_time > 0 else "-"
 
-    return [
+    rows.extend([
         ("event_id", ev.event_id, format_value(ev.event_id), "System event numeric code (1=EnterRealtime, 2=ExitRealtime, 3=StartSession, 4=EndSession)"),
         ("name", ev.name, f"[bold #58a6ff]{ev.name}[/]", "Decoded human-readable event name"),
         ("in_realtime", ev.in_realtime, format_value(ev.in_realtime), "Whether event switches driving state to active real-time"),
         ("timestamp", event_time, format_value(ev_time_str), "Local system receipt timestamp of the event"),
-    ]
+    ])
+
+    return rows
 
 
 def extract_stats_rows(engine: TelemetryEngine) -> List[Tuple[str, Any, str, str]]:
@@ -751,7 +801,8 @@ class IsiMotorBenchmarkApp(App):
         # Widget handles
         self.lbl_elapsed = Static("⏱️ Elapsed: [bold green]00:00s[/]", classes="metric-box")
         self.lbl_packets = Static("📦 Packets: [bold yellow]0[/]", classes="metric-box")
-        self.lbl_rate = Static("⚡ Rate: [bold magenta]0.0 KB/s (0.0 Hz)[/]", classes="metric-box")
+        self.lbl_channel_freq = Static("📶 Stream: [bold yellow]0.0 Hz[/]", classes="metric-box")
+        self.lbl_rate = Static("⚡ Total: [bold magenta]0.0 KB/s[/]", classes="metric-box")
         self.lbl_visible_rows = Static("🔍 Fields: [bold cyan]0 / 0[/]", classes="metric-box")
 
         self.tabs = Tabs(
@@ -777,6 +828,7 @@ class IsiMotorBenchmarkApp(App):
             yield Static("🏁 [bold cyan]isiMotor UDP Explorer[/]", classes="metric-box")
             yield self.lbl_elapsed
             yield self.lbl_packets
+            yield self.lbl_channel_freq
             yield self.lbl_rate
             yield self.lbl_visible_rows
             yield Static(f"🌐 [bold cyan]{self.host}:{self.port}[/]", classes="metric-box")
@@ -881,11 +933,11 @@ class IsiMotorBenchmarkApp(App):
     def _get_active_rows(self) -> List[Tuple[str, Any, str, str]]:
         """Returns the raw rows for the currently selected tab."""
         if self.active_tab == TAB_TELEM:
-            return extract_telemetry_rows(self.engine.latest_telemetry)
+            return extract_telemetry_rows(self.engine.latest_telemetry, self.engine.stats[PKT_RAW_TELEMETRY])
         elif self.active_tab == TAB_SCORING:
-            return extract_scoring_rows(self.engine.latest_scoring)
+            return extract_scoring_rows(self.engine.latest_scoring, self.engine.stats[PKT_COMPACT_SCORING])
         elif self.active_tab == TAB_EVENT:
-            return extract_event_rows(self.engine.latest_event, self.engine.latest_event_time)
+            return extract_event_rows(self.engine.latest_event, self.engine.stats[PKT_SYSTEM_EVENT], self.engine.latest_event_time)
         elif self.active_tab == TAB_STATS:
             return extract_stats_rows(self.engine)
         return []
@@ -893,8 +945,16 @@ class IsiMotorBenchmarkApp(App):
     def _get_active_model_dict(self) -> Dict[str, Any]:
         """Returns clean dictionary for JSON export."""
         if self.active_tab == TAB_TELEM:
+            st = self.engine.stats[PKT_RAW_TELEMETRY]
             if self.engine.latest_telemetry:
                 d = model_to_clean_dict(self.engine.latest_telemetry)
+                d["_channel_diagnostics"] = {
+                    "frequency_hz": round(st.current_freq, 2),
+                    "packets_count": st.count,
+                    "avg_delay_ms": round(st.avg_interval_ms, 2),
+                    "jitter_ms": round(st.jitter_ms, 2),
+                    "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
+                }
                 d["_computed"] = {
                     "speed_kmh": self.engine.latest_telemetry.speed_kmh,
                     "forward_speed_kmh": self.engine.latest_telemetry.forward_speed_kmh,
@@ -903,8 +963,15 @@ class IsiMotorBenchmarkApp(App):
                 return d
             return {"status": "No TelemInfo packet received yet"}
         elif self.active_tab == TAB_SCORING:
+            st = self.engine.stats[PKT_COMPACT_SCORING]
             if self.engine.latest_scoring:
                 d = model_to_clean_dict(self.engine.latest_scoring)
+                d["_channel_diagnostics"] = {
+                    "frequency_hz": round(st.current_freq, 2),
+                    "packets_count": st.count,
+                    "avg_delay_ms": round(st.avg_interval_ms, 2),
+                    "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
+                }
                 d["_computed"] = {
                     "cur_sector2_individual": self.engine.latest_scoring.cur_sector2_individual,
                     "last_sector2_individual": self.engine.latest_scoring.last_sector2_individual,
@@ -913,10 +980,15 @@ class IsiMotorBenchmarkApp(App):
                 return d
             return {"status": "No CompactScoring packet received yet"}
         elif self.active_tab == TAB_EVENT:
+            st = self.engine.stats[PKT_SYSTEM_EVENT]
             if self.engine.latest_event:
                 d = model_to_clean_dict(self.engine.latest_event)
                 d["name"] = self.engine.latest_event.name
                 d["timestamp"] = self.engine.latest_event_time
+                d["_channel_diagnostics"] = {
+                    "packets_count": st.count,
+                    "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
+                }
                 return d
             return {"status": "No SystemEvent packet received yet"}
         elif self.active_tab == TAB_STATS:
@@ -1005,8 +1077,29 @@ class IsiMotorBenchmarkApp(App):
             f"📦 Packets: [bold yellow]{self.engine.total_packets:,}[/]"
         )
         self.lbl_rate.update(
-            f"⚡ Rate: [bold magenta]{current_kb_s:5.1f} KB/s ({current_total_freq:4.1f} Hz)[/]"
+            f"⚡ Total: [bold magenta]{current_kb_s:5.1f} KB/s[/]"
         )
+
+        # Update Selected Channel Real Reception Frequency
+        if self.active_tab == TAB_TELEM:
+            st = self.engine.stats[PKT_RAW_TELEMETRY]
+            self.lbl_channel_freq.update(
+                f"📶 [bold cyan]TelemInfo:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+            )
+        elif self.active_tab == TAB_SCORING:
+            st = self.engine.stats[PKT_COMPACT_SCORING]
+            self.lbl_channel_freq.update(
+                f"📶 [bold cyan]Scoring:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+            )
+        elif self.active_tab == TAB_EVENT:
+            st = self.engine.stats[PKT_SYSTEM_EVENT]
+            self.lbl_channel_freq.update(
+                f"📶 [bold cyan]Events:[/] [bold yellow]{st.count}[/] [dim]pkts[/dim]"
+            )
+        elif self.active_tab == TAB_STATS:
+            self.lbl_channel_freq.update(
+                f"📶 [bold cyan]All Streams:[/] [bold yellow]{current_total_freq:5.1f} Hz[/]"
+            )
 
         # In-place table cell updates for smooth 30 FPS rendering
         rows = self._get_active_rows()
