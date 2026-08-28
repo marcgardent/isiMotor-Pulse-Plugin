@@ -12,6 +12,10 @@ from .models import (
     CompactScoring,
     FullScoringSession,
     VehicleScoring,
+    TrackRulesParticipant,
+    TrackRulesSession,
+    PitMenu,
+    WeatherControl,
     SystemEvent,
 )
 
@@ -23,6 +27,18 @@ COMPACT_SCORING_SIZE = 168
 FULL_SCORING_SESSION_SIZE = 284
 VEHICLE_SCORING_SIZE = 584
 SYSTEM_EVENT_SIZE = 6
+
+TRACK_RULES_PARTICIPANT_SIZE = 140
+TRACK_RULES_PARTICIPANT_STRUCT = "<ihhfdiiiB?2xd96s"
+
+TRACK_RULES_SESSION_SIZE = 192
+TRACK_RULES_SESSION_STRUCT = "<diiii?B??ifdfffb1xh4xifffffff96s"
+
+PIT_MENU_SIZE = 76
+PIT_MENU_STRUCT = "<i32si32si"
+
+WEATHER_SIZE = 108
+WEATHER_STRUCT = "<d9dddd?3x"
 
 
 def _decode_string(raw_bytes: bytes) -> str:
@@ -558,6 +574,166 @@ def decode_full_scoring(data: bytes, offset: int = 0) -> Optional[FullScoringSes
     )
 
 
+def decode_track_rules_participant(
+    data: bytes, offset: int = 0
+) -> TrackRulesParticipant:
+    """Decodes a 140-byte TrackRulesParticipant struct at specified offset."""
+    (
+        slot_id,
+        frozen_order,
+        place,
+        yellow_severity,
+        current_rel_dist,
+        rel_laps,
+        col_assign,
+        pos_assign,
+        pits_open,
+        up_to_speed,
+        goal_rel_dist,
+        raw_msg,
+    ) = struct.unpack_from(TRACK_RULES_PARTICIPANT_STRUCT, data, offset)
+
+    return TrackRulesParticipant(
+        id=slot_id,
+        frozen_order=frozen_order,
+        place=place,
+        yellow_severity=yellow_severity,
+        current_relative_distance=current_rel_dist,
+        relative_laps=rel_laps,
+        column_assignment=col_assign,
+        position_assignment=pos_assign,
+        pits_open=pits_open,
+        up_to_speed=up_to_speed,
+        goal_relative_distance=goal_rel_dist,
+        message=_decode_string(raw_msg),
+    )
+
+
+def decode_track_rules(data: bytes, offset: int = 0) -> Optional[TrackRulesSession]:
+    """
+    Decodes full TrackRulesSession packet (Type 5).
+    Header: 192 bytes, followed by N * 140 bytes of participant records.
+    """
+    if len(data) - offset < TRACK_RULES_SESSION_SIZE:
+        return None
+
+    (
+        current_et,
+        stage,
+        pole_col,
+        num_actions,
+        num_participants,
+        yellow_detected,
+        yellow_overridden,
+        sc_exists,
+        sc_active,
+        sc_laps,
+        sc_threshold,
+        sc_lap_dist,
+        sc_lap_dist_start,
+        pit_lane_start_dist,
+        teleport_lap_dist,
+        yellow_flag_state,
+        yellow_flag_laps,
+        sc_instruction,
+        sc_speed,
+        sc_min_spacing,
+        sc_max_spacing,
+        min_col_spacing,
+        max_col_spacing,
+        min_speed,
+        max_speed,
+        raw_msg,
+    ) = struct.unpack_from(TRACK_RULES_SESSION_STRUCT, data, offset)
+
+    participants: List[TrackRulesParticipant] = []
+    part_offset = offset + TRACK_RULES_SESSION_SIZE
+    valid_count = max(0, min(num_participants, 128))
+
+    for _ in range(valid_count):
+        if part_offset + TRACK_RULES_PARTICIPANT_SIZE <= len(data):
+            participants.append(decode_track_rules_participant(data, part_offset))
+            part_offset += TRACK_RULES_PARTICIPANT_SIZE
+        else:
+            break
+
+    return TrackRulesSession(
+        current_et=current_et,
+        stage=stage,
+        pole_column=pole_col,
+        num_actions=num_actions,
+        num_participants=num_participants,
+        yellow_flag_detected=yellow_detected,
+        yellow_flag_laps_overridden=yellow_overridden,
+        safety_car_exists=sc_exists,
+        safety_car_active=sc_active,
+        safety_car_laps=sc_laps,
+        safety_car_threshold=sc_threshold,
+        safety_car_lap_dist=sc_lap_dist,
+        safety_car_lap_dist_at_start=sc_lap_dist_start,
+        pit_lane_start_dist=pit_lane_start_dist,
+        teleport_lap_dist=teleport_lap_dist,
+        yellow_flag_state=yellow_flag_state,
+        yellow_flag_laps=yellow_flag_laps,
+        safety_car_instruction=sc_instruction,
+        safety_car_speed=sc_speed,
+        safety_car_minimum_spacing=sc_min_spacing,
+        safety_car_maximum_spacing=sc_max_spacing,
+        minimum_column_spacing=min_col_spacing,
+        maximum_column_spacing=max_col_spacing,
+        minimum_speed=min_speed,
+        maximum_speed=max_speed,
+        message=_decode_string(raw_msg),
+        participants=participants,
+    )
+
+
+def decode_pit_menu(data: bytes, offset: int = 0) -> Optional[PitMenu]:
+    """Decodes a 76-byte PitMenu packet (Type 6)."""
+    if len(data) - offset < PIT_MENU_SIZE:
+        return None
+
+    cat_idx, raw_cat_name, choice_idx, raw_choice_str, num_choices = (
+        struct.unpack_from(PIT_MENU_STRUCT, data, offset)
+    )
+    return PitMenu(
+        category_index=cat_idx,
+        category_name=_decode_string(raw_cat_name),
+        choice_index=choice_idx,
+        choice_string=_decode_string(raw_choice_str),
+        num_choices=num_choices,
+    )
+
+
+def decode_weather(data: bytes, offset: int = 0) -> Optional[WeatherControl]:
+    """Decodes a 108-byte WeatherControl packet (Type 7)."""
+    if len(data) - offset < WEATHER_SIZE:
+        return None
+
+    unpacked = struct.unpack_from(WEATHER_STRUCT, data, offset)
+    et = unpacked[0]
+    rain_flat = unpacked[1:10]
+    cloudiness = unpacked[10]
+    ambient_temp_k = unpacked[11]
+    wind_max_speed = unpacked[12]
+    instant_cloud = unpacked[13]
+
+    raining = (
+        (rain_flat[0], rain_flat[1], rain_flat[2]),
+        (rain_flat[3], rain_flat[4], rain_flat[5]),
+        (rain_flat[6], rain_flat[7], rain_flat[8]),
+    )
+
+    return WeatherControl(
+        et=et,
+        raining=raining,
+        cloudiness=cloudiness,
+        ambient_temp_k=ambient_temp_k,
+        wind_max_speed=wind_max_speed,
+        apply_cloudiness_instantly=instant_cloud,
+    )
+
+
 def decode_system_event(data: bytes, offset: int = 0) -> Optional[SystemEvent]:
     """Decodes a 6-byte SIMP Type 3 system event packet."""
     if len(data) - offset < 2:
@@ -568,7 +744,17 @@ def decode_system_event(data: bytes, offset: int = 0) -> Optional[SystemEvent]:
 
 def decode_packet(
     data: bytes,
-) -> Optional[Union[TelemInfo, CompactScoring, FullScoringSession, SystemEvent]]:
+) -> Optional[
+    Union[
+        TelemInfo,
+        CompactScoring,
+        FullScoringSession,
+        TrackRulesSession,
+        PitMenu,
+        WeatherControl,
+        SystemEvent,
+    ]
+]:
     """
     Main decoder entrypoint. Identifies and parses any supported isiMotor UDP packet.
     Supports both legacy raw/SIMP packets and new standardized 24-byte header packets.
@@ -592,8 +778,15 @@ def decode_packet(
                 elif hdr.packet_type == 4:
                     if hdr.total_chunks == 1:
                         return decode_full_scoring(payload)
-                    # Sliced chunks are reassembled in IsiMotorClient
                     return None
+                elif hdr.packet_type == 5:
+                    if hdr.total_chunks == 1:
+                        return decode_track_rules(payload)
+                    return None
+                elif hdr.packet_type == 6:
+                    return decode_pit_menu(payload)
+                elif hdr.packet_type == 7:
+                    return decode_weather(payload)
 
     # 2. Legacy SIMP Packet Types (CompactScoring=2, SystemEvent=3)
     if data.startswith(b"SIMP") and len(data) >= 5:

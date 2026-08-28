@@ -1,5 +1,5 @@
 """
-High-level UDP Client for receiving isiMotor telemetry and scoring packets.
+High-level UDP Client for receiving isiMotor telemetry, scoring, track rules, pit menu, and weather packets.
 """
 
 import socket
@@ -12,6 +12,9 @@ from .models import (
     TelemInfo,
     CompactScoring,
     FullScoringSession,
+    TrackRulesSession,
+    PitMenu,
+    WeatherControl,
     SystemEvent,
 )
 from .decoder import (
@@ -20,6 +23,9 @@ from .decoder import (
     decode_telemetry,
     decode_compact_scoring,
     decode_full_scoring,
+    decode_track_rules,
+    decode_pit_menu,
+    decode_weather,
     decode_system_event,
     HEADER_SIZE,
 )
@@ -35,6 +41,9 @@ class IsiMotorClient:
         client = IsiMotorClient(port=5000)
         client.on_telemetry = lambda t: print(f"RPM: {t.engine_rpm}, Speed: {t.speed_kmh:.1f}")
         client.on_full_scoring = lambda s: print(f"Leader: {s.leaderboard[0].driver_name}")
+        client.on_track_rules = lambda r: print(f"FCY: {r.is_caution_active}, SC: {r.is_safety_car_active}")
+        client.on_pit_menu = lambda p: print(f"Pit Menu: {p.category_name} -> {p.choice_string}")
+        client.on_weather = lambda w: print(f"Track Temp: {w.ambient_temp_c:.1f} °C, Rain: {w.origin_raining * 100:.0f}%")
         client.start()
         ...
         client.stop()
@@ -43,7 +52,7 @@ class IsiMotorClient:
         with IsiMotorClient(port=5000) as client:
             while True:
                 telem = client.get_latest_telemetry()
-                scoring = client.get_latest_full_scoring()
+                rules = client.get_latest_track_rules()
                 if telem:
                     print(telem.gear_str, telem.speed_kmh)
                 time.sleep(0.01)
@@ -62,6 +71,9 @@ class IsiMotorClient:
         self._latest_telemetry: Optional[TelemInfo] = None
         self._latest_scoring: Optional[CompactScoring] = None
         self._latest_full_scoring: Optional[FullScoringSession] = None
+        self._latest_track_rules: Optional[TrackRulesSession] = None
+        self._latest_pit_menu: Optional[PitMenu] = None
+        self._latest_weather: Optional[WeatherControl] = None
         self._latest_system_event: Optional[SystemEvent] = None
         self._last_packet_time: float = 0.0
         self._packet_count: int = 0
@@ -74,10 +86,23 @@ class IsiMotorClient:
         self.on_telemetry: Optional[Callable[[TelemInfo], None]] = None
         self.on_scoring: Optional[Callable[[CompactScoring], None]] = None
         self.on_full_scoring: Optional[Callable[[FullScoringSession], None]] = None
+        self.on_track_rules: Optional[Callable[[TrackRulesSession], None]] = None
+        self.on_pit_menu: Optional[Callable[[PitMenu], None]] = None
+        self.on_weather: Optional[Callable[[WeatherControl], None]] = None
         self.on_system_event: Optional[Callable[[SystemEvent], None]] = None
         self.on_packet: Optional[
             Callable[
-                [Union[TelemInfo, CompactScoring, FullScoringSession, SystemEvent]],
+                [
+                    Union[
+                        TelemInfo,
+                        CompactScoring,
+                        FullScoringSession,
+                        TrackRulesSession,
+                        PitMenu,
+                        WeatherControl,
+                        SystemEvent,
+                    ]
+                ],
                 None,
             ]
         ] = None
@@ -133,7 +158,9 @@ class IsiMotorClient:
         for k in stale_keys:
             del self._reassembly_buffers[k]
 
-    def _process_chunk(self, data: bytes, now: float) -> Optional[FullScoringSession]:
+    def _process_chunk(
+        self, data: bytes, now: float
+    ) -> Optional[Union[FullScoringSession, TrackRulesSession]]:
         """Handles sliced multipart packet reassembly."""
         if len(data) < HEADER_SIZE:
             return None
@@ -147,6 +174,8 @@ class IsiMotorClient:
         if hdr.total_chunks == 1:
             if hdr.packet_type == 4:
                 return decode_full_scoring(payload)
+            elif hdr.packet_type == 5:
+                return decode_track_rules(payload)
             return None
 
         key = (hdr.packet_type, hdr.sequence_number)
@@ -172,6 +201,8 @@ class IsiMotorClient:
 
             if hdr.packet_type == 4:
                 return decode_full_scoring(assembled_payload)
+            elif hdr.packet_type == 5:
+                return decode_track_rules(assembled_payload)
 
         return None
 
@@ -217,6 +248,12 @@ class IsiMotorClient:
                                         self._latest_scoring = pkt
                                     elif isinstance(pkt, FullScoringSession):
                                         self._latest_full_scoring = pkt
+                                    elif isinstance(pkt, TrackRulesSession):
+                                        self._latest_track_rules = pkt
+                                    elif isinstance(pkt, PitMenu):
+                                        self._latest_pit_menu = pkt
+                                    elif isinstance(pkt, WeatherControl):
+                                        self._latest_weather = pkt
                                     elif isinstance(pkt, SystemEvent):
                                         self._latest_system_event = pkt
 
@@ -239,6 +276,21 @@ class IsiMotorClient:
                                     and self.on_full_scoring
                                 ):
                                     self.on_full_scoring(pkt)
+                                elif (
+                                    isinstance(pkt, TrackRulesSession)
+                                    and self.on_track_rules
+                                ):
+                                    self.on_track_rules(pkt)
+                                elif (
+                                    isinstance(pkt, PitMenu)
+                                    and self.on_pit_menu
+                                ):
+                                    self.on_pit_menu(pkt)
+                                elif (
+                                    isinstance(pkt, WeatherControl)
+                                    and self.on_weather
+                                ):
+                                    self.on_weather(pkt)
                                 elif (
                                     isinstance(pkt, SystemEvent)
                                     and self.on_system_event
@@ -265,6 +317,21 @@ class IsiMotorClient:
         """Returns the most recently received FullScoringSession frame thread-safely."""
         with self._lock:
             return self._latest_full_scoring
+
+    def get_latest_track_rules(self) -> Optional[TrackRulesSession]:
+        """Returns the most recently received TrackRulesSession frame thread-safely."""
+        with self._lock:
+            return self._latest_track_rules
+
+    def get_latest_pit_menu(self) -> Optional[PitMenu]:
+        """Returns the most recently received PitMenu frame thread-safely."""
+        with self._lock:
+            return self._latest_pit_menu
+
+    def get_latest_weather(self) -> Optional[WeatherControl]:
+        """Returns the most recently received WeatherControl frame thread-safely."""
+        with self._lock:
+            return self._latest_weather
 
     def get_latest_system_event(self) -> Optional[SystemEvent]:
         """Returns the most recently received SystemEvent thread-safely."""

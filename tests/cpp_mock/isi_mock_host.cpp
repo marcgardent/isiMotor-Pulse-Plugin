@@ -2,7 +2,7 @@
  * isiMotor C++ Mock Host & Struct Layout Introspector
  * 
  * Provides:
- * 1. Exact memory layout & offset dumping for C++ structs (TelemInfoV01, CompactScoring, SystemEvent, FullScoring).
+ * 1. Exact memory layout & offset dumping for C++ structs (TelemInfoV01, CompactScoring, SystemEvent, FullScoring, TrackRules, PitMenu, Weather).
  * 2. Golden Binary Dataset Generator (dumps exact C++ memory buffers and corresponding JSON truth).
  * 3. Live UDP Mock Server (streams native C++ struct memory dumps over 127.0.0.1 for end-to-end integration tests).
  */
@@ -41,13 +41,13 @@ typedef void* HWND;
 struct RawUdpHeader {
     char          magic[4];          // "SIMP"
     uint8_t       protocolVersion;   // 1
-    uint8_t       packetType;        // 1=Telemetry, 2=CompactScoring, 3=SystemEvent, 4=FullScoring
+    uint8_t       packetType;        // 1=Telem, 2=Scoring, 3=Event, 4=FullScoring, 5=Rules, 6=PitMenu, 7=Weather
     uint16_t      payloadSize;       // Size of chunk payload following header
     uint32_t      sequenceNumber;    // Monotonic stream sequence counter
     double        sessionET;         // Current session elapsed time in seconds
     uint8_t       chunkIndex;        // 0-based chunk index
     uint8_t       totalChunks;       // Total chunks count
-    uint16_t      subTypeOrId;       // Active vehicle count or slot ID
+    uint16_t      subTypeOrId;       // Active vehicle count or context ID
 };
 
 struct CompactScoringPacket {
@@ -103,6 +103,70 @@ struct FullScoringSessionPacket {
     double        minPathWetness;      // Track minimum wetness (0.0 - 1.0)
     double        maxPathWetness;      // Track maximum wetness (0.0 - 1.0)
     double        avgPathWetness;      // Track average wetness (0.0 - 1.0)
+};
+
+struct TrackRulesParticipantPacket {
+    int32_t       id;                        // Slot ID
+    int16_t       frozenOrder;               // 0-based place when caution was called
+    int16_t       place;                     // 1-based place
+    float         yellowSeverity;            // Rating of yellow flag contribution
+    double        currentRelativeDistance;   // Distance relative to track start/SC
+    int32_t       relativeLaps;              // Laps relative to safety car
+    int32_t       columnAssignment;          // 0=left, 1=midleft, 2=middle, 3=midright, 4=right, 5=invalid, 6=freechoice, 7=pending
+    int32_t       positionAssignment;        // 0-based position within column (-1=invalid)
+    uint8_t       pitsOpen;                  // 0=closed, 1=open, 2=false, 3=true
+    bool          upToSpeed;                 // Vehicle can be followed
+    uint8_t       pad[2];
+    double        goalRelativeDistance;      // Target distance behind leader
+    char          message[96];               // Participant message
+};
+
+struct TrackRulesSessionPacket {
+    double        currentET;                 // Current session time
+    int32_t       stage;                     // 0=formation_init, 1=formation_update, 2=normal, 3=caution_init, 4=caution_update
+    int32_t       poleColumn;                // 0=left..4=right
+    int32_t       numActions;                // Recent actions count
+    int32_t       numParticipants;           // Active participant count (0..128)
+    bool          yellowFlagDetected;        // Caution requested or threshold exceeded
+    uint8_t       yellowFlagLapsWasOverridden; // Admin override flag
+    bool          safetyCarExists;           // SC exists
+    bool          safetyCarActive;           // SC on track
+    int32_t       safetyCarLaps;             // SC laps count
+    float         safetyCarThreshold;        // SC yellow threshold
+    double        safetyCarLapDist;          // SC current track lap distance
+    float         safetyCarLapDistAtStart;   // SC start position
+    float         pitLaneStartDist;          // Pit entrance dist
+    float         teleportLapDist;           // Green flag reference dist
+    int8_t        yellowFlagState;           // Yellow flag state
+    int16_t       yellowFlagLaps;            // Caution laps count
+    uint8_t       pad1;
+    int32_t       safetyCarInstruction;      // 0=none, 1=active, 2=head for pits
+    float         safetyCarSpeed;            // Max SC speed m/s
+    float         safetyCarMinimumSpacing;   // SC min spacing
+    float         safetyCarMaximumSpacing;   // SC max spacing
+    float         minimumColumnSpacing;      // Column min spacing
+    float         maximumColumnSpacing;      // Column max spacing
+    float         minimumSpeed;              // Min speed
+    float         maximumSpeed;              // Max speed
+    char          message[96];               // Global session message
+};
+
+struct PitMenuPacket {
+    int32_t       categoryIndex;             // Current category index
+    char          categoryName[32];          // Category name (e.g. "Tires", "Fuel")
+    int32_t       choiceIndex;               // Current choice index
+    char          choiceString[32];          // Choice string (e.g. "Soft Slick", "+35 L")
+    int32_t       numChoices;                // Total available choices in category
+};
+
+struct WeatherPacket {
+    double        et;                        // Effective session ET
+    double        raining[3][3];             // Rain intensity grid
+    double        cloudiness;                // Cloud cover (0.0 - 1.0)
+    double        ambientTempK;              // Ambient temperature (Kelvin)
+    double        windMaxSpeed;              // Wind speed (m/s)
+    bool          applyCloudinessInstantly;  // Instant cloud application flag
+    uint8_t       pad[3];
 };
 
 #pragma pack(pop)
@@ -301,43 +365,16 @@ void populate_golden_full_scoring(FullScoringSessionPacket &sess, std::vector<Ve
     std::strncpy(vehicles[0].mVehicleClass, "Hypercar", sizeof(vehicles[0].mVehicleClass) - 1);
     vehicles[0].mTotalLaps = 8;
     vehicles[0].mSector = 2;
-    vehicles[0].mFinishStatus = 0; // Running
+    vehicles[0].mFinishStatus = 0;
     vehicles[0].mLapDist = 8450.0;
-    vehicles[0].mPathLateral = -0.25;
-    vehicles[0].mTrackEdge = 7.5;
     vehicles[0].mBestSector1 = 40.820;
     vehicles[0].mBestSector2 = 123.500;
     vehicles[0].mBestLapTime = 204.850;
-    vehicles[0].mLastSector1 = 40.950;
-    vehicles[0].mLastSector2 = 123.850;
     vehicles[0].mLastLapTime = 205.420;
-    vehicles[0].mCurSector1 = 41.250;
-    vehicles[0].mCurSector2 = 124.500;
     vehicles[0].mNumPitstops = 1;
-    vehicles[0].mNumPenalties = 0;
     vehicles[0].mIsPlayer = true;
-    vehicles[0].mControl = 0; // Player
-    vehicles[0].mInPits = false;
+    vehicles[0].mControl = 0;
     vehicles[0].mPlace = 1;
-    vehicles[0].mTimeBehindNext = 0.0;
-    vehicles[0].mLapsBehindNext = 0;
-    vehicles[0].mTimeBehindLeader = 0.0;
-    vehicles[0].mLapsBehindLeader = 0;
-    vehicles[0].mLapStartET = 1045.0;
-    vehicles[0].mPos.Set(-1250.5, 45.25, 3420.75);
-    vehicles[0].mLocalVel.Set(-1.5, 0.2, -78.5);
-    vehicles[0].mLocalAccel.Set(-2.4, 9.81, 14.2);
-    vehicles[0].mOri[0].Set(1.0, 0.0, 0.0);
-    vehicles[0].mOri[1].Set(0.0, 1.0, 0.0);
-    vehicles[0].mOri[2].Set(0.0, 0.0, 1.0);
-    vehicles[0].mHeadlights = 1;
-    vehicles[0].mPitState = 0;
-    vehicles[0].mServerScored = 1;
-    vehicles[0].mQualification = 1;
-    vehicles[0].mTimeIntoLap = 205.456;
-    vehicles[0].mEstimatedLapTime = 205.0;
-    std::strncpy(vehicles[0].mPitGroup, "AF Corse", sizeof(vehicles[0].mPitGroup) - 1);
-    vehicles[0].mCountLapFlag = 2;
 
     // Car 2 (Toyota GR010 #7 - P2)
     vehicles[1].mID = 7;
@@ -345,48 +382,119 @@ void populate_golden_full_scoring(FullScoringSessionPacket &sess, std::vector<Ve
     std::strncpy(vehicles[1].mVehicleName, "Toyota GR010 #7", sizeof(vehicles[1].mVehicleName) - 1);
     std::strncpy(vehicles[1].mVehicleClass, "Hypercar", sizeof(vehicles[1].mVehicleClass) - 1);
     vehicles[1].mTotalLaps = 8;
-    vehicles[1].mSector = 2;
-    vehicles[1].mFinishStatus = 0;
-    vehicles[1].mLapDist = 8320.0;
-    vehicles[1].mBestSector1 = 40.910;
-    vehicles[1].mBestSector2 = 123.650;
+    vehicles[1].mPlace = 2;
+    vehicles[1].mTimeBehindLeader = 1.450;
     vehicles[1].mBestLapTime = 205.110;
     vehicles[1].mLastLapTime = 205.650;
-    vehicles[1].mNumPitstops = 1;
-    vehicles[1].mIsPlayer = false;
-    vehicles[1].mControl = 2; // Remote / AI
-    vehicles[1].mPlace = 2;
-    vehicles[1].mTimeBehindNext = 1.450;
-    vehicles[1].mLapsBehindNext = 0;
-    vehicles[1].mTimeBehindLeader = 1.450;
-    vehicles[1].mLapsBehindLeader = 0;
-    vehicles[1].mPos.Set(-1265.0, 45.10, 3310.5);
-    vehicles[1].mLocalVel.Set(-1.2, 0.1, -78.1);
-    vehicles[1].mPlace = 2;
 
     // Car 3 (Porsche 963 #6 - P3, in pits)
     vehicles[2].mID = 6;
     std::strncpy(vehicles[2].mDriverName, "Kevin Estre", sizeof(vehicles[2].mDriverName) - 1);
     std::strncpy(vehicles[2].mVehicleName, "Porsche 963 #6", sizeof(vehicles[2].mVehicleName) - 1);
-    std::strncpy(vehicles[2].mVehicleClass, "Hypercar", sizeof(vehicles[2].mVehicleClass) - 1);
-    vehicles[2].mTotalLaps = 7;
-    vehicles[2].mSector = 0;
-    vehicles[2].mFinishStatus = 0;
-    vehicles[2].mLapDist = 120.0;
-    vehicles[2].mBestLapTime = 205.350;
-    vehicles[2].mLastLapTime = 206.100;
-    vehicles[2].mNumPitstops = 2;
-    vehicles[2].mIsPlayer = false;
-    vehicles[2].mControl = 2;
-    vehicles[2].mInPits = true;
-    vehicles[2].mPitState = 3; // Stopped in box
     vehicles[2].mPlace = 3;
-    vehicles[2].mTimeBehindNext = 3.200;
-    vehicles[2].mLapsBehindNext = 1;
+    vehicles[2].mInPits = true;
+    vehicles[2].mPitState = 3;
     vehicles[2].mTimeBehindLeader = 4.650;
-    vehicles[2].mLapsBehindLeader = 1;
-    vehicles[2].mPos.Set(45.0, 12.0, 150.0);
-    vehicles[2].mLocalVel.Set(0.0, 0.0, 0.0);
+}
+
+void populate_golden_track_rules(TrackRulesSessionPacket &rules, std::vector<TrackRulesParticipantPacket> &participants) {
+    std::memset(&rules, 0, sizeof(rules));
+    rules.currentET = 1250.456;
+    rules.stage = 4; // Caution Update (FCY)
+    rules.poleColumn = 0; // Left
+    rules.numActions = 1;
+    rules.numParticipants = 3;
+    rules.yellowFlagDetected = true;
+    rules.yellowFlagLapsWasOverridden = 0;
+    rules.safetyCarExists = true;
+    rules.safetyCarActive = true;
+    rules.safetyCarLaps = 2;
+    rules.safetyCarThreshold = 1.0f;
+    rules.safetyCarLapDist = 4520.0;
+    rules.safetyCarLapDistAtStart = 0.0f;
+    rules.pitLaneStartDist = 13200.0f;
+    rules.teleportLapDist = 500.0f;
+    rules.yellowFlagState = 4; // PitOpen
+    rules.yellowFlagLaps = 3;
+    rules.safetyCarInstruction = 1; // Active
+    rules.safetyCarSpeed = 22.22f; // 80 km/h in m/s
+    rules.safetyCarMinimumSpacing = 10.0f;
+    rules.safetyCarMaximumSpacing = 30.0f;
+    rules.minimumColumnSpacing = 5.0f;
+    rules.maximumColumnSpacing = 20.0f;
+    rules.minimumSpeed = 15.0f;
+    rules.maximumSpeed = 25.0f;
+    std::strncpy(rules.message, "Full Course Yellow - Follow Safety Car", sizeof(rules.message) - 1);
+
+    participants.resize(3);
+    for (size_t i = 0; i < 3; ++i) {
+        std::memset(&participants[i], 0, sizeof(TrackRulesParticipantPacket));
+    }
+
+    // Car 1 (Player - P1)
+    participants[0].id = 51;
+    participants[0].frozenOrder = 0;
+    participants[0].place = 1;
+    participants[0].yellowSeverity = 0.0f;
+    participants[0].currentRelativeDistance = 4500.0;
+    participants[0].relativeLaps = 0;
+    participants[0].columnAssignment = 0; // Left Lane
+    participants[0].positionAssignment = 0;
+    participants[0].pitsOpen = 3; // True
+    participants[0].upToSpeed = true;
+    participants[0].goalRelativeDistance = 4510.0;
+    std::strncpy(participants[0].message, "Follow Safety Car", sizeof(participants[0].message) - 1);
+
+    // Car 2 (P2)
+    participants[1].id = 7;
+    participants[1].frozenOrder = 1;
+    participants[1].place = 2;
+    participants[1].yellowSeverity = 0.0f;
+    participants[1].currentRelativeDistance = 4485.0;
+    participants[1].relativeLaps = 0;
+    participants[1].columnAssignment = 0;
+    participants[1].positionAssignment = 1;
+    participants[1].pitsOpen = 3;
+    participants[1].upToSpeed = true;
+    participants[1].goalRelativeDistance = 4495.0;
+    std::strncpy(participants[1].message, "Follow Car #51", sizeof(participants[1].message) - 1);
+
+    // Car 3 (P3, caused caution)
+    participants[2].id = 6;
+    participants[2].frozenOrder = 2;
+    participants[2].place = 3;
+    participants[2].yellowSeverity = 1.5f;
+    participants[2].currentRelativeDistance = 120.0;
+    participants[2].relativeLaps = 1;
+    participants[2].columnAssignment = 5; // Invalid / Pits
+    participants[2].positionAssignment = -1;
+    participants[2].pitsOpen = 3;
+    participants[2].upToSpeed = false;
+    participants[2].goalRelativeDistance = 0.0;
+    std::strncpy(participants[2].message, "In Pits", sizeof(participants[2].message) - 1);
+}
+
+void populate_golden_pit_menu(PitMenuPacket &p) {
+    std::memset(&p, 0, sizeof(p));
+    p.categoryIndex = 1;
+    std::strncpy(p.categoryName, "Tires", sizeof(p.categoryName) - 1);
+    p.choiceIndex = 0;
+    std::strncpy(p.choiceString, "Soft Slick", sizeof(p.choiceString) - 1);
+    p.numChoices = 4;
+}
+
+void populate_golden_weather(WeatherPacket &w) {
+    std::memset(&w, 0, sizeof(w));
+    w.et = 1250.456;
+    for (int r = 0; r < 3; ++r) {
+        for (int c = 0; c < 3; ++c) {
+            w.raining[r][c] = (r == 1 && c == 1) ? 0.05 : 0.0;
+        }
+    }
+    w.cloudiness = 0.25;
+    w.ambientTempK = 297.65; // 24.5 °C
+    w.windMaxSpeed = 4.5;
+    w.applyCloudinessInstantly = false;
 }
 
 void populate_golden_event(SystemEventPacket &ev, uint8_t type = 1) {
@@ -401,6 +509,9 @@ void populate_golden_event(SystemEventPacket &ev, uint8_t type = 1) {
 void dump_truth(const std::string &bin_telem_path, const std::string &json_telem_path,
                 const std::string &bin_scoring_path, const std::string &json_scoring_path,
                 const std::string &bin_full_scoring_path, const std::string &json_full_scoring_path,
+                const std::string &bin_rules_path, const std::string &json_rules_path,
+                const std::string &bin_pit_path, const std::string &json_pit_path,
+                const std::string &bin_weather_path, const std::string &json_weather_path,
                 const std::string &bin_event_path, const std::string &json_event_path) {
     // 1. Telemetry
     TelemInfoV01 t;
@@ -522,7 +633,87 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
     fj_fs << "}\n";
     fj_fs.close();
 
-    // 4. Event
+    // 4. Track Rules (Session Header + 3 Participants)
+    TrackRulesSessionPacket tr_sess;
+    std::vector<TrackRulesParticipantPacket> tr_parts;
+    populate_golden_track_rules(tr_sess, tr_parts);
+
+    std::ofstream fb_tr(bin_rules_path, std::ios::binary);
+    fb_tr.write(reinterpret_cast<const char*>(&tr_sess), sizeof(tr_sess));
+    fb_tr.write(reinterpret_cast<const char*>(tr_parts.data()), tr_parts.size() * sizeof(TrackRulesParticipantPacket));
+    fb_tr.close();
+
+    std::ofstream fj_tr(json_rules_path);
+    fj_tr << std::setprecision(6) << std::fixed;
+    fj_tr << "{\n";
+    fj_tr << "  \"rules_header_size\": " << sizeof(tr_sess) << ",\n";
+    fj_tr << "  \"participant_size\": " << sizeof(TrackRulesParticipantPacket) << ",\n";
+    fj_tr << "  \"current_et\": " << tr_sess.currentET << ",\n";
+    fj_tr << "  \"stage\": " << tr_sess.stage << ",\n";
+    fj_tr << "  \"pole_column\": " << tr_sess.poleColumn << ",\n";
+    fj_tr << "  \"num_participants\": " << tr_sess.numParticipants << ",\n";
+    fj_tr << "  \"safety_car_active\": " << (tr_sess.safetyCarActive ? "true" : "false") << ",\n";
+    fj_tr << "  \"yellow_flag_detected\": " << (tr_sess.yellowFlagDetected ? "true" : "false") << ",\n";
+    fj_tr << "  \"yellow_flag_state\": " << static_cast<int>(tr_sess.yellowFlagState) << ",\n";
+    fj_tr << "  \"safety_car_speed\": " << tr_sess.safetyCarSpeed << ",\n";
+    fj_tr << "  \"message\": \"" << tr_sess.message << "\",\n";
+    fj_tr << "  \"participants\": [\n";
+    for (size_t i = 0; i < tr_parts.size(); ++i) {
+        const auto &p = tr_parts[i];
+        fj_tr << "    {\n";
+        fj_tr << "      \"id\": " << p.id << ",\n";
+        fj_tr << "      \"place\": " << p.place << ",\n";
+        fj_tr << "      \"frozen_order\": " << p.frozenOrder << ",\n";
+        fj_tr << "      \"column_assignment\": " << p.columnAssignment << ",\n";
+        fj_tr << "      \"pits_open\": " << static_cast<int>(p.pitsOpen) << ",\n";
+        fj_tr << "      \"up_to_speed\": " << (p.upToSpeed ? "true" : "false") << ",\n";
+        fj_tr << "      \"goal_relative_distance\": " << p.goalRelativeDistance << ",\n";
+        fj_tr << "      \"message\": \"" << p.message << "\"\n";
+        fj_tr << "    }" << (i + 1 < tr_parts.size() ? "," : "") << "\n";
+    }
+    fj_tr << "  ]\n";
+    fj_tr << "}\n";
+    fj_tr.close();
+
+    // 5. Pit Menu
+    PitMenuPacket pm;
+    populate_golden_pit_menu(pm);
+    std::ofstream fb_pm(bin_pit_path, std::ios::binary);
+    fb_pm.write(reinterpret_cast<const char*>(&pm), sizeof(pm));
+    fb_pm.close();
+
+    std::ofstream fj_pm(json_pit_path);
+    fj_pm << "{\n";
+    fj_pm << "  \"struct_size\": " << sizeof(pm) << ",\n";
+    fj_pm << "  \"category_index\": " << pm.categoryIndex << ",\n";
+    fj_pm << "  \"category_name\": \"" << pm.categoryName << "\",\n";
+    fj_pm << "  \"choice_index\": " << pm.choiceIndex << ",\n";
+    fj_pm << "  \"choice_string\": \"" << pm.choiceString << "\",\n";
+    fj_pm << "  \"num_choices\": " << pm.numChoices << "\n";
+    fj_pm << "}\n";
+    fj_pm.close();
+
+    // 6. Weather
+    WeatherPacket wp;
+    populate_golden_weather(wp);
+    std::ofstream fb_wp(bin_weather_path, std::ios::binary);
+    fb_wp.write(reinterpret_cast<const char*>(&wp), sizeof(wp));
+    fb_wp.close();
+
+    std::ofstream fj_wp(json_weather_path);
+    fj_wp << std::setprecision(6) << std::fixed;
+    fj_wp << "{\n";
+    fj_wp << "  \"struct_size\": " << sizeof(wp) << ",\n";
+    fj_wp << "  \"et\": " << wp.et << ",\n";
+    fj_wp << "  \"cloudiness\": " << wp.cloudiness << ",\n";
+    fj_wp << "  \"ambient_temp_k\": " << wp.ambientTempK << ",\n";
+    fj_wp << "  \"ambient_temp_c\": " << (wp.ambientTempK - 273.15) << ",\n";
+    fj_wp << "  \"wind_max_speed\": " << wp.windMaxSpeed << ",\n";
+    fj_wp << "  \"origin_raining\": " << wp.raining[1][1] << "\n";
+    fj_wp << "}\n";
+    fj_wp.close();
+
+    // 7. System Event
     SystemEventPacket ev;
     populate_golden_event(ev, 1);
     std::ofstream fb_e(bin_event_path, std::ios::binary);
@@ -596,25 +787,43 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
     std::vector<VehicleScoringInfoV01> full_vehs;
     populate_golden_full_scoring(full_sess, full_vehs);
 
-    // Buffer for full scoring serialization
     std::vector<char> full_scoring_buf(sizeof(full_sess) + full_vehs.size() * sizeof(VehicleScoringInfoV01));
     std::memcpy(full_scoring_buf.data(), &full_sess, sizeof(full_sess));
     std::memcpy(full_scoring_buf.data() + sizeof(full_sess), full_vehs.data(), full_vehs.size() * sizeof(VehicleScoringInfoV01));
+
+    TrackRulesSessionPacket rules_sess;
+    std::vector<TrackRulesParticipantPacket> rules_parts;
+    populate_golden_track_rules(rules_sess, rules_parts);
+
+    std::vector<char> rules_buf(sizeof(rules_sess) + rules_parts.size() * sizeof(TrackRulesParticipantPacket));
+    std::memcpy(rules_buf.data(), &rules_sess, sizeof(rules_sess));
+    std::memcpy(rules_buf.data() + sizeof(rules_sess), rules_parts.data(), rules_parts.size() * sizeof(TrackRulesParticipantPacket));
+
+    PitMenuPacket pit_menu;
+    populate_golden_pit_menu(pit_menu);
+
+    WeatherPacket weather;
+    populate_golden_weather(weather);
 
     SystemEventPacket ev;
     populate_golden_event(ev, 1);
 
     unsigned int full_scoring_seq = 0;
+    unsigned int rules_seq = 0;
+    unsigned int pit_seq = 0;
+    unsigned int weather_seq = 0;
 
     // Send initial system event
     sendto(sock, reinterpret_cast<const char*>(&ev), sizeof(ev), 0,
            reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
 
     int total_frames = hz * duration_sec;
-    int scoring_divider = std::max(1, hz / 5); // 5Hz scoring
+    int scoring_divider = std::max(1, hz / 5);    // 5Hz scoring
+    int rules_divider = std::max(1, hz / 3);      // 3Hz track rules
+    int weather_divider = std::max(1, hz / 1);    // 1Hz weather
     auto frame_delay = std::chrono::microseconds(1000000 / hz);
 
-    std::cout << "[C++ Mock Host] Streaming UDP packets to 127.0.0.1:" << port
+    std::cout << "[C++ Mock Host] Streaming Phase 2 UDP packets to 127.0.0.1:" << port
               << " @ " << hz << "Hz for " << duration_sec << "s..." << std::endl;
 
     for (int frame = 0; frame < total_frames; ++frame) {
@@ -623,11 +832,14 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
         telem.mEngineRPM = 7500.0 + std::sin(sim_time * 5.0) * 1200.0;
         telem.mSpeedLimiter = (frame % 200 < 50) ? 1 : 0;
 
-        // Send telemetry (1888 bytes)
+        // 1. Send telemetry (1888 bytes)
         sendto(sock, reinterpret_cast<const char*>(&telem), sizeof(telem), 0,
                reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
 
-        // Send scoring (Compact + Full Sliced @ 5Hz)
+        // 2. Send PitMenu (Type 6 @ 100Hz)
+        send_sliced_udp_mock(sock, dest, 6, 0, &pit_menu, sizeof(pit_menu), 0.0, pit_seq);
+
+        // 3. Send Scoring (Compact + Full Sliced @ 5Hz)
         if (frame % scoring_divider == 0) {
             scoring.currentET = 1250.0 + sim_time;
             sendto(sock, reinterpret_cast<const char*>(&scoring), sizeof(scoring), 0,
@@ -637,6 +849,20 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
             std::memcpy(full_scoring_buf.data(), &full_sess, sizeof(full_sess));
             send_sliced_udp_mock(sock, dest, 4, static_cast<unsigned short>(full_vehs.size()),
                                 full_scoring_buf.data(), full_scoring_buf.size(), full_sess.currentET, full_scoring_seq);
+        }
+
+        // 4. Send TrackRules (Type 5 Sliced @ 3Hz)
+        if (frame % rules_divider == 0) {
+            rules_sess.currentET = 1250.0 + sim_time;
+            std::memcpy(rules_buf.data(), &rules_sess, sizeof(rules_sess));
+            send_sliced_udp_mock(sock, dest, 5, static_cast<unsigned short>(rules_parts.size()),
+                                rules_buf.data(), rules_buf.size(), rules_sess.currentET, rules_seq);
+        }
+
+        // 5. Send Weather (Type 7 @ 1Hz)
+        if (frame % weather_divider == 0) {
+            weather.et = 1250.0 + sim_time;
+            send_sliced_udp_mock(sock, dest, 7, 0, &weather, sizeof(weather), weather.et, weather_seq);
         }
 
         std::this_thread::sleep_for(frame_delay);
@@ -664,6 +890,10 @@ int main(int argc, char** argv) {
         std::cout << "CompactScoringPacket: " << sizeof(CompactScoringPacket) << " bytes" << std::endl;
         std::cout << "FullScoringSessionPacket: " << sizeof(FullScoringSessionPacket) << " bytes" << std::endl;
         std::cout << "VehicleScoringInfoV01: " << sizeof(VehicleScoringInfoV01) << " bytes" << std::endl;
+        std::cout << "TrackRulesSessionPacket: " << sizeof(TrackRulesSessionPacket) << " bytes" << std::endl;
+        std::cout << "TrackRulesParticipantPacket: " << sizeof(TrackRulesParticipantPacket) << " bytes" << std::endl;
+        std::cout << "PitMenuPacket: " << sizeof(PitMenuPacket) << " bytes" << std::endl;
+        std::cout << "WeatherPacket: " << sizeof(WeatherPacket) << " bytes" << std::endl;
         std::cout << "SystemEventPacket: " << sizeof(SystemEventPacket) << " bytes" << std::endl;
         return 0;
     }
@@ -674,6 +904,9 @@ int main(int argc, char** argv) {
             dir + "/telemetry_golden.bin", dir + "/telemetry_golden.json",
             dir + "/scoring_golden.bin", dir + "/scoring_golden.json",
             dir + "/full_scoring_golden.bin", dir + "/full_scoring_golden.json",
+            dir + "/track_rules_golden.bin", dir + "/track_rules_golden.json",
+            dir + "/pit_menu_golden.bin", dir + "/pit_menu_golden.json",
+            dir + "/weather_golden.bin", dir + "/weather_golden.json",
             dir + "/event_golden.bin", dir + "/event_golden.json"
         );
         std::cout << "[C++ Mock Host] Golden datasets successfully dumped to " << dir << std::endl;

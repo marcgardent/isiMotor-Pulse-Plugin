@@ -1,0 +1,45 @@
+{
+  "rules_header_size": 192,
+  "participant_size": 140,
+  "current_et": 1250.456000,
+  "stage": 4,
+  "pole_column": 0,
+  "num_participants": 3,
+  "safety_car_active": true,
+  "yellow_flag_detected": true,
+  "yellow_flag_state": 4,
+  "safety_car_speed": 22.219999,
+  "message": "Full Course Yellow - Follow Safety Car",
+  "participants": [
+    {
+      "id": 51,
+      "place": 1,
+      "frozen_order": 0,
+      "column_assignment": 0,
+      "pits_open": 3,
+      "up_to_speed": true,
+      "goal_relative_distance": 4510.000000,
+      "message": "Follow Safety Car"
+    },
+    {
+      "id": 7,
+      "place": 2,
+      "frozen_order": 1,
+      "column_assignment": 0,
+      "pits_open": 3,
+      "up_to_speed": true,
+      "goal_relative_distance": 4495.000000,
+      "message": "Follow Car #51"
+    },
+    {
+      "id": 6,
+      "place": 3,
+      "frozen_order": 2,
+      "column_assignment": 5,
+      "pits_open": 3,
+      "up_to_speed": false,
+      "goal_relative_distance": 0.000000,
+      "message": "In Pits"
+    }
+  ]
+}

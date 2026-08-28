@@ -40,12 +40,19 @@ from isimotor_rawudp_client.models import (
     CompactScoring,
     FullScoringSession,
     VehicleScoring,
+    TrackRulesParticipant,
+    TrackRulesSession,
+    PitMenu,
+    WeatherControl,
     SystemEvent,
 )
 from isimotor_rawudp_client.decoder import (
     decode_telemetry,
     decode_compact_scoring,
     decode_full_scoring,
+    decode_track_rules,
+    decode_pit_menu,
+    decode_weather,
     decode_system_event,
     decode_header,
     HEADER_SIZE,
@@ -56,11 +63,17 @@ from isimotor_rawudp_client.decoder import (
 PKT_RAW_TELEMETRY   = "TelemInfoV01 (Raw Binary)"
 PKT_COMPACT_SCORING = "CompactScoring (SIMP v2)"
 PKT_FULL_SCORING    = "FullScoring (SIMP v4 Sliced)"
+PKT_TRACK_RULES     = "TrackRules (SIMP v5 Sliced)"
+PKT_PIT_MENU        = "PitMenu (SIMP v6)"
+PKT_WEATHER         = "Weather (SIMP v7)"
 PKT_SYSTEM_EVENT    = "SystemEvent (SIMP v3)"
 PKT_FOREIGN         = "Foreign / Unknown"
 
 TAB_TELEM   = "tab-telem"
 TAB_SCORING = "tab-scoring"
+TAB_RULES   = "tab-rules"
+TAB_PIT     = "tab-pit"
+TAB_WEATHER = "tab-weather"
 TAB_EVENT   = "tab-event"
 TAB_STATS   = "tab-stats"
 
@@ -144,6 +157,9 @@ class TelemetryEngine:
             PKT_RAW_TELEMETRY: PacketStats(PKT_RAW_TELEMETRY, "Binary Struct", "1888/1904 B"),
             PKT_COMPACT_SCORING: PacketStats(PKT_COMPACT_SCORING, "Binary SIMP", "168 B"),
             PKT_FULL_SCORING: PacketStats(PKT_FULL_SCORING, "Sliced SIMP", "Multi-KB"),
+            PKT_TRACK_RULES: PacketStats(PKT_TRACK_RULES, "Sliced SIMP", "Multi-KB"),
+            PKT_PIT_MENU: PacketStats(PKT_PIT_MENU, "Binary SIMP", "76 B"),
+            PKT_WEATHER: PacketStats(PKT_WEATHER, "Binary SIMP", "108 B"),
             PKT_SYSTEM_EVENT: PacketStats(PKT_SYSTEM_EVENT, "Binary SIMP", "6 B"),
             PKT_FOREIGN: PacketStats(PKT_FOREIGN, "Raw/Other", "Variable"),
         }
@@ -151,6 +167,9 @@ class TelemetryEngine:
         self.latest_telemetry: Optional[TelemInfo] = None
         self.latest_scoring: Optional[CompactScoring] = None
         self.latest_full_scoring: Optional[FullScoringSession] = None
+        self.latest_track_rules: Optional[TrackRulesSession] = None
+        self.latest_pit_menu: Optional[PitMenu] = None
+        self.latest_weather: Optional[WeatherControl] = None
         self.latest_event: Optional[SystemEvent] = None
         self.latest_event_time: float = 0.0
         self.reassembly_buffers: Dict[tuple, dict] = {}
@@ -245,6 +264,38 @@ class TelemetryEngine:
                             fs = decode_full_scoring(b"".join(ordered))
                             if fs:
                                 self.latest_full_scoring = fs
+                elif hdr.packet_type == 5:
+                    pkt_type = PKT_TRACK_RULES
+                    if hdr.total_chunks == 1:
+                        tr = decode_track_rules(payload)
+                        if tr:
+                            self.latest_track_rules = tr
+                    else:
+                        key = (hdr.packet_type, hdr.sequence_number)
+                        if key not in self.reassembly_buffers:
+                            self.reassembly_buffers[key] = {
+                                "total_chunks": hdr.total_chunks,
+                                "chunks": {},
+                                "timestamp": now,
+                            }
+                        buf = self.reassembly_buffers[key]
+                        buf["chunks"][hdr.chunk_index] = payload
+                        if len(buf["chunks"]) == buf["total_chunks"]:
+                            ordered = [buf["chunks"][i] for i in range(buf["total_chunks"]) if i in buf["chunks"]]
+                            del self.reassembly_buffers[key]
+                            tr = decode_track_rules(b"".join(ordered))
+                            if tr:
+                                self.latest_track_rules = tr
+                elif hdr.packet_type == 6:
+                    pkt_type = PKT_PIT_MENU
+                    pm = decode_pit_menu(payload)
+                    if pm:
+                        self.latest_pit_menu = pm
+                elif hdr.packet_type == 7:
+                    pkt_type = PKT_WEATHER
+                    w = decode_weather(payload)
+                    if w:
+                        self.latest_weather = w
 
         # 2. Legacy Raw Telemetry
         elif size >= 1888:
@@ -628,92 +679,133 @@ def model_to_clean_dict(obj: Any) -> Dict[str, Any]:
             elif isinstance(val, (list, tuple)):
                 res[f] = [model_to_clean_dict(x) if hasattr(x, "__dataclass_fields__") else x for x in val]
             else:
-res[f] = val
+                res[f] = val
         return res
     return dict(obj)
 
 
-        self.stats: Dict[str, PacketStats] = {
-            PKT_RAW_TELEMETRY: PacketStats(PKT_RAW_TELEMETRY, "Binary Struct", "1888 B"),
-            PKT_COMPACT_SCORING: PacketStats(PKT_COMPACT_SCORING, "Binary SIMP", "168 B"),
-            PKT_SYSTEM_EVENT: PacketStats(PKT_SYSTEM_EVENT, "Binary SIMP", "6 B"),
-            PKT_FOREIGN: PacketStats(PKT_FOREIGN, "Raw/Other", "Variable"),
-        }
+def extract_track_rules_rows(
+    rules: Optional[TrackRulesSession], st: Optional[PacketStats] = None
+) -> List[Tuple[str, Any, str, str]]:
+    """Returns list of (key, raw_value, formatted_string, description) for TrackRulesSession packet."""
+    rows = []
 
-        self.latest_telemetry: Optional[TelemInfo] = None
-        self.latest_scoring: Optional[CompactScoring] = None
-        self.latest_event: Optional[SystemEvent] = None
-        self.latest_event_time: float = 0.0
+    if st is not None:
+        freq_str = f"[bold #e3b341]{st.current_freq:5.1f} Hz[/]"
+        delay_str = f"{st.avg_interval_ms:4.1f} ms" if st.intervals else "-"
+        rows.extend([
+            ("_channel.frequency_hz", st.current_freq, freq_str, "Real-time reception frequency of TrackRules stream"),
+            ("_channel.packets_count", st.count, f"{st.count:,}", "Total TrackRules packets received"),
+            ("_channel.avg_delay_ms", st.avg_interval_ms, delay_str, "Average arrival delay between TrackRules packets"),
+            ("_channel.bandwidth_kb_s", st.bandwidth_kb_s, f"{st.bandwidth_kb_s:5.1f} KB/s", "Instantaneous bandwidth for TrackRules stream"),
+        ])
 
-    def start(self):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.socket.setblocking(False)
-        self.socket.bind((self.host, self.port))
-        self.running = True
+    if rules is None:
+        rows.append(
+            ("status", "Waiting for packets", "[dim]No TrackRules packet received yet[/dim]", "Active during caution / safety car / formation laps")
+        )
+        return rows
 
-    def stop(self):
-        self.running = False
-        if self.socket:
-            try:
-                self.socket.close()
-            except Exception:
-                pass
-            self.socket = None
+    rows.extend([
+        ("session.stage", rules.stage_str, f"[bold #58a6ff]{rules.stage_str}[/]", "Current race stage (Formation, Normal, Caution)"),
+        ("session.pole_column", rules.pole_column_str, format_value(rules.pole_column_str), "Pole position lane/column"),
+        ("session.num_participants", rules.num_participants, format_value(rules.num_participants), "Total active participant cars in track order"),
+        ("session.yellow_flag_detected", rules.yellow_flag_detected, format_value(rules.yellow_flag_detected), "Yellow flag / caution condition detected"),
+        ("session.is_caution_active", rules.is_caution_active, format_value(rules.is_caution_active), "Full Course Yellow / Caution active"),
+        ("session.is_safety_car_active", rules.is_safety_car_active, format_value(rules.is_safety_car_active), "Safety car deployed on track"),
+        ("safety_car.laps", rules.safety_car_laps, format_value(rules.safety_car_laps), "Safety car caution laps completed"),
+        ("safety_car.lap_dist", rules.safety_car_lap_dist, f"{rules.safety_car_lap_dist:.1f} m", "Safety car track distance position (m)"),
+        ("safety_car.speed_kmh", rules.safety_car_speed * 3.6, f"{rules.safety_car_speed * 3.6:.1f} km/h", "Safety car target speed"),
+        ("session.message", rules.message, format_value(rules.message), "Global race control message"),
+    ])
 
-    def poll(self):
-        """Drains pending packets from the socket."""
-        if not self.socket or not self.running:
-            return
+    for i, p in enumerate(rules.participants):
+        pfx = f"participant[{i}]."
+        rows.extend([
+            (f"{pfx}id", p.id, format_value(p.id), f"Car slot ID (Place P{p.place})"),
+            (f"{pfx}place", p.place, f"P{p.place}", f"1-based track position"),
+            (f"{pfx}frozen_order", p.frozen_order, format_value(p.frozen_order), f"0-based order when caution was called"),
+            (f"{pfx}column", p.column_str, format_value(p.column_str), f"Assigned column/lane"),
+            (f"{pfx}pits_open", p.pits_open_bool, format_value(p.pits_open_bool), f"Pits open for this vehicle"),
+            (f"{pfx}up_to_speed", p.up_to_speed, format_value(p.up_to_speed), f"Vehicle can be followed safely"),
+            (f"{pfx}message", p.message, format_value(p.message), f"Individual driver instruction"),
+        ])
 
-        while True:
-            r, _, _ = select.select([self.socket], [], [], 0.001)
-            if not r:
-                break
-            try:
-                data, addr = self.socket.recvfrom(65535)
-                self._process_packet(data, addr)
-            except (BlockingIOError, socket.error):
-                break
+    return rows
 
-    def _process_packet(self, data: bytes, addr: Tuple[str, int]):
-        now = time.time()
-        size = len(data)
-        self.total_packets += 1
-        self.total_bytes += size
 
-        # 1. Native Binary Telemetry (1888 bytes)
-        if size == 1888:
-            pkt_type = PKT_RAW_TELEMETRY
-            telem = decode_telemetry(data)
-            if telem:
-                self.latest_telemetry = telem
+def extract_pit_menu_rows(
+    pit: Optional[PitMenu], st: Optional[PacketStats] = None
+) -> List[Tuple[str, Any, str, str]]:
+    """Returns list of (key, raw_value, formatted_string, description) for PitMenu packet."""
+    rows = []
 
-        # 2. Compact Scoring (SIMP Type 2, 168 bytes)
-        elif data.startswith(b"SIMP") and len(data) >= 5 and data[4] == 2:
-            pkt_type = PKT_COMPACT_SCORING
-            scoring = decode_compact_scoring(data)
-            if scoring:
-                self.latest_scoring = scoring
+    if st is not None:
+        freq_str = f"[bold #e3b341]{st.current_freq:5.1f} Hz[/]"
+        delay_str = f"{st.avg_interval_ms:4.1f} ms" if st.intervals else "-"
+        rows.extend([
+            ("_channel.frequency_hz", st.current_freq, freq_str, "Real-time reception frequency of PitMenu stream"),
+            ("_channel.packets_count", st.count, f"{st.count:,}", "Total PitMenu packets received"),
+            ("_channel.avg_delay_ms", st.avg_interval_ms, delay_str, "Average arrival delay between PitMenu packets"),
+            ("_channel.bandwidth_kb_s", st.bandwidth_kb_s, f"{st.bandwidth_kb_s:5.1f} KB/s", "Instantaneous bandwidth for PitMenu stream"),
+        ])
 
-        # 3. System Event (SIMP Type 3, 6 bytes)
-        elif data.startswith(b"SIMP") and len(data) >= 5 and data[4] == 3:
-            pkt_type = PKT_SYSTEM_EVENT
-            ev = decode_system_event(data)
-            if ev:
-                self.latest_event = ev
-                self.latest_event_time = now
-        else:
-            pkt_type = PKT_FOREIGN
+    if pit is None:
+        rows.append(
+            ("status", "Waiting for packets", "[dim]No PitMenu packet received yet[/dim]", "Pit menu state streamed @ 100Hz")
+        )
+        return rows
 
-        self.stats[pkt_type].record(size, now)
+    rows.extend([
+        ("pit_menu.category_index", pit.category_index, format_value(pit.category_index), "Current category index"),
+        ("pit_menu.category_name", pit.category_name, f"[bold #58a6ff]{pit.category_name}[/]", "Current pit menu category name (e.g. Tires, Fuel, Aero)"),
+        ("pit_menu.choice_index", pit.choice_index, format_value(pit.choice_index), "Current choice index within category"),
+        ("pit_menu.choice_string", pit.choice_string, f"[bold #3fb950]{pit.choice_string}[/]", "Selected choice / setting value"),
+        ("pit_menu.num_choices", pit.num_choices, format_value(pit.num_choices), "Total available options in category"),
+        ("pit_menu.is_available", pit.is_available, format_value(pit.is_available), "Pit menu active / accessible"),
+    ])
 
-    def reset_stats(self):
-        self.total_packets = 0
-        self.total_bytes = 0
-        self.start_time = time.time()
-        for s in self.stats.values():
-            s.reset()
+    return rows
+
+
+def extract_weather_rows(
+    w: Optional[WeatherControl], st: Optional[PacketStats] = None
+) -> List[Tuple[str, Any, str, str]]:
+    """Returns list of (key, raw_value, formatted_string, description) for WeatherControl packet."""
+    rows = []
+
+    if st is not None:
+        freq_str = f"[bold #e3b341]{st.current_freq:5.1f} Hz[/]"
+        delay_str = f"{st.avg_interval_ms:4.1f} ms" if st.intervals else "-"
+        rows.extend([
+            ("_channel.frequency_hz", st.current_freq, freq_str, "Real-time reception frequency of Weather stream"),
+            ("_channel.packets_count", st.count, f"{st.count:,}", "Total Weather packets received"),
+            ("_channel.avg_delay_ms", st.avg_interval_ms, delay_str, "Average arrival delay between Weather packets"),
+            ("_channel.bandwidth_kb_s", st.bandwidth_kb_s, f"{st.bandwidth_kb_s:5.1f} KB/s", "Instantaneous bandwidth for Weather stream"),
+        ])
+
+    if w is None:
+        rows.append(
+            ("status", "Waiting for packets", "[dim]No Weather packet received yet[/dim]", "Environmental conditions streamed @ 1Hz")
+        )
+        return rows
+
+    rows.extend([
+        ("weather.et", w.et, f"{w.et:.3f} s", "Session time when weather takes effect"),
+        ("weather.cloudiness", w.cloudiness, f"{w.cloudiness * 100:.1f} %", "General cloud cover (0% clear, 100% dark overcast)"),
+        ("weather.ambient_temp_c", w.ambient_temp_c, f"[bold #e3b341]{w.ambient_temp_c:.1f} °C[/]", "Ambient air temperature (Celsius)"),
+        ("weather.ambient_temp_k", w.ambient_temp_k, f"{w.ambient_temp_k:.2f} K", "Ambient air temperature (Kelvin)"),
+        ("weather.wind_max_speed", w.wind_max_speed, f"{w.wind_max_speed:.1f} m/s ({w.wind_max_speed * 3.6:.1f} km/h)", "Maximum ground wind speed"),
+        ("weather.origin_raining", w.origin_raining, f"[bold #58a6ff]{w.origin_raining * 100:.1f} %[/]", "Rain intensity at track origin [1][1] (0.0 to 1.0)"),
+        ("weather.apply_cloudiness_instantly", w.apply_cloudiness_instantly, format_value(w.apply_cloudiness_instantly), "Instantaneous cloud change flag"),
+    ])
+
+    for r in range(3):
+        for c in range(3):
+            val = w.raining[r][c]
+            rows.append((f"weather.raining[{r}][{c}]", val, f"{val * 100:.1f} %", f"Rain intensity at track node grid position ({r}, {c})"))
+
+    return rows
 
 
 # ── Field Extractors (Key, Value, Desc) ────────────────────────────────────────
@@ -983,8 +1075,11 @@ class IsiMotorBenchmarkApp(App):
         Binding("slash", "focus_search", "Search Filter", show=True),
         Binding("1", "select_tab_telem", "Telem", show=False),
         Binding("2", "select_tab_scoring", "Scoring", show=False),
-        Binding("3", "select_tab_event", "Event", show=False),
-        Binding("4", "select_tab_stats", "Stats", show=False),
+        Binding("3", "select_tab_rules", "Rules", show=False),
+        Binding("4", "select_tab_pit", "Pit", show=False),
+        Binding("5", "select_tab_weather", "Weather", show=False),
+        Binding("6", "select_tab_event", "Event", show=False),
+        Binding("7", "select_tab_stats", "Stats", show=False),
     ]
 
     active_tab = reactive(TAB_TELEM)
@@ -1009,7 +1104,10 @@ class IsiMotorBenchmarkApp(App):
 
         self.tabs = Tabs(
             Tab("🏎️ TelemInfo (1888 B)", id=TAB_TELEM),
-            Tab("⏱️ CompactScoring (168 B)", id=TAB_SCORING),
+            Tab("🏁 Grid Scoring", id=TAB_SCORING),
+            Tab("🚩 Track Rules & SC", id=TAB_RULES),
+            Tab("⛽ Pit Menu", id=TAB_PIT),
+            Tab("🌦️ Weather", id=TAB_WEATHER),
             Tab("🔔 SystemEvent (6 B)", id=TAB_EVENT),
             Tab("📊 Stream Rates", id=TAB_STATS),
             id="packet-tabs"
@@ -1107,6 +1205,15 @@ class IsiMotorBenchmarkApp(App):
     def action_select_tab_scoring(self) -> None:
         self.tabs.active = TAB_SCORING
 
+    def action_select_tab_rules(self) -> None:
+        self.tabs.active = TAB_RULES
+
+    def action_select_tab_pit(self) -> None:
+        self.tabs.active = TAB_PIT
+
+    def action_select_tab_weather(self) -> None:
+        self.tabs.active = TAB_WEATHER
+
     def action_select_tab_event(self) -> None:
         self.tabs.active = TAB_EVENT
 
@@ -1139,6 +1246,12 @@ class IsiMotorBenchmarkApp(App):
         elif self.active_tab == TAB_SCORING:
             st = self.engine.stats.get(PKT_FULL_SCORING) if self.engine.latest_full_scoring else self.engine.stats[PKT_COMPACT_SCORING]
             return extract_scoring_rows(self.engine.latest_scoring, self.engine.latest_full_scoring, st)
+        elif self.active_tab == TAB_RULES:
+            return extract_track_rules_rows(self.engine.latest_track_rules, self.engine.stats[PKT_TRACK_RULES])
+        elif self.active_tab == TAB_PIT:
+            return extract_pit_menu_rows(self.engine.latest_pit_menu, self.engine.stats[PKT_PIT_MENU])
+        elif self.active_tab == TAB_WEATHER:
+            return extract_weather_rows(self.engine.latest_weather, self.engine.stats[PKT_WEATHER])
         elif self.active_tab == TAB_EVENT:
             return extract_event_rows(self.engine.latest_event, self.engine.stats[PKT_SYSTEM_EVENT], self.engine.latest_event_time)
         elif self.active_tab == TAB_STATS:
@@ -1185,13 +1298,43 @@ class IsiMotorBenchmarkApp(App):
                     "avg_delay_ms": round(st.avg_interval_ms, 2),
                     "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
                 }
-                d["_computed"] = {
-                    "cur_sector2_individual": self.engine.latest_scoring.cur_sector2_individual,
-                    "last_sector2_individual": self.engine.latest_scoring.last_sector2_individual,
-                    "last_sector3_individual": self.engine.latest_scoring.last_sector3_individual,
-                }
                 return d
             return {"status": "No Scoring packet received yet"}
+        elif self.active_tab == TAB_RULES:
+            st = self.engine.stats[PKT_TRACK_RULES]
+            if self.engine.latest_track_rules:
+                d = model_to_clean_dict(self.engine.latest_track_rules)
+                d["_channel_diagnostics"] = {
+                    "frequency_hz": round(st.current_freq, 2),
+                    "packets_count": st.count,
+                    "avg_delay_ms": round(st.avg_interval_ms, 2),
+                    "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
+                }
+                return d
+            return {"status": "No TrackRules packet received yet"}
+        elif self.active_tab == TAB_PIT:
+            st = self.engine.stats[PKT_PIT_MENU]
+            if self.engine.latest_pit_menu:
+                d = model_to_clean_dict(self.engine.latest_pit_menu)
+                d["_channel_diagnostics"] = {
+                    "frequency_hz": round(st.current_freq, 2),
+                    "packets_count": st.count,
+                    "avg_delay_ms": round(st.avg_interval_ms, 2),
+                    "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
+                }
+                return d
+            return {"status": "No PitMenu packet received yet"}
+        elif self.active_tab == TAB_WEATHER:
+            st = self.engine.stats[PKT_WEATHER]
+            if self.engine.latest_weather:
+                d = model_to_clean_dict(self.engine.latest_weather)
+                d["_channel_diagnostics"] = {
+                    "frequency_hz": round(st.current_freq, 2),
+                    "packets_count": st.count,
+                    "avg_delay_ms": round(st.avg_interval_ms, 2),
+                    "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
+                }
+                return d
         elif self.active_tab == TAB_EVENT:
             st = self.engine.stats[PKT_SYSTEM_EVENT]
             if self.engine.latest_event:
@@ -1300,9 +1443,24 @@ class IsiMotorBenchmarkApp(App):
                 f"📶 [bold cyan]TelemInfo:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
             )
         elif self.active_tab == TAB_SCORING:
-            st = self.engine.stats[PKT_COMPACT_SCORING]
+            st = self.engine.stats[PKT_FULL_SCORING] if self.engine.latest_full_scoring else self.engine.stats[PKT_COMPACT_SCORING]
             self.lbl_channel_freq.update(
                 f"📶 [bold cyan]Scoring:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+            )
+        elif self.active_tab == TAB_RULES:
+            st = self.engine.stats[PKT_TRACK_RULES]
+            self.lbl_channel_freq.update(
+                f"📶 [bold cyan]TrackRules:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+            )
+        elif self.active_tab == TAB_PIT:
+            st = self.engine.stats[PKT_PIT_MENU]
+            self.lbl_channel_freq.update(
+                f"📶 [bold cyan]PitMenu:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+            )
+        elif self.active_tab == TAB_WEATHER:
+            st = self.engine.stats[PKT_WEATHER]
+            self.lbl_channel_freq.update(
+                f"📶 [bold cyan]Weather:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
             )
         elif self.active_tab == TAB_EVENT:
             st = self.engine.stats[PKT_SYSTEM_EVENT]

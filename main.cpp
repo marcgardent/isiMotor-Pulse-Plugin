@@ -9,6 +9,9 @@
  * - Standardized 24-byte UDP header with monotonic sequence numbering and chunk slicing.
  * - Direct binary memory dump of TelemInfoV01 (1888 bytes) over UDP.
  * - Multi-vehicle full scoring stream (up to 128 vehicles, ScoringInfoV01 + VehicleScoringInfoV01).
+ * - Track rules, flags, and Safety Car / FCY stream (TrackRulesV01, Type 5).
+ * - Pit Menu navigation & strategy stream (PitMenuV01, Type 6 @ 100Hz).
+ * - Weather & ambient conditions stream (WeatherControlInfoV01, Type 7 @ 1Hz).
  * - Compact binary scoring packet (SIMP Type 2, 168 bytes) for ultra-low overhead HUDs.
  * - System event state notifications (SIMP Type 3, 6 bytes).
  * - UnsubscribedBuffersMask support matching rF2SharedMemoryMapPlugin.
@@ -93,7 +96,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 struct RawUdpHeader {
     char          magic[4];          // "SIMP"
     unsigned char protocolVersion;   // 1
-    unsigned char packetType;        // 1=Telemetry, 2=CompactScoring, 3=SystemEvent, 4=FullScoring
+    unsigned char packetType;        // 1=Telem, 2=CompactScoring, 3=Event, 4=FullScoring, 5=Rules, 6=PitMenu, 7=Weather
     unsigned short payloadSize;      // Payload bytes following header
     unsigned int  sequenceNumber;    // Monotonic per-stream sequence counter
     double        sessionET;         // Current session elapsed time in seconds
@@ -167,6 +170,82 @@ struct FullScoringSessionPacket {
     double        minPathWetness;      // Track minimum wetness (0.0 - 1.0)
     double        maxPathWetness;      // Track maximum wetness (0.0 - 1.0)
     double        avgPathWetness;      // Track average wetness (0.0 - 1.0)
+};
+
+/**
+ * Track Rules Participant (SIMP Type 5 Participant, 140 bytes)
+ */
+struct TrackRulesParticipantPacket {
+    long          id;                        // Slot ID
+    short         frozenOrder;               // 0-based place when caution was called
+    short         place;                     // 1-based place
+    float         yellowSeverity;            // Rating of yellow flag contribution
+    double        currentRelativeDistance;   // Distance relative to track start/SC
+    long          relativeLaps;              // Laps relative to safety car
+    long          columnAssignment;          // 0=left, 1=midleft, 2=middle, 3=midright, 4=right, 5=invalid, 6=freechoice, 7=pending
+    long          positionAssignment;        // 0-based position within column (-1=invalid)
+    unsigned char pitsOpen;                  // 0=closed, 1=open, 2=false, 3=true
+    bool          upToSpeed;                 // Vehicle can be followed
+    unsigned char pad[2];
+    double        goalRelativeDistance;      // Target distance behind leader
+    char          message[96];               // Participant message
+};
+
+/**
+ * Track Rules Session Header (SIMP Type 5 Header, 192 bytes)
+ */
+struct TrackRulesSessionPacket {
+    double        currentET;                 // Current session time
+    long          stage;                     // 0=formation_init, 1=formation_update, 2=normal, 3=caution_init, 4=caution_update
+    long          poleColumn;                // 0=left..4=right
+    long          numActions;                // Recent actions count
+    long          numParticipants;           // Active participant count (0..128)
+    bool          yellowFlagDetected;        // Caution requested or threshold exceeded
+    unsigned char yellowFlagLapsWasOverridden; // Admin override flag
+    bool          safetyCarExists;           // SC exists
+    bool          safetyCarActive;           // SC on track
+    long          safetyCarLaps;             // SC laps count
+    float         safetyCarThreshold;        // SC yellow threshold
+    double        safetyCarLapDist;          // SC current track lap distance
+    float         safetyCarLapDistAtStart;   // SC start position
+    float         pitLaneStartDist;          // Pit entrance dist
+    float         teleportLapDist;           // Green flag reference dist
+    signed char   yellowFlagState;           // Yellow flag state
+    short         yellowFlagLaps;            // Caution laps count
+    unsigned char pad1;
+    long          safetyCarInstruction;      // 0=none, 1=active, 2=head for pits
+    float         safetyCarSpeed;            // Max SC speed m/s
+    float         safetyCarMinimumSpacing;   // SC min spacing
+    float         safetyCarMaximumSpacing;   // SC max spacing
+    float         minimumColumnSpacing;      // Column min spacing
+    float         maximumColumnSpacing;      // Column max spacing
+    float         minimumSpeed;              // Min speed
+    float         maximumSpeed;              // Max speed
+    char          message[96];               // Global session message
+};
+
+/**
+ * Pit Menu State Packet (SIMP Type 6, 76 bytes)
+ */
+struct PitMenuPacket {
+    long          categoryIndex;             // Current category index
+    char          categoryName[32];          // Category name (e.g. "Tires", "Fuel")
+    long          choiceIndex;               // Current choice index
+    char          choiceString[32];          // Choice string (e.g. "Soft Slick", "+35 L")
+    long          numChoices;                // Total available choices in category
+};
+
+/**
+ * Weather Conditions Packet (SIMP Type 7, 108 bytes)
+ */
+struct WeatherPacket {
+    double        et;                        // Effective session ET
+    double        raining[3][3];             // Rain intensity grid
+    double        cloudiness;                // Cloud cover (0.0 - 1.0)
+    double        ambientTempK;              // Ambient temperature (Kelvin)
+    double        windMaxSpeed;              // Wind speed (m/s)
+    bool          applyCloudinessInstantly;  // Instant cloud application flag
+    unsigned char pad[3];
 };
 
 #pragma pack(pop)
@@ -305,16 +384,20 @@ struct PluginConfig {
     double telemetryHz;
     double compactScoringHz;
     double fullScoringHz;
+    double trackRulesHz;
+    double pitMenuHz;
+    double weatherHz;
     bool enableSystemEvents;
     long unsubscribedBuffersMask;
 };
 
-// Static working buffers (zero allocations)
+// Static working buffers (zero dynamic allocations)
 static const size_t MAX_UDP_CHUNK_SIZE = 1200;
 static char s_scoringBuffer[sizeof(FullScoringSessionPacket) + 128 * sizeof(VehicleScoringInfoV01)];
+static char s_trackRulesBuffer[sizeof(TrackRulesSessionPacket) + 128 * sizeof(TrackRulesParticipantPacket)];
 static char s_chunkPacketBuffer[sizeof(RawUdpHeader) + MAX_UDP_CHUNK_SIZE];
 
-class IsiMotorRawUdpPlugin : public InternalsPluginV01 {
+class IsiMotorRawUdpPlugin : public InternalsPluginV07 {
 private:
     SOCKET udpSocket;
     sockaddr_in serverAddr;
@@ -322,6 +405,9 @@ private:
     RateLimiter telemetryLimiter;
     RateLimiter compactScoringLimiter;
     RateLimiter fullScoringLimiter;
+    RateLimiter trackRulesLimiter;
+    RateLimiter pitMenuLimiter;
+    RateLimiter weatherLimiter;
     unsigned int sequenceCounters[256];
     bool initialized;
 
@@ -347,6 +433,9 @@ private:
         config.telemetryHz = -1.0;     // unlimited
         config.compactScoringHz = -1.0;// unlimited
         config.fullScoringHz = 5.0;    // 5Hz
+        config.trackRulesHz = 3.0;     // 3Hz
+        config.pitMenuHz = 100.0;      // 100Hz
+        config.weatherHz = 1.0;        // 1Hz
         config.enableSystemEvents = true;
         config.unsubscribedBuffersMask = 0;
 
@@ -381,6 +470,15 @@ private:
                     "; Full grid scoring stream (up to 128 cars, sliced): off | unlimited | 5Hz | 2Hz | 1Hz\n"
                     "FullScoring=5Hz\n"
                     "\n"
+                    "; Track rules, flags and Safety Car stream: off | unlimited | 5Hz | 3Hz | 1Hz\n"
+                    "TrackRules=3Hz\n"
+                    "\n"
+                    "; Pit menu navigation & state stream: off | unlimited | 100Hz | 60Hz | 30Hz\n"
+                    "PitMenu=100Hz\n"
+                    "\n"
+                    "; Weather & environmental conditions stream: off | unlimited | 2Hz | 1Hz\n"
+                    "Weather=1Hz\n"
+                    "\n"
                     "; System events stream (session / realtime transitions): off | on\n"
                     "SystemEvents=on\n"
                     "\n"
@@ -411,6 +509,18 @@ private:
         GetPrivateProfileStringA("Streams", "FullScoring", "5Hz", fullStr, sizeof(fullStr), iniPath);
         config.fullScoringHz = ParseRateHz(fullStr, 5.0);
 
+        char rulesStr[64] = {0};
+        GetPrivateProfileStringA("Streams", "TrackRules", "3Hz", rulesStr, sizeof(rulesStr), iniPath);
+        config.trackRulesHz = ParseRateHz(rulesStr, 3.0);
+
+        char pitStr[64] = {0};
+        GetPrivateProfileStringA("Streams", "PitMenu", "100Hz", pitStr, sizeof(pitStr), iniPath);
+        config.pitMenuHz = ParseRateHz(pitStr, 100.0);
+
+        char weatherStr[64] = {0};
+        GetPrivateProfileStringA("Streams", "Weather", "1Hz", weatherStr, sizeof(weatherStr), iniPath);
+        config.weatherHz = ParseRateHz(weatherStr, 1.0);
+
         char eventStr[64] = {0};
         GetPrivateProfileStringA("Streams", "SystemEvents", "on", eventStr, sizeof(eventStr), iniPath);
         config.enableSystemEvents = ParseSystemEvents(eventStr, true);
@@ -420,6 +530,9 @@ private:
         telemetryLimiter.SetRate(config.telemetryHz);
         compactScoringLimiter.SetRate(config.compactScoringHz);
         fullScoringLimiter.SetRate(config.fullScoringHz);
+        trackRulesLimiter.SetRate(config.trackRulesHz);
+        pitMenuLimiter.SetRate(config.pitMenuHz);
+        weatherLimiter.SetRate(config.weatherHz);
     }
 
     void SendSlicedPayload(unsigned char packetType, unsigned short subTypeOrId, const void* payload, size_t totalPayloadSize, double sessionET) {
@@ -477,6 +590,7 @@ public:
     }
 
     void Startup(long version) override {
+        (void)version;
         if (initialized) return;
 
         // Load or auto-create configuration file
@@ -656,6 +770,133 @@ public:
             SendSlicedPayload(4, static_cast<unsigned short>(numVehicles), s_scoringBuffer, totalPayloadSize, info.mCurrentET);
         }
     }
+
+    // Subscribe to track rules updates (FR-03, SIMP Type 5)
+    bool WantsTrackRulesAccess() override {
+        if (config.unsubscribedBuffersMask & UNSUB_RULES) return false;
+        return trackRulesLimiter.IsEnabled();
+    }
+
+    bool AccessTrackRules(TrackRulesV01 &info) override {
+        if (!initialized || udpSocket == INVALID_SOCKET) return false;
+        if (config.unsubscribedBuffersMask & UNSUB_RULES) return false;
+        if (!trackRulesLimiter.ShouldSend()) return false;
+
+        TrackRulesSessionPacket* rules = reinterpret_cast<TrackRulesSessionPacket*>(s_trackRulesBuffer);
+        std::memset(rules, 0, sizeof(TrackRulesSessionPacket));
+
+        rules->currentET = info.mCurrentET;
+        rules->stage = info.mStage;
+        rules->poleColumn = info.mPoleColumn;
+        rules->numActions = info.mNumActions;
+
+        long numParticipants = (info.mNumParticipants > 128) ? 128 : info.mNumParticipants;
+        rules->numParticipants = numParticipants;
+
+        rules->yellowFlagDetected = info.mYellowFlagDetected;
+        rules->yellowFlagLapsWasOverridden = info.mYellowFlagLapsWasOverridden;
+        rules->safetyCarExists = info.mSafetyCarExists;
+        rules->safetyCarActive = info.mSafetyCarActive;
+        rules->safetyCarLaps = info.mSafetyCarLaps;
+        rules->safetyCarThreshold = info.mSafetyCarThreshold;
+        rules->safetyCarLapDist = info.mSafetyCarLapDist;
+        rules->safetyCarLapDistAtStart = info.mSafetyCarLapDistAtStart;
+        rules->pitLaneStartDist = info.mPitLaneStartDist;
+        rules->teleportLapDist = info.mTeleportLapDist;
+        rules->yellowFlagState = info.mYellowFlagState;
+        rules->yellowFlagLaps = info.mYellowFlagLaps;
+        rules->safetyCarInstruction = info.mSafetyCarInstruction;
+        rules->safetyCarSpeed = info.mSafetyCarSpeed;
+        rules->safetyCarMinimumSpacing = info.mSafetyCarMinimumSpacing;
+        rules->safetyCarMaximumSpacing = info.mSafetyCarMaximumSpacing;
+        rules->minimumColumnSpacing = info.mMinimumColumnSpacing;
+        rules->maximumColumnSpacing = info.mMaximumColumnSpacing;
+        rules->minimumSpeed = info.mMinimumSpeed;
+        rules->maximumSpeed = info.mMaximumSpeed;
+        std::strncpy(rules->message, info.mMessage, sizeof(rules->message) - 1);
+        rules->message[sizeof(rules->message) - 1] = '\0';
+
+        if (numParticipants > 0 && info.mParticipant != nullptr) {
+            TrackRulesParticipantPacket* partDst = reinterpret_cast<TrackRulesParticipantPacket*>(
+                s_trackRulesBuffer + sizeof(TrackRulesSessionPacket)
+            );
+            for (long i = 0; i < numParticipants; ++i) {
+                const auto &p = info.mParticipant[i];
+                auto &dst = partDst[i];
+                dst.id = p.mID;
+                dst.frozenOrder = p.mFrozenOrder;
+                dst.place = p.mPlace;
+                dst.yellowSeverity = p.mYellowSeverity;
+                dst.currentRelativeDistance = p.mCurrentRelativeDistance;
+                dst.relativeLaps = p.mRelativeLaps;
+                dst.columnAssignment = p.mColumnAssignment;
+                dst.positionAssignment = p.mPositionAssignment;
+                dst.pitsOpen = p.mPitsOpen;
+                dst.upToSpeed = p.mUpToSpeed;
+                dst.pad[0] = 0; dst.pad[1] = 0;
+                dst.goalRelativeDistance = p.mGoalRelativeDistance;
+                std::strncpy(dst.message, p.mMessage, sizeof(dst.message) - 1);
+                dst.message[sizeof(dst.message) - 1] = '\0';
+            }
+        }
+
+        size_t totalPayloadSize = sizeof(TrackRulesSessionPacket) + (numParticipants * sizeof(TrackRulesParticipantPacket));
+        SendSlicedPayload(5, static_cast<unsigned short>(numParticipants), s_trackRulesBuffer, totalPayloadSize, info.mCurrentET);
+        return false;
+    }
+
+    // Subscribe to pit menu updates (FR-04, SIMP Type 6 @ 100Hz)
+    bool WantsPitMenuAccess() override {
+        if (config.unsubscribedBuffersMask & UNSUB_PIT_INFO) return false;
+        return pitMenuLimiter.IsEnabled();
+    }
+
+    bool AccessPitMenu(PitMenuV01 &info) override {
+        if (!initialized || udpSocket == INVALID_SOCKET) return false;
+        if (config.unsubscribedBuffersMask & UNSUB_PIT_INFO) return false;
+        if (!pitMenuLimiter.ShouldSend()) return false;
+
+        PitMenuPacket pkt{};
+        pkt.categoryIndex = info.mCategoryIndex;
+        std::strncpy(pkt.categoryName, info.mCategoryName, sizeof(pkt.categoryName) - 1);
+        pkt.categoryName[sizeof(pkt.categoryName) - 1] = '\0';
+        pkt.choiceIndex = info.mChoiceIndex;
+        std::strncpy(pkt.choiceString, info.mChoiceString, sizeof(pkt.choiceString) - 1);
+        pkt.choiceString[sizeof(pkt.choiceString) - 1] = '\0';
+        pkt.numChoices = info.mNumChoices;
+
+        SendSlicedPayload(6, 0, &pkt, sizeof(pkt), 0.0);
+        return false;
+    }
+
+    // Subscribe to weather updates (FR-04, SIMP Type 7 @ 1Hz)
+    bool WantsWeatherAccess() override {
+        if (config.unsubscribedBuffersMask & UNSUB_WEATHER) return false;
+        return weatherLimiter.IsEnabled();
+    }
+
+    bool AccessWeather(double trackNodeSize, WeatherControlInfoV01 &info) override {
+        (void)trackNodeSize;
+        if (!initialized || udpSocket == INVALID_SOCKET) return false;
+        if (config.unsubscribedBuffersMask & UNSUB_WEATHER) return false;
+        if (!weatherLimiter.ShouldSend()) return false;
+
+        WeatherPacket pkt{};
+        pkt.et = info.mET;
+        for (int r = 0; r < 3; ++r) {
+            for (int c = 0; c < 3; ++c) {
+                pkt.raining[r][c] = info.mRaining[r][c];
+            }
+        }
+        pkt.cloudiness = info.mCloudiness;
+        pkt.ambientTempK = info.mAmbientTempK;
+        pkt.windMaxSpeed = info.mWindMaxSpeed;
+        pkt.applyCloudinessInstantly = info.mApplyCloudinessInstantly;
+        pkt.pad[0] = 0; pkt.pad[1] = 0; pkt.pad[2] = 0;
+
+        SendSlicedPayload(7, 0, &pkt, sizeof(pkt), info.mET);
+        return false;
+    }
 };
 
 // --- C Interface Exported for isiMotor (LMU / rFactor 2) Plugin Host ---
@@ -669,7 +910,7 @@ extern "C" __declspec(dllexport) PluginObjectType __cdecl GetPluginType() {
 }
 
 extern "C" __declspec(dllexport) int __cdecl GetPluginVersion() {
-    return 1; // Corresponds to InternalsPluginV01
+    return 7; // Corresponds to InternalsPluginV07
 }
 
 extern "C" __declspec(dllexport) PluginObject* __cdecl CreatePluginObject() {

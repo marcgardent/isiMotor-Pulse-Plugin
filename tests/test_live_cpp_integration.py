@@ -41,11 +41,17 @@ class TestLiveCppIntegration(unittest.TestCase):
         telem_list = []
         compact_scoring_list = []
         full_scoring_list = []
+        track_rules_list = []
+        pit_menu_list = []
+        weather_list = []
         event_list = []
 
         client.on_telemetry = lambda t: telem_list.append(t)
         client.on_scoring = lambda s: compact_scoring_list.append(s)
         client.on_full_scoring = lambda fs: full_scoring_list.append(fs)
+        client.on_track_rules = lambda tr: track_rules_list.append(tr)
+        client.on_pit_menu = lambda pm: pit_menu_list.append(pm)
+        client.on_weather = lambda w: weather_list.append(w)
         client.on_system_event = lambda ev: event_list.append(ev)
 
         client.start()
@@ -79,6 +85,15 @@ class TestLiveCppIntegration(unittest.TestCase):
         self.assertGreaterEqual(
             len(full_scoring_list), 1, f"Expected full scoring packets, received {len(full_scoring_list)}"
         )
+        self.assertGreaterEqual(
+            len(track_rules_list), 1, f"Expected track rules packets, received {len(track_rules_list)}"
+        )
+        self.assertGreaterEqual(
+            len(pit_menu_list), 10, f"Expected pit menu packets, received {len(pit_menu_list)}"
+        )
+        self.assertGreaterEqual(
+            len(weather_list), 1, f"Expected weather packets, received {len(weather_list)}"
+        )
 
         # Validate multi-car full scoring
         latest_fs = full_scoring_list[-1]
@@ -93,6 +108,25 @@ class TestLiveCppIntegration(unittest.TestCase):
         self.assertEqual(leaderboard[1].driver_name, "Kamui Kobayashi")
         self.assertEqual(leaderboard[2].place, 3)
         self.assertEqual(leaderboard[2].driver_name, "Kevin Estre")
+
+        # Validate Track Rules
+        latest_tr = track_rules_list[-1]
+        self.assertTrue(latest_tr.is_safety_car_active)
+        self.assertTrue(latest_tr.is_caution_active)
+        self.assertEqual(latest_tr.stage_str, "Caution Update")
+        self.assertEqual(len(latest_tr.participants), 3)
+        self.assertEqual(latest_tr.participants[0].message, "Follow Safety Car")
+
+        # Validate Pit Menu
+        latest_pm = pit_menu_list[-1]
+        self.assertEqual(latest_pm.category_name, "Tires")
+        self.assertEqual(latest_pm.choice_string, "Soft Slick")
+        self.assertEqual(latest_pm.num_choices, 4)
+
+        # Validate Weather
+        latest_w = weather_list[-1]
+        self.assertAlmostEqual(latest_w.ambient_temp_c, 24.5, places=1)
+        self.assertAlmostEqual(latest_w.origin_raining, 0.05, places=2)
 
         # Validate physical dynamics in stream
         first_t = telem_list[0]
