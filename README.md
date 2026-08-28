@@ -147,15 +147,17 @@ When loaded by the game, the plugin automatically looks for an `isiMotor_RawUDP.
 ; Destination IP address (127.0.0.1 for local PC, or LAN IP for phone/tablet/rig)
 TargetIP=127.0.0.1
 ; Destination UDP Port (default: 5000)
-TargetPort=5000
-
 [Streams]
-; Raw Telemetry binary stream (1888 bytes @ 60-100Hz): 1=Enabled, 0=Disabled
-EnableTelemetry=1
-; Compact Scoring binary stream (168 bytes @ 1-5Hz): 1=Enabled, 0=Disabled
-EnableScoring=1
-; System Events notification (6 bytes on state transitions): 1=Enabled, 0=Disabled
-EnableSystemEvents=1
+; Frequency limiters per channel: off | unlimited | <N>Hz (e.g. 100Hz, 60Hz, 30Hz, 5Hz)
+; -------------------------------------------------------------------------------------
+; Telemetry stream (1888 B): off | unlimited (raw ~90-100Hz) | 100Hz | 60Hz | 30Hz | 20Hz | 10Hz
+Telemetry=unlimited
+
+; Scoring & timing stream (168 B): off | unlimited (raw ~2-5Hz) | 5Hz | 2Hz | 1Hz
+Scoring=unlimited
+
+; System events stream (6 B on session/realtime changes): on | off
+SystemEvents=on
 ```
 
 ### 💡 Network Scenarios & Topologies

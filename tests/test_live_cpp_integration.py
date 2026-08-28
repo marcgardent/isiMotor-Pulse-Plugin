@@ -89,6 +89,47 @@ class TestLiveCppIntegration(unittest.TestCase):
         self.assertGreaterEqual(first_t.engine_rpm, 4000.0)
         self.assertLessEqual(first_t.engine_rpm, 10000.0)
 
+    def test_live_frequency_rate_throttling(self):
+        """
+        Tests that rate-limiting accurately constrains packet stream frequency (e.g. 30Hz).
+        """
+        target_hz = 30
+        duration = 1.0
+        port = 5077
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("127.0.0.1", port))
+        sock.settimeout(1.5)
+
+        proc = subprocess.Popen(
+            [MOCK_BIN, "--serve", str(port), str(target_hz), str(duration)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        received_count = 0
+        start_time = time.time()
+        try:
+            while time.time() - start_time < duration + 0.5:
+                try:
+                    data, _ = sock.recvfrom(65535)
+                    if len(data) == 1888:
+                        received_count += 1
+                except socket.timeout:
+                    break
+        finally:
+            sock.close()
+            if proc.stdout:
+                proc.stdout.close()
+            if proc.stderr:
+                proc.stderr.close()
+            proc.wait(timeout=2)
+
+        # Expected ~30 packets for 1.0s stream at 30Hz (allow +/- 5 frames tolerance)
+        self.assertGreaterEqual(received_count, target_hz - 5, f"Expected ~{target_hz} pkts, got {received_count}")
+        self.assertLessEqual(received_count, target_hz + 5, f"Expected ~{target_hz} pkts, got {received_count}")
+
 
 if __name__ == "__main__":
     unittest.main()

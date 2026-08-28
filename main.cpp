@@ -79,11 +79,115 @@ struct SystemEventPacket {
 
 #pragma pack(pop)
 
+// High-resolution monotonic frequency limiter for zero-jitter UDP packet throttling
+class RateLimiter {
+private:
+    double targetHz;         // 0.0: off, < 0.0: unlimited, > 0.0: target rate in Hz
+    double minIntervalSec;   // 1.0 / targetHz
+    LARGE_INTEGER lastTime;
+    LARGE_INTEGER perfFreq;
+    bool hasSentFirst;
+
+public:
+    RateLimiter() : targetHz(-1.0), minIntervalSec(0.0), hasSentFirst(false) {
+        lastTime.QuadPart = 0;
+#ifdef _WIN32
+        QueryPerformanceFrequency(&perfFreq);
+#else
+        perfFreq.QuadPart = 1000000000LL;
+#endif
+    }
+
+    void SetRate(double hz) {
+        targetHz = hz;
+        if (targetHz > 0.0) {
+            minIntervalSec = 1.0 / targetHz;
+        } else {
+            minIntervalSec = 0.0;
+        }
+        hasSentFirst = false;
+        lastTime.QuadPart = 0;
+    }
+
+    bool IsEnabled() const {
+        return targetHz != 0.0;
+    }
+
+    bool IsUnlimited() const {
+        return targetHz < 0.0;
+    }
+
+    double GetRateHz() const {
+        return targetHz;
+    }
+
+    bool ShouldSend() {
+        if (targetHz == 0.0) return false;
+        if (targetHz < 0.0) return true; // unlimited (raw 1:1 on every engine tick)
+
+        LARGE_INTEGER now;
+#ifdef _WIN32
+        QueryPerformanceCounter(&now);
+#else
+        timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        now.QuadPart = static_cast<long long>(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
+#endif
+
+        if (!hasSentFirst) {
+            hasSentFirst = true;
+            lastTime = now;
+            return true;
+        }
+
+        double elapsed = static_cast<double>(now.QuadPart - lastTime.QuadPart) / perfFreq.QuadPart;
+        if (elapsed >= minIntervalSec) {
+            lastTime = now;
+            return true;
+        }
+        return false;
+    }
+};
+
+static double ParseRateHz(const char* str, double defaultRate = -1.0) {
+    if (!str || str[0] == '\0') return defaultRate;
+
+    while (*str == ' ' || *str == '\t') ++str;
+    if (*str == '\0') return defaultRate;
+
+    char buf[64] = {0};
+    size_t i = 0;
+    while (*str && i < sizeof(buf) - 1) {
+        char c = *str++;
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);
+        buf[i++] = c;
+    }
+
+    if (std::strcmp(buf, "off") == 0 || std::strcmp(buf, "0") == 0 ||
+        std::strcmp(buf, "false") == 0 || std::strcmp(buf, "disabled") == 0 ||
+        std::strcmp(buf, "no") == 0) {
+        return 0.0;
+    }
+    if (std::strcmp(buf, "unlimited") == 0 || std::strcmp(buf, "raw") == 0 ||
+        std::strcmp(buf, "max") == 0 || std::strcmp(buf, "-1") == 0 ||
+        std::strcmp(buf, "none") == 0 || std::strcmp(buf, "on") == 0 ||
+        std::strcmp(buf, "true") == 0 || std::strcmp(buf, "enabled") == 0) {
+        return -1.0;
+    }
+
+    char* endPtr = nullptr;
+    double val = std::strtod(buf, &endPtr);
+    if (val <= 0.0) {
+        return 0.0;
+    }
+    return val;
+}
+
 struct PluginConfig {
     char targetIp[64];
     int targetPort;
-    bool enableTelemetry;
-    bool enableScoring;
+    double telemetryHz;
+    double scoringHz;
     bool enableSystemEvents;
 };
 
@@ -92,6 +196,8 @@ private:
     SOCKET udpSocket;
     sockaddr_in serverAddr;
     PluginConfig config;
+    RateLimiter telemetryLimiter;
+    RateLimiter scoringLimiter;
     bool initialized;
 
     void GetIniPath(char* outPath, size_t maxLen) {
@@ -113,8 +219,8 @@ private:
         std::strncpy(config.targetIp, DEFAULT_UDP_HOST, sizeof(config.targetIp) - 1);
         config.targetIp[sizeof(config.targetIp) - 1] = '\0';
         config.targetPort = DEFAULT_UDP_PORT;
-        config.enableTelemetry = true;
-        config.enableScoring = true;
+        config.telemetryHz = -1.0; // unlimited by default
+        config.scoringHz = -1.0;   // unlimited by default
         config.enableSystemEvents = true;
 
         char iniPath[MAX_PATH] = {0};
@@ -137,23 +243,60 @@ private:
                     "TargetPort=5000\n"
                     "\n"
                     "[Streams]\n"
-                    "; Raw Telemetry binary stream (1888 bytes @ 60-100Hz): 1=Enabled, 0=Disabled\n"
-                    "EnableTelemetry=1\n"
-                    "; Compact Scoring binary stream (168 bytes @ 1-5Hz): 1=Enabled, 0=Disabled\n"
-                    "EnableScoring=1\n"
-                    "; System Events notification (6 bytes on state changes): 1=Enabled, 0=Disabled\n"
-                    "EnableSystemEvents=1\n"
+                    "; Frequency limiters per channel: off | unlimited | <N>Hz (e.g. 100Hz, 60Hz, 30Hz, 5Hz)\n"
+                    "; -------------------------------------------------------------------------------------\n"
+                    "; Telemetry stream (1888 B): off | unlimited (raw ~90-100Hz) | 100Hz | 60Hz | 30Hz | 20Hz | 10Hz\n"
+                    "Telemetry=unlimited\n"
+                    "\n"
+                    "; Scoring & timing stream (168 B): off | unlimited (raw ~2-5Hz) | 5Hz | 2Hz | 1Hz\n"
+                    "Scoring=unlimited\n"
+                    "\n"
+                    "; System events stream (6 B on session/realtime changes): on | off\n"
+                    "SystemEvents=on\n"
                 );
                 std::fclose(f);
             }
         }
 
-        // Read settings from INI file
+        // Read network settings
         GetPrivateProfileStringA("Network", "TargetIP", DEFAULT_UDP_HOST, config.targetIp, sizeof(config.targetIp), iniPath);
         config.targetPort = GetPrivateProfileIntA("Network", "TargetPort", DEFAULT_UDP_PORT, iniPath);
-        config.enableTelemetry = (GetPrivateProfileIntA("Streams", "EnableTelemetry", 1, iniPath) != 0);
-        config.enableScoring = (GetPrivateProfileIntA("Streams", "EnableScoring", 1, iniPath) != 0);
-        config.enableSystemEvents = (GetPrivateProfileIntA("Streams", "EnableSystemEvents", 1, iniPath) != 0);
+
+        // Read stream frequency rate limiters (supports Telemetry=off|unlimited|100Hz or legacy EnableTelemetry=1|0)
+        char telemStr[64] = {0};
+        GetPrivateProfileStringA("Streams", "Telemetry", "", telemStr, sizeof(telemStr), iniPath);
+        if (telemStr[0] == '\0') {
+            GetPrivateProfileStringA("Streams", "TelemetryRate", "", telemStr, sizeof(telemStr), iniPath);
+        }
+        if (telemStr[0] != '\0') {
+            config.telemetryHz = ParseRateHz(telemStr, -1.0);
+        } else {
+            int legacy = GetPrivateProfileIntA("Streams", "EnableTelemetry", 1, iniPath);
+            config.telemetryHz = (legacy != 0) ? -1.0 : 0.0;
+        }
+
+        char scoringStr[64] = {0};
+        GetPrivateProfileStringA("Streams", "Scoring", "", scoringStr, sizeof(scoringStr), iniPath);
+        if (scoringStr[0] == '\0') {
+            GetPrivateProfileStringA("Streams", "ScoringRate", "", scoringStr, sizeof(scoringStr), iniPath);
+        }
+        if (scoringStr[0] != '\0') {
+            config.scoringHz = ParseRateHz(scoringStr, -1.0);
+        } else {
+            int legacy = GetPrivateProfileIntA("Streams", "EnableScoring", 1, iniPath);
+            config.scoringHz = (legacy != 0) ? -1.0 : 0.0;
+        }
+
+        char eventStr[64] = {0};
+        GetPrivateProfileStringA("Streams", "SystemEvents", "", eventStr, sizeof(eventStr), iniPath);
+        if (eventStr[0] != '\0') {
+            config.enableSystemEvents = (ParseRateHz(eventStr, -1.0) != 0.0);
+        } else {
+            config.enableSystemEvents = (GetPrivateProfileIntA("Streams", "EnableSystemEvents", 1, iniPath) != 0);
+        }
+
+        telemetryLimiter.SetRate(config.telemetryHz);
+        scoringLimiter.SetRate(config.scoringHz);
     }
 
     void SendSystemEvent(unsigned char eventType) {
@@ -240,12 +383,13 @@ public:
 
     // Subscribe to telemetry updates: 1 = Player vehicle only, 2 = All vehicles, 0 = Disabled
     long WantsTelemetryUpdates() override {
-        return config.enableTelemetry ? 1 : 0;
+        return telemetryLimiter.IsEnabled() ? 1 : 0;
     }
 
     // High frequency callback (~60-100Hz): Direct memory dump (zero-copy, zero-allocation)
     void UpdateTelemetry(const TelemInfoV01 &info) override {
-        if (!initialized || !config.enableTelemetry || udpSocket == INVALID_SOCKET) return;
+        if (!initialized || udpSocket == INVALID_SOCKET) return;
+        if (!telemetryLimiter.ShouldSend()) return;
 
         sendto(udpSocket, reinterpret_cast<const char*>(&info), sizeof(TelemInfoV01), 0,
                reinterpret_cast<const sockaddr*>(&serverAddr), sizeof(serverAddr));
@@ -253,11 +397,12 @@ public:
 
     // Subscribe to scoring updates (~1-5Hz)
     bool WantsScoringUpdates() override {
-        return config.enableScoring;
+        return scoringLimiter.IsEnabled();
     }
 
     void UpdateScoring(const ScoringInfoV01 &info) override {
-        if (!initialized || !config.enableScoring || udpSocket == INVALID_SOCKET) return;
+        if (!initialized || udpSocket == INVALID_SOCKET) return;
+        if (!scoringLimiter.ShouldSend()) return;
 
         CompactScoringPacket pkt{};
         pkt.magic[0] = 'S'; pkt.magic[1] = 'I'; pkt.magic[2] = 'M'; pkt.magic[3] = 'P';
