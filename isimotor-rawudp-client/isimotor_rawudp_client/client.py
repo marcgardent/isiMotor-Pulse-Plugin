@@ -1,12 +1,13 @@
 """
 High-level UDP Client for receiving isiMotor telemetry, scoring, track rules, pit menu, and weather packets.
+
+Architectural Design:
+- SOLID & SRP: Single-responsibility decoupled sub-components (Transport, Codec, Reassembly, StateStore, EventDispatcher).
+- SLAP: High-level methods orchestrating workflow at a uniform abstraction level.
+- OCP: Extensible packet decoder registry and event subscription bus.
 """
 
-import socket
-import select
-import threading
-import time
-from typing import Optional, Callable, Dict, List, Union
+from typing import Optional, Callable, Union, Type
 from .models import (
     TelemInfo,
     CompactScoring,
@@ -14,32 +15,21 @@ from .models import (
     TrackRulesSession,
     PitMenu,
     WeatherControl,
-    PhysicsOptions,
     ExtendedState,
     ForceFeedback,
     Graphics,
     SystemEvent,
-    RawUdpHeader,
     PitAction,
     HWControlCommand,
     WeatherControlCommand,
 )
-from .decoder import (
-    decode_header,
-    decode_packet,
-    decode_telemetry,
-    decode_compact_scoring,
-    decode_full_scoring,
-    decode_track_rules,
-    decode_pit_menu,
-    decode_weather,
-    decode_system_event,
-    decode_hw_control,
-    decode_weather_control,
-    encode_hw_control,
-    encode_weather_control,
-    HEADER_SIZE,
-)
+from .constants import HEADER_SIZE
+from .decoder.header import decode_header
+from .decoder.packet_decoder import decode_packet, PacketDecoderRegistry, AnyPacket
+from .reassembly import ChunkReassembler
+from .state import StateStore
+from .dispatcher import EventDispatcher, PacketCallback
+from .transport import UdpReceiver, UdpSender
 
 
 class IsiMotorClient:
@@ -78,72 +68,22 @@ class IsiMotorClient:
         port: int = 5000,
         inbound_host: str = "127.0.0.1",
         inbound_port: int = 5001,
-    ):
+        reassembly_timeout: float = 1.0,
+    ) -> None:
         self.host = host
         self.port = port
         self.inbound_host = inbound_host
         self.inbound_port = inbound_port
 
-        self._socket: Optional[socket.socket] = None
-        self._thread: Optional[threading.Thread] = None
-        self._running = False
-        self._lock = threading.Lock()
-        self._inbound_seq = 0
+        # Subsystems (Single Responsibility Principle)
+        self._receiver = UdpReceiver(host=self.host, port=self.port)
+        self._sender = UdpSender(default_host=self.inbound_host, default_port=self.inbound_port)
+        self._reassembler = ChunkReassembler(timeout_seconds=reassembly_timeout)
+        self._state = StateStore()
+        self._dispatcher = EventDispatcher()
+        self._decoder_registry = PacketDecoderRegistry()
 
-        # Cached latest frames
-        self._latest_telemetry: Optional[TelemInfo] = None
-        self._latest_scoring: Optional[CompactScoring] = None
-        self._latest_full_scoring: Optional[FullScoringSession] = None
-        self._latest_track_rules: Optional[TrackRulesSession] = None
-        self._latest_pit_menu: Optional[PitMenu] = None
-        self._latest_weather: Optional[WeatherControl] = None
-        self._latest_extended_state: Optional[ExtendedState] = None
-        self._latest_force_feedback: Optional[ForceFeedback] = None
-        self._latest_graphics: Optional[Graphics] = None
-        self._latest_system_event: Optional[SystemEvent] = None
-        self._latest_hw_control: Optional[HWControlCommand] = None
-        self._latest_weather_control: Optional[WeatherControlCommand] = None
-        self._last_packet_time: float = 0.0
-        self._packet_count: int = 0
-
-        # Chunk reassembly buffer: (packet_type, sequence_number) -> dict
-        self._reassembly_buffers: Dict[tuple, dict] = {}
-        self._last_reassembly_cleanup: float = 0.0
-
-        # Callbacks
-        self.on_telemetry: Optional[Callable[[TelemInfo], None]] = None
-        self.on_scoring: Optional[Callable[[CompactScoring], None]] = None
-        self.on_full_scoring: Optional[Callable[[FullScoringSession], None]] = None
-        self.on_track_rules: Optional[Callable[[TrackRulesSession], None]] = None
-        self.on_pit_menu: Optional[Callable[[PitMenu], None]] = None
-        self.on_weather: Optional[Callable[[WeatherControl], None]] = None
-        self.on_extended_state: Optional[Callable[[ExtendedState], None]] = None
-        self.on_force_feedback: Optional[Callable[[ForceFeedback], None]] = None
-        self.on_graphics: Optional[Callable[[Graphics], None]] = None
-        self.on_system_event: Optional[Callable[[SystemEvent], None]] = None
-        self.on_hw_control: Optional[Callable[[HWControlCommand], None]] = None
-        self.on_weather_control: Optional[Callable[[WeatherControlCommand], None]] = None
-        self.on_packet: Optional[
-            Callable[
-                [
-                    Union[
-                        TelemInfo,
-                        CompactScoring,
-                        FullScoringSession,
-                        TrackRulesSession,
-                        PitMenu,
-                        WeatherControl,
-                        ExtendedState,
-                        ForceFeedback,
-                        Graphics,
-                        SystemEvent,
-                        HWControlCommand,
-                        WeatherControlCommand,
-                    ]
-                ],
-                None,
-            ]
-        ] = None
+    # ── Context Manager Protocol ───────────────────────────────────────────────
 
     def __enter__(self) -> "IsiMotorClient":
         self.start()
@@ -152,289 +92,120 @@ class IsiMotorClient:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.stop()
 
+    # ── Lifecycle Orchestration (SLAP) ─────────────────────────────────────────
+
     def start(self) -> "IsiMotorClient":
-        """Starts the background receiver thread."""
-        if self._running:
-            return self
-
-        self._running = True
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._socket.setblocking(False)
-        self._socket.bind((self.host, self.port))
-
-        self._thread = threading.Thread(
-            target=self._listen_loop, daemon=True, name="IsiMotorUdpReceiver"
-        )
-        self._thread.start()
+        """Starts the background UDP receiver thread."""
+        self._receiver.start(self._on_datagram_received)
         return self
 
     def stop(self) -> None:
-        """Stops the background receiver thread and closes socket."""
-        self._running = False
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=1.0)
-            self._thread = None
+        """Stops the background UDP receiver thread and releases network sockets."""
+        self._receiver.stop()
 
-        if self._socket:
-            try:
-                self._socket.close()
-            except Exception:
-                pass
-            self._socket = None
+    @property
+    def is_running(self) -> bool:
+        """True if the UDP background listener thread is active."""
+        return self._receiver.is_running
 
-    def _cleanup_old_reassemblies(self, now: float) -> None:
-        """Prunes incomplete multipart frames older than 1.0 second."""
-        if now - self._last_reassembly_cleanup < 0.5:
-            return
-        self._last_reassembly_cleanup = now
-        stale_keys = [
-            k
-            for k, v in self._reassembly_buffers.items()
-            if now - v.get("timestamp", 0) > 1.0
-        ]
-        for k in stale_keys:
-            del self._reassembly_buffers[k]
+    # ── Internal Ingestion Pipeline (SLAP) ─────────────────────────────────────
+
+    def _on_datagram_received(self, data: bytes, timestamp: float) -> None:
+        """
+        Coordinates datagram processing at a single level of abstraction:
+        1. Decode or reassemble multipart chunks into a domain packet
+        2. Store latest packet into thread-safe state cache
+        3. Dispatch event to registered callbacks
+        """
+        packet = self._decode_or_reassemble(data, timestamp)
+        if packet is not None:
+            self._state.update(packet, timestamp)
+            self._dispatcher.dispatch(packet)
+
+    def _decode_or_reassemble(self, data: bytes, timestamp: float) -> Optional[AnyPacket]:
+        """Parses chunked multipart frames or decodes single datagrams."""
+        if (
+            data.startswith(b"SIMP")
+            and len(data) >= HEADER_SIZE
+            and data[4] == 1
+        ):
+            hdr = decode_header(data)
+            if hdr and hdr.total_chunks > 1:
+                return self._reassembler.process(data, timestamp)
+
+        return decode_packet(data, registry=self._decoder_registry)
 
     def _process_chunk(
         self, data: bytes, now: float
     ) -> Optional[Union[FullScoringSession, TrackRulesSession]]:
-        """Handles sliced multipart packet reassembly."""
-        if len(data) < HEADER_SIZE:
-            return None
+        """Backward compatibility delegate for chunk reassembly."""
+        return self._reassembler.process(data, now)
 
-        hdr = decode_header(data)
-        if not hdr:
-            return None
+    def _cleanup_old_reassemblies(self, now: float) -> None:
+        """Backward compatibility delegate for reassembly pruning."""
+        self._reassembler.cleanup_stale(now)
 
-        payload = data[HEADER_SIZE : HEADER_SIZE + hdr.payload_size]
-
-        if hdr.total_chunks == 1:
-            if hdr.packet_type == 4:
-                return decode_full_scoring(payload)
-            elif hdr.packet_type == 5:
-                return decode_track_rules(payload)
-            return None
-
-        key = (hdr.packet_type, hdr.sequence_number)
-        if key not in self._reassembly_buffers:
-            self._reassembly_buffers[key] = {
-                "total_chunks": hdr.total_chunks,
-                "chunks": {},
-                "timestamp": now,
-            }
-
-        buf = self._reassembly_buffers[key]
-        buf["chunks"][hdr.chunk_index] = payload
-
-        if len(buf["chunks"]) == buf["total_chunks"]:
-            # All slices received in full
-            ordered_slices = [
-                buf["chunks"][i]
-                for i in range(buf["total_chunks"])
-                if i in buf["chunks"]
-            ]
-            del self._reassembly_buffers[key]
-            assembled_payload = b"".join(ordered_slices)
-
-            if hdr.packet_type == 4:
-                return decode_full_scoring(assembled_payload)
-            elif hdr.packet_type == 5:
-                return decode_track_rules(assembled_payload)
-
-        return None
-
-    def _listen_loop(self) -> None:
-        """Internal ultra-low latency receive loop."""
-        while self._running:
-            if not self._socket:
-                time.sleep(0.005)
-                continue
-
-            try:
-                r, _, _ = select.select([self._socket], [], [], 0.01)
-                if r:
-                    while self._running:
-                        try:
-                            data, _ = self._socket.recvfrom(65535)
-                            now = time.time()
-                            self._cleanup_old_reassemblies(now)
-
-                            # Handle sliced / chunked packets
-                            pkt = None
-                            if (
-                                data.startswith(b"SIMP")
-                                and len(data) >= HEADER_SIZE
-                                and data[4] == 1
-                            ):
-                                hdr = decode_header(data)
-                                if hdr and hdr.total_chunks > 1:
-                                    pkt = self._process_chunk(data, now)
-                                else:
-                                    pkt = decode_packet(data)
-                            else:
-                                pkt = decode_packet(data)
-
-                            if pkt is not None:
-                                with self._lock:
-                                    self._last_packet_time = now
-                                    self._packet_count += 1
-
-                                    if isinstance(pkt, TelemInfo):
-                                        self._latest_telemetry = pkt
-                                    elif isinstance(pkt, CompactScoring):
-                                        self._latest_scoring = pkt
-                                    elif isinstance(pkt, FullScoringSession):
-                                        self._latest_full_scoring = pkt
-                                    elif isinstance(pkt, TrackRulesSession):
-                                        self._latest_track_rules = pkt
-                                    elif isinstance(pkt, PitMenu):
-                                        self._latest_pit_menu = pkt
-                                    elif isinstance(pkt, WeatherControl):
-                                        self._latest_weather = pkt
-                                    elif isinstance(pkt, ExtendedState):
-                                        self._latest_extended_state = pkt
-                                    elif isinstance(pkt, ForceFeedback):
-                                        self._latest_force_feedback = pkt
-                                    elif isinstance(pkt, Graphics):
-                                        self._latest_graphics = pkt
-                                    elif isinstance(pkt, SystemEvent):
-                                        self._latest_system_event = pkt
-                                    elif isinstance(pkt, HWControlCommand):
-                                        self._latest_hw_control = pkt
-                                    elif isinstance(pkt, WeatherControlCommand):
-                                        self._latest_weather_control = pkt
-
-                                # Invoke callbacks outside lock
-                                if self.on_packet:
-                                    self.on_packet(pkt)
-
-                                if (
-                                    isinstance(pkt, TelemInfo)
-                                    and self.on_telemetry
-                                ):
-                                    self.on_telemetry(pkt)
-                                elif (
-                                    isinstance(pkt, CompactScoring)
-                                    and self.on_scoring
-                                ):
-                                    self.on_scoring(pkt)
-                                elif (
-                                    isinstance(pkt, FullScoringSession)
-                                    and self.on_full_scoring
-                                ):
-                                    self.on_full_scoring(pkt)
-                                elif (
-                                    isinstance(pkt, TrackRulesSession)
-                                    and self.on_track_rules
-                                ):
-                                    self.on_track_rules(pkt)
-                                elif (
-                                    isinstance(pkt, PitMenu)
-                                    and self.on_pit_menu
-                                ):
-                                    self.on_pit_menu(pkt)
-                                elif (
-                                    isinstance(pkt, WeatherControl)
-                                    and self.on_weather
-                                ):
-                                    self.on_weather(pkt)
-                                elif (
-                                    isinstance(pkt, ExtendedState)
-                                    and self.on_extended_state
-                                ):
-                                    self.on_extended_state(pkt)
-                                elif (
-                                    isinstance(pkt, ForceFeedback)
-                                    and self.on_force_feedback
-                                ):
-                                    self.on_force_feedback(pkt)
-                                elif (
-                                    isinstance(pkt, Graphics)
-                                    and self.on_graphics
-                                ):
-                                    self.on_graphics(pkt)
-                                elif (
-                                    isinstance(pkt, SystemEvent)
-                                    and self.on_system_event
-                                ):
-                                    self.on_system_event(pkt)
-                                elif (
-                                    isinstance(pkt, HWControlCommand)
-                                    and self.on_hw_control
-                                ):
-                                    self.on_hw_control(pkt)
-                                elif (
-                                    isinstance(pkt, WeatherControlCommand)
-                                    and self.on_weather_control
-                                ):
-                                    self.on_weather_control(pkt)
-
-                        except (BlockingIOError, socket.error):
-                            break
-            except Exception:
-                if not self._running:
-                    break
+    # ── State Accessors (Thread-Safe) ──────────────────────────────────────────
 
     def get_latest_telemetry(self) -> Optional[TelemInfo]:
         """Returns the most recently received TelemInfo frame thread-safely."""
-        with self._lock:
-            return self._latest_telemetry
+        return self._state.get_telemetry()
 
     def get_latest_scoring(self) -> Optional[CompactScoring]:
         """Returns the most recently received CompactScoring frame thread-safely."""
-        with self._lock:
-            return self._latest_scoring
+        return self._state.get_scoring()
 
     def get_latest_full_scoring(self) -> Optional[FullScoringSession]:
         """Returns the most recently received FullScoringSession frame thread-safely."""
-        with self._lock:
-            return self._latest_full_scoring
+        return self._state.get_full_scoring()
 
     def get_latest_track_rules(self) -> Optional[TrackRulesSession]:
         """Returns the most recently received TrackRulesSession frame thread-safely."""
-        with self._lock:
-            return self._latest_track_rules
+        return self._state.get_track_rules()
 
     def get_latest_pit_menu(self) -> Optional[PitMenu]:
         """Returns the most recently received PitMenu frame thread-safely."""
-        with self._lock:
-            return self._latest_pit_menu
+        return self._state.get_pit_menu()
 
     def get_latest_weather(self) -> Optional[WeatherControl]:
         """Returns the most recently received WeatherControl frame thread-safely."""
-        with self._lock:
-            return self._latest_weather
+        return self._state.get_weather()
 
     def get_latest_extended_state(self) -> Optional[ExtendedState]:
         """Returns the most recently received ExtendedState frame thread-safely."""
-        with self._lock:
-            return self._latest_extended_state
+        return self._state.get_extended_state()
 
     def get_latest_force_feedback(self) -> Optional[ForceFeedback]:
         """Returns the most recently received ForceFeedback frame thread-safely."""
-        with self._lock:
-            return self._latest_force_feedback
+        return self._state.get_force_feedback()
 
     def get_latest_graphics(self) -> Optional[Graphics]:
         """Returns the most recently received Graphics frame thread-safely."""
-        with self._lock:
-            return self._latest_graphics
+        return self._state.get_graphics()
 
     def get_latest_system_event(self) -> Optional[SystemEvent]:
         """Returns the most recently received SystemEvent thread-safely."""
-        with self._lock:
-            return self._latest_system_event
+        return self._state.get_system_event()
 
     def get_latest_hw_control(self) -> Optional[HWControlCommand]:
         """Returns the most recently received HWControlCommand thread-safely."""
-        with self._lock:
-            return self._latest_hw_control
+        return self._state.get_hw_control()
 
     def get_latest_weather_control(self) -> Optional[WeatherControlCommand]:
         """Returns the most recently received WeatherControlCommand thread-safely."""
-        with self._lock:
-            return self._latest_weather_control
+        return self._state.get_weather_control()
+
+    @property
+    def packet_count(self) -> int:
+        """Total number of valid packets decoded and ingested."""
+        return self._state.packet_count
+
+    @property
+    def last_packet_time(self) -> float:
+        """Timestamp of the most recent packet received."""
+        return self._state.last_packet_time
+
+    # ── Outbound Commands (Inbound to Game) ─────────────────────────────────────
 
     def send_hw_control(
         self,
@@ -453,29 +224,13 @@ class IsiMotorClient:
         :param host: Destination IP (defaults to self.inbound_host).
         :param port: Destination inbound port (defaults to self.inbound_port).
         """
-        dest_host = host or self.inbound_host
-        dest_port = port or self.inbound_port
-
-        with self._lock:
-            self._inbound_seq += 1
-            seq = self._inbound_seq
-
-        packet = encode_hw_control(
+        return self._sender.send_hw_control(
             control_name=control_name,
             control_value=control_value,
             duration_ms=duration_ms,
-            with_header=True,
-            sequence_number=seq,
+            host=host,
+            port=port,
         )
-
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            sock.sendto(packet, (dest_host, dest_port))
-            return True
-        except Exception:
-            return False
-        finally:
-            sock.close()
 
     def send_pit_action(
         self,
@@ -487,10 +242,8 @@ class IsiMotorClient:
         """
         Convenience helper to send pit menu navigation actions (Up, Down, Prev, Next, Select).
         """
-        name = action.value if isinstance(action, PitAction) else str(action)
-        return self.send_hw_control(
-            control_name=name,
-            control_value=1.0,
+        return self._sender.send_pit_action(
+            action=action,
             duration_ms=duration_ms,
             host=host,
             port=port,
@@ -523,14 +276,7 @@ class IsiMotorClient:
         :param host: Destination IP (defaults to self.inbound_host).
         :param port: Destination inbound port (defaults to self.inbound_port).
         """
-        dest_host = host or self.inbound_host
-        dest_port = port or self.inbound_port
-
-        with self._lock:
-            self._inbound_seq += 1
-            seq = self._inbound_seq
-
-        packet = encode_weather_control(
+        return self._sender.send_weather_override(
             ambient_temp=ambient_temp,
             track_temp=track_temp,
             dark_cloud=dark_cloud,
@@ -539,25 +285,126 @@ class IsiMotorClient:
             wind_direction=wind_direction,
             min_path_wetness=min_path_wetness,
             max_path_wetness=max_path_wetness,
-            with_header=True,
-            sequence_number=seq,
+            host=host,
+            port=port,
         )
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            sock.sendto(packet, (dest_host, dest_port))
-            return True
-        except Exception:
-            return False
-        finally:
-            sock.close()
+    # ── Extensible Event Dispatching (Open/Closed Principle) ───────────────────
+
+    def subscribe(self, packet_cls: Type, callback: PacketCallback) -> None:
+        """Subscribes a callback to a specific packet type."""
+        self._dispatcher.subscribe(packet_cls, callback)
+
+    def unsubscribe(self, packet_cls: Type, callback: PacketCallback) -> None:
+        """Unsubscribes a callback from a specific packet type."""
+        self._dispatcher.unsubscribe(packet_cls, callback)
+
+    def register_decoder(self, packet_type: int, decoder: Callable[[bytes], Optional[AnyPacket]]) -> None:
+        """Registers or overrides a payload decoder for a given packet type."""
+        self._decoder_registry.register(packet_type, decoder)
+
+    # ── Property Delegations for Direct Callbacks ──────────────────────────────
 
     @property
-    def packet_count(self) -> int:
-        with self._lock:
-            return self._packet_count
+    def on_telemetry(self) -> Optional[Callable[[TelemInfo], None]]:
+        return self._dispatcher.on_telemetry
+
+    @on_telemetry.setter
+    def on_telemetry(self, value: Optional[Callable[[TelemInfo], None]]) -> None:
+        self._dispatcher.on_telemetry = value
 
     @property
-    def last_packet_time(self) -> float:
-        with self._lock:
-            return self._last_packet_time
+    def on_scoring(self) -> Optional[Callable[[CompactScoring], None]]:
+        return self._dispatcher.on_scoring
+
+    @on_scoring.setter
+    def on_scoring(self, value: Optional[Callable[[CompactScoring], None]]) -> None:
+        self._dispatcher.on_scoring = value
+
+    @property
+    def on_full_scoring(self) -> Optional[Callable[[FullScoringSession], None]]:
+        return self._dispatcher.on_full_scoring
+
+    @on_full_scoring.setter
+    def on_full_scoring(self, value: Optional[Callable[[FullScoringSession], None]]) -> None:
+        self._dispatcher.on_full_scoring = value
+
+    @property
+    def on_track_rules(self) -> Optional[Callable[[TrackRulesSession], None]]:
+        return self._dispatcher.on_track_rules
+
+    @on_track_rules.setter
+    def on_track_rules(self, value: Optional[Callable[[TrackRulesSession], None]]) -> None:
+        self._dispatcher.on_track_rules = value
+
+    @property
+    def on_pit_menu(self) -> Optional[Callable[[PitMenu], None]]:
+        return self._dispatcher.on_pit_menu
+
+    @on_pit_menu.setter
+    def on_pit_menu(self, value: Optional[Callable[[PitMenu], None]]) -> None:
+        self._dispatcher.on_pit_menu = value
+
+    @property
+    def on_weather(self) -> Optional[Callable[[WeatherControl], None]]:
+        return self._dispatcher.on_weather
+
+    @on_weather.setter
+    def on_weather(self, value: Optional[Callable[[WeatherControl], None]]) -> None:
+        self._dispatcher.on_weather = value
+
+    @property
+    def on_extended_state(self) -> Optional[Callable[[ExtendedState], None]]:
+        return self._dispatcher.on_extended_state
+
+    @on_extended_state.setter
+    def on_extended_state(self, value: Optional[Callable[[ExtendedState], None]]) -> None:
+        self._dispatcher.on_extended_state = value
+
+    @property
+    def on_force_feedback(self) -> Optional[Callable[[ForceFeedback], None]]:
+        return self._dispatcher.on_force_feedback
+
+    @on_force_feedback.setter
+    def on_force_feedback(self, value: Optional[Callable[[ForceFeedback], None]]) -> None:
+        self._dispatcher.on_force_feedback = value
+
+    @property
+    def on_graphics(self) -> Optional[Callable[[Graphics], None]]:
+        return self._dispatcher.on_graphics
+
+    @on_graphics.setter
+    def on_graphics(self, value: Optional[Callable[[Graphics], None]]) -> None:
+        self._dispatcher.on_graphics = value
+
+    @property
+    def on_system_event(self) -> Optional[Callable[[SystemEvent], None]]:
+        return self._dispatcher.on_system_event
+
+    @on_system_event.setter
+    def on_system_event(self, value: Optional[Callable[[SystemEvent], None]]) -> None:
+        self._dispatcher.on_system_event = value
+
+    @property
+    def on_hw_control(self) -> Optional[Callable[[HWControlCommand], None]]:
+        return self._dispatcher.on_hw_control
+
+    @on_hw_control.setter
+    def on_hw_control(self, value: Optional[Callable[[HWControlCommand], None]]) -> None:
+        self._dispatcher.on_hw_control = value
+
+    @property
+    def on_weather_control(self) -> Optional[Callable[[WeatherControlCommand], None]]:
+        return self._dispatcher.on_weather_control
+
+    @on_weather_control.setter
+    def on_weather_control(self, value: Optional[Callable[[WeatherControlCommand], None]]) -> None:
+        self._dispatcher.on_weather_control = value
+
+    @property
+    def on_packet(self) -> Optional[Callable[[AnyPacket], None]]:
+        return self._dispatcher.on_packet
+
+    @on_packet.setter
+    def on_packet(self, value: Optional[Callable[[AnyPacket], None]]) -> None:
+        self._dispatcher.on_packet = value
