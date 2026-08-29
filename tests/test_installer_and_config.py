@@ -157,6 +157,83 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertIn("config.TelemetryRate", row_keys)
         self.assertIn("hotreload.architecture", row_keys)
 
+    def test_home_summary_renderers_and_app_navigation(self):
+        from isimotor_rawudp_manager.installer import get_configuration_overview
+        from isimotor_rawudp_manager.sniffer import (
+            IsiMotorBenchmarkApp,
+            NAV_COMMANDS,
+            NAV_EXPLORER,
+            NAV_HOME,
+            NAV_INSTALL,
+            TAB_TELEM,
+            TelemetryEngine,
+            VIEW_COMMANDS,
+            VIEW_EXPLORER,
+            VIEW_HOME,
+            VIEW_INSTALL,
+            render_home_config_summary,
+            render_home_install_summary,
+            render_home_network_summary,
+        )
+
+        overview = get_configuration_overview()
+        engine = TelemetryEngine()
+
+        install_text = render_home_install_summary(overview)
+        config_text = render_home_config_summary(overview)
+        network_text = render_home_network_summary(engine, 10.0)
+
+        self.assertIn("DLL Binary", install_text)
+        self.assertIn("UDP Destination", config_text)
+        self.assertIn("Telemetry UDP Socket", network_text)
+
+        app = IsiMotorBenchmarkApp(host="127.0.0.1", port=5000)
+        self.assertEqual(app.active_nav, NAV_HOME)
+        self.assertEqual(app.active_tab, TAB_TELEM)
+        self.assertIsNotNone(app.table_explorer)
+        self.assertIsNotNone(app.table_install)
+        self.assertIsNotNone(app.table_commands)
+
+    def test_app_async_pilot_navigation(self):
+        import asyncio
+        from isimotor_rawudp_manager.sniffer import (
+            IsiMotorBenchmarkApp,
+            NAV_COMMANDS,
+            NAV_EXPLORER,
+            NAV_HOME,
+            NAV_INSTALL,
+            TAB_WEATHER,
+        )
+
+        async def _run():
+            app = IsiMotorBenchmarkApp(host="127.0.0.1", port=5098)
+            async with app.run_test() as pilot:
+                self.assertEqual(app.active_nav, NAV_HOME)
+
+                app.action_select_nav_install()
+                await pilot.pause()
+                self.assertEqual(app.active_nav, NAV_INSTALL)
+
+                app.action_select_nav_explorer()
+                await pilot.pause()
+                self.assertEqual(app.active_nav, NAV_EXPLORER)
+
+                app.action_select_tab_weather()
+                await pilot.pause()
+                self.assertEqual(app.active_tab, TAB_WEATHER)
+
+                app.action_select_nav_commands()
+                await pilot.pause()
+                self.assertEqual(app.active_nav, NAV_COMMANDS)
+
+                app.action_select_nav_home()
+                await pilot.pause()
+                self.assertEqual(app.active_nav, NAV_HOME)
+
+        asyncio.run(_run())
+
 
 if __name__ == "__main__":
     unittest.main()
+
+

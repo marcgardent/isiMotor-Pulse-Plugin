@@ -43,14 +43,16 @@ except (ImportError, ValueError):
 try:
     from textual.app import App, ComposeResult
     from textual.binding import Binding
-    from textual.containers import Container, Horizontal
+    from textual.containers import Container, Grid, Horizontal, Vertical, VerticalScroll
     from textual.reactive import reactive
     from textual.widgets import (
         Button,
+        ContentSwitcher,
         DataTable,
         Footer,
         Header,
         Input,
+        Label,
         Static,
         Tab,
         Tabs,
@@ -108,6 +110,18 @@ PKT_HW_CONTROL = "HWControl (SIMP v100)"
 PKT_WEATHER_CONTROL = "WeatherControl (SIMP v101)"
 PKT_FOREIGN = "Foreign / Unknown"
 
+# ── Main Navigation Modes ──────────────────────────────────────────────────────
+NAV_HOME = "nav-home"
+NAV_INSTALL = "nav-install"
+NAV_EXPLORER = "nav-explorer"
+NAV_COMMANDS = "nav-commands"
+
+VIEW_HOME = "view-home"
+VIEW_INSTALL = "view-install"
+VIEW_EXPLORER = "view-explorer"
+VIEW_COMMANDS = "view-commands"
+
+# ── Stream Explorer Tabs ───────────────────────────────────────────────────────
 TAB_TELEM = "tab-telem"
 TAB_SCORING = "tab-scoring"
 TAB_RULES = "tab-rules"
@@ -2373,6 +2387,92 @@ def extract_config_rows(overview: dict[str, Any]) -> list[tuple[str, Any, str, s
     return rows
 
 
+# ── Home Dashboard Summary Renderers ───────────────────────────────────────────
+
+
+def render_home_install_summary(overview: dict[str, Any]) -> str:
+    """Renders formatted Rich markup for the Home Installation summary card."""
+    src = overview.get("source_dll", {})
+    dll_exists = src.get("exists", False)
+    dll_size = src.get("size_bytes", 0)
+    dll_mtime = src.get("mtime_str", "-")
+    dll_path = src.get("path", "")
+
+    lines: list[str] = []
+    if dll_exists:
+        lines.append(f"• [bold white]DLL Binary :[/] [bold green]✓ Compiled[/] [dim]({dll_size:,} B)[/dim]")
+        lines.append(f"• [bold white]Last Build :[/] [dim]{dll_mtime}[/dim]")
+        if dll_path:
+            lines.append(f"• [bold white]Source :[/] [cyan]{Path(dll_path).name}[/]")
+    else:
+        lines.append("• [bold white]DLL Binary :[/] [bold red]✗ Not compiled[/] [dim]('make cross')[/dim]")
+
+    lines.append("[bold #58a6ff]Detected Simulators :[/]")
+    games = overview.get("games", [])
+    if not games:
+        lines.append("  [dim]• None in default Steam library[/dim]")
+    else:
+        for g in games:
+            g_name = g.get("name", "Game")
+            g_inst = g.get("dll_installed", False)
+            g_ext = g.get("external_plugins_enabled", False)
+            inst_tag = f"[bold green]✓ Installed[/]" if g_inst else "[bold red]✗ Missing[/]"
+            ext_tag = "[bold green]✓ Active[/]" if g_ext else "[yellow]⚠️ Inactive[/]"
+            lines.append(f"  • [white]{g_name}[/] : {inst_tag} | {ext_tag}")
+
+    return "\n".join(lines)
+
+
+def render_home_config_summary(overview: dict[str, Any]) -> str:
+    """Renders formatted Rich markup for the Home Configuration summary card."""
+    vars_dict = overview.get("active_variables", {})
+    target_ip = vars_dict.get("TargetIP", "127.0.0.1")
+    target_port = vars_dict.get("TargetPort", "5000")
+    inbound_ctrl = vars_dict.get("InboundControl", "Enabled")
+    inbound_port = vars_dict.get("InboundPort", "5001")
+    telem_rate = vars_dict.get("TelemetryRate", "unlimited")
+    scoring_rate = vars_dict.get("FullScoringRate", "5Hz")
+    rules_rate = vars_dict.get("TrackRulesRate", "3Hz")
+    pit_rate = vars_dict.get("PitMenuRate", "100Hz")
+    weather_rate = vars_dict.get("WeatherRate", "1Hz")
+    ffb_rate = vars_dict.get("ForceFeedbackRate", "unlimited (400Hz)")
+
+    lines = [
+        f"• [bold white]UDP Destination :[/] [bold cyan]{target_ip}:{target_port}[/]",
+        f"• [bold white]Inbound Control :[/] [bold green]{inbound_ctrl}[/] [dim](Port {inbound_port})[/dim]",
+        f"• [bold white]Telemetry Rate  :[/] [bold #58a6ff]{telem_rate}[/]",
+        f"• [bold white]Scoring / Rules :[/] [cyan]{scoring_rate}[/] / [cyan]{rules_rate}[/]",
+        f"• [bold white]Pit / Weather   :[/] [cyan]{pit_rate}[/] / [cyan]{weather_rate}[/]",
+        f"• [bold white]Force Feedback  :[/] [bold #bc8cff]{ffb_rate}[/]",
+    ]
+    return "\n".join(lines)
+
+
+def render_home_network_summary(engine: TelemetryEngine, elapsed: float) -> str:
+    """Renders formatted Rich markup for the Home Connectivity summary card."""
+    total_kb_s = sum(s.bandwidth_kb_s for s in engine.stats.values())
+    total_freq = sum(s.current_freq for s in engine.stats.values())
+
+    if engine.total_packets > 0 and total_freq > 0.1:
+        status_tag = "[bold green]🟢 Streaming (Game Active)[/]"
+    elif engine.total_packets > 0:
+        status_tag = "[bold yellow]🟡 Paused (No new packets)[/]"
+    else:
+        status_tag = "[bold yellow]🟡 Listening (Waiting for game)[/]"
+
+    min_sec = f"{int(elapsed // 60):02d}:{int(elapsed % 60):02d}s"
+
+    lines = [
+        f"• [bold white]Telemetry UDP Socket :[/] [bold cyan]{engine.host}:{engine.port}[/]",
+        f"• [bold white]Connection Status    :[/] {status_tag}",
+        f"• [bold white]Total Packets        :[/] [bold yellow]{engine.total_packets:,}[/] pkts",
+        f"• [bold white]Current Bandwidth    :[/] [bold magenta]{total_kb_s:5.1f} KB/s[/] [dim]({total_freq:5.1f} Hz)[/dim]",
+        f"• [bold white]Session Duration     :[/] [bold green]{min_sec}[/]",
+        f"• [bold white]Inbound Commands     :[/] [cyan]{engine.inbound_target_host}:{engine.inbound_target_port}[/]",
+    ]
+    return "\n".join(lines)
+
+
 # ── Textual TUI Application ───────────────────────────────────────────────────
 
 
@@ -2383,6 +2483,20 @@ class IsiMotorBenchmarkApp(App):
     Screen {
         background: #0d1117;
         color: #c9d1d9;
+    }
+
+    #top-nav-bar {
+        layout: horizontal;
+        height: 3;
+        background: #161b22;
+        border-bottom: solid #30363d;
+        align: left middle;
+    }
+
+    #main-nav-tabs {
+        width: 1fr;
+        height: 100%;
+        background: transparent;
     }
 
     #metrics-bar {
@@ -2400,17 +2514,117 @@ class IsiMotorBenchmarkApp(App):
         padding: 0 1;
     }
 
-    #controls-container {
+    #main-content-switcher {
+        height: 1fr;
+        margin: 0 1;
+    }
+
+    /* ── 1. Home View Styles ────────────────────────────────────────── */
+    #view-home {
+        height: 100%;
+        layout: vertical;
+        padding: 0 0;
+    }
+
+    #home-hero-banner {
+        height: 3;
+        background: #161b22;
+        border: round #58a6ff;
+        margin: 1 0 0 0;
+        content-align: center middle;
+        text-align: center;
+    }
+
+    #home-cards-container {
+        layout: horizontal;
+        height: 1fr;
+        margin: 1 0 0 0;
+    }
+
+    .home-card {
+        width: 1fr;
+        height: 100%;
+        background: #161b22;
+        border: round #30363d;
+        padding: 1 1;
+        margin: 0 1;
+        layout: vertical;
+    }
+
+    .home-card-header {
+        text-align: center;
+        text-style: bold;
+        padding-bottom: 0;
+        border-bottom: solid #30363d;
+        margin-bottom: 1;
+        height: 2;
+    }
+
+    .home-card-content {
+        height: 1fr;
+    }
+
+    .home-card-actions {
         layout: horizontal;
         height: 3;
+        margin-top: 1;
+    }
+
+    .home-card-btn {
+        width: 1fr;
         margin: 0 1;
+        height: 3;
+    }
+
+    /* ── 2. Install / Config View Styles ────────────────────────────── */
+    #view-install {
+        height: 100%;
+        layout: vertical;
+    }
+
+    #install-controls {
+        layout: horizontal;
+        height: 3;
+        margin: 1 0 0 0;
         background: #161b22;
         border-top: solid #30363d;
         border-bottom: solid #30363d;
         align: left middle;
     }
 
-    Tabs {
+    #install-search-box {
+        width: 1fr;
+        height: 100%;
+        margin: 0 1;
+        background: #0d1117;
+        border: none;
+        color: #c9d1d9;
+    }
+
+    #table-container-install {
+        height: 1fr;
+        margin: 1 0 0 0;
+        background: #161b22;
+        border: round #58a6ff;
+    }
+
+    /* ── 3. Explorer View Styles ────────────────────────────────────── */
+    #view-explorer {
+        height: 100%;
+        layout: vertical;
+    }
+
+    #explorer-controls {
+        layout: horizontal;
+        height: 3;
+        margin: 1 0 0 0;
+        background: #161b22;
+        border-top: solid #30363d;
+        border-bottom: solid #30363d;
+        align: left middle;
+    }
+
+    #packet-tabs {
         width: auto;
         height: 100%;
         background: transparent;
@@ -2425,7 +2639,84 @@ class IsiMotorBenchmarkApp(App):
         color: #c9d1d9;
     }
 
-    #actions-box {
+    #table-container-explorer {
+        height: 1fr;
+        margin: 1 0 0 0;
+        background: #161b22;
+        border: round #58a6ff;
+    }
+
+    /* ── 4. Commands View Styles ────────────────────────────────────── */
+    #view-commands {
+        height: 100%;
+        layout: vertical;
+    }
+
+    #commands-status-bar {
+        height: 3;
+        margin: 1 0 0 0;
+        background: #161b22;
+        border-top: solid #30363d;
+        border-bottom: solid #30363d;
+        content-align: center middle;
+        text-align: center;
+    }
+
+    #commands-panels-container {
+        layout: horizontal;
+        height: auto;
+        margin: 1 0 0 0;
+    }
+
+    .cmd-panel {
+        width: 1fr;
+        background: #161b22;
+        border: round #30363d;
+        padding: 1;
+        margin: 0 1;
+        layout: vertical;
+    }
+
+    .cmd-panel-title {
+        text-align: center;
+        text-style: bold;
+        color: #e3b341;
+        border-bottom: solid #30363d;
+        padding-bottom: 1;
+        margin-bottom: 1;
+    }
+
+    .cmd-btn {
+        width: 100%;
+        margin-bottom: 1;
+        height: 3;
+    }
+
+    .cmd-grid {
+        layout: grid;
+        grid-size: 2;
+        grid-gutter: 1;
+    }
+
+    #input-cmd-name {
+        margin-bottom: 1;
+        height: 3;
+    }
+
+    #input-cmd-val {
+        margin-bottom: 1;
+        height: 3;
+    }
+
+    #table-container-commands {
+        height: 1fr;
+        margin: 1 0 0 0;
+        background: #161b22;
+        border: round #58a6ff;
+    }
+
+    /* Common Actions & Tables */
+    .actions-box {
         layout: horizontal;
         width: auto;
         height: 100%;
@@ -2436,13 +2727,6 @@ class IsiMotorBenchmarkApp(App):
         margin: 0 1;
         min-width: 13;
         height: 100%;
-    }
-
-    #table-container {
-        height: 1fr;
-        margin: 1 1 0 1;
-        background: #161b22;
-        border: round #58a6ff;
     }
 
     DataTable {
@@ -2465,10 +2749,15 @@ class IsiMotorBenchmarkApp(App):
 
     BINDINGS = [
         Binding("q", "quit", "Quit", show=True),
+        Binding("h", "select_nav_home", "Home", show=True),
+        Binding("p", "select_nav_install", "Install/Config", show=True),
+        Binding("e", "select_nav_explorer", "Explorer", show=True),
+        Binding("i", "select_nav_commands", "Commands", show=True),
         Binding("c", "copy_json", "Copy JSON", show=True),
         Binding("t", "copy_table", "Copy Table", show=True),
         Binding("r", "reset_stats", "Reset Stats", show=True),
-        Binding("slash", "focus_search", "Search Filter", show=True),
+        Binding("k", "copy_dll_action", "Copy DLL", show=False),
+        Binding("slash", "focus_search", "Search", show=True),
         Binding("1", "select_tab_telem", "Telem", show=False),
         Binding("2", "select_tab_scoring", "Scoring", show=False),
         Binding("3", "select_tab_rules", "Rules", show=False),
@@ -2479,19 +2768,18 @@ class IsiMotorBenchmarkApp(App):
         Binding("8", "select_tab_physics", "Physics", show=False),
         Binding("9", "select_tab_event", "Event", show=False),
         Binding("0", "select_tab_stats", "Stats", show=False),
-        Binding("i", "select_tab_inbound", "Inbound", show=False),
-        Binding("p", "select_tab_config", "Config", show=False),
-        Binding("k", "copy_dll_action", "Copy DLL", show=False),
         Binding("u", "inbound_pit_up", "Pit Up", show=False),
         Binding("d", "inbound_pit_down", "Pit Down", show=False),
         Binding("l", "inbound_pit_prev", "Pit Prev", show=False),
-        Binding("k", "inbound_pit_next", "Pit Next", show=False),
+        Binding("right", "inbound_pit_next", "Pit Next", show=False),
         Binding("j", "inbound_pit_select", "Pit Select", show=False),
         Binding("w", "inbound_rain_toggle", "Rain Toggle", show=False),
     ]
 
+    active_nav = reactive(NAV_HOME)
     active_tab = reactive(TAB_TELEM)
-    search_query = reactive("")
+    search_query_explorer = reactive("")
+    search_query_install = reactive("")
 
     def __init__(self, host: str = "0.0.0.0", port: int = 5000):
         super().__init__()
@@ -2502,14 +2790,35 @@ class IsiMotorBenchmarkApp(App):
         self.config_overview: dict[str, Any] = {}
         self.refresh_config_overview()
 
-        # Widget handles
-        self.lbl_elapsed = Static("⏱️ Elapsed: [bold green]00:00s[/]", classes="metric-box")
+        # Top Navigation Tabs
+        self.main_tabs = Tabs(
+            Tab("🏠 Home", id=NAV_HOME),
+            Tab("📦 Installer & Config", id=NAV_INSTALL),
+            Tab("🔍 Packet Explorer", id=NAV_EXPLORER),
+            Tab("🎮 Inbound Controls", id=NAV_COMMANDS),
+            active=NAV_HOME,
+            id="main-nav-tabs",
+        )
+
+        # Global Metric widgets
+        self.lbl_elapsed = Static("⏱️ Session: [bold green]00:00s[/]", classes="metric-box")
         self.lbl_packets = Static("📦 Packets: [bold yellow]0[/]", classes="metric-box")
         self.lbl_channel_freq = Static("📶 Stream: [bold yellow]0.0 Hz[/]", classes="metric-box")
         self.lbl_rate = Static("⚡ Total: [bold magenta]0.0 KB/s[/]", classes="metric-box")
         self.lbl_visible_rows = Static("🔍 Fields: [bold cyan]0 / 0[/]", classes="metric-box")
 
-        self.tabs = Tabs(
+        # Home View widgets
+        self.lbl_home_install = Static(render_home_install_summary(self.config_overview), classes="home-card-content")
+        self.lbl_home_config = Static(render_home_config_summary(self.config_overview), classes="home-card-content")
+        self.lbl_home_network = Static(render_home_network_summary(self.engine, 0.0), classes="home-card-content")
+
+        # Install View widgets
+        self.search_install = Input(placeholder="🔍 Filter configuration parameters...", id="install-search-box")
+        self.table_install: DataTable[Any] = DataTable(cursor_type="row")
+        self._current_install_keys: list[str] = []
+
+        # Explorer View widgets
+        self.packet_tabs = Tabs(
             Tab("🏎️ TelemInfo (1888 B)", id=TAB_TELEM),
             Tab("🏁 Grid Scoring", id=TAB_SCORING),
             Tab("🚩 Track Rules & SC", id=TAB_RULES),
@@ -2519,21 +2828,29 @@ class IsiMotorBenchmarkApp(App):
             Tab("🎥 Graphics", id=TAB_GRAPHICS),
             Tab("🔧 Physics & Aids", id=TAB_PHYSICS),
             Tab("🔔 Events (6 B)", id=TAB_EVENT),
-            Tab("🎮 Inbound Tester", id=TAB_INBOUND),
-            Tab("⚙️ Config JSON", id=TAB_CONFIG),
             Tab("📊 Stream Rates", id=TAB_STATS),
+            active=TAB_TELEM,
             id="packet-tabs",
         )
-        self.search_input = Input(
+        self.search_explorer = Input(
             placeholder="🔍 Filter fields by name or description... (Press '/' to focus)", id="search-box"
         )
-        self.btn_copy_dll = Button("📦 Copier DLL", id="btn-copy-dll", variant="success", classes="btn-action")
-        self.btn_copy_json = Button("📋 Copy JSON", id="btn-copy-json", variant="primary", classes="btn-action")
-        self.btn_copy_table = Button("📑 Copy Table", id="btn-copy-table", variant="default", classes="btn-action")
-        self.table: DataTable[Any] = DataTable(cursor_type="row")
+        self.table_explorer: DataTable[Any] = DataTable(cursor_type="row")
+        self._current_explorer_keys: list[str] = []
 
-        # Cache of rows currently displayed in the table to allow fast cell updates
-        self._current_table_keys: list[str] = []
+        # Commands View widgets
+        self.lbl_commands_status = Static(
+            f"🎮 Inbound Target: [bold cyan]{self.engine.inbound_target_host}:{self.engine.inbound_target_port}[/] | "
+            f"Last Command: [bold #58a6ff]{self.engine.last_inbound_cmd_sent}[/] | Pulse: [bold yellow]50 ms[/]",
+            id="commands-status-bar",
+        )
+        self.input_cmd_name = Input(placeholder="Name (e.g. PitMenuSelect, BrakeBiasForward)", id="input-cmd-name")
+        self.input_cmd_val = Input(placeholder="Value (default: 1.0)", id="input-cmd-val")
+        self.table_commands: DataTable[Any] = DataTable(cursor_type="row")
+        self._current_commands_keys: list[str] = []
+
+        # Content Switcher reference
+        self.switcher = ContentSwitcher(initial=VIEW_HOME, id="main-content-switcher")
 
     def refresh_config_overview(self) -> None:
         """Refreshes the detected game installations and JSON configuration overview."""
@@ -2545,8 +2862,11 @@ class IsiMotorBenchmarkApp(App):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
 
+        with Horizontal(id="top-nav-bar"):
+            yield self.main_tabs
+
         with Horizontal(id="metrics-bar"):
-            yield Static("🏁 [bold cyan]isiMotor UDP Explorer[/]", classes="metric-box")
+            yield Static("🏎️ [bold cyan]isiMotorRawUDP[/]", classes="metric-box")
             yield self.lbl_elapsed
             yield self.lbl_packets
             yield self.lbl_channel_freq
@@ -2554,89 +2874,243 @@ class IsiMotorBenchmarkApp(App):
             yield self.lbl_visible_rows
             yield Static(f"🌐 [bold cyan]{self.host}:{self.port}[/]", classes="metric-box")
 
-        with Horizontal(id="controls-container"):
-            yield self.tabs
-            yield self.search_input
-            with Horizontal(id="actions-box"):
-                yield self.btn_copy_dll
-                yield self.btn_copy_json
-                yield self.btn_copy_table
+        with ContentSwitcher(initial=VIEW_HOME, id="main-content-switcher"):
+            # ── 1. Home View ──────────────────────────────────────────
+            with Vertical(id=VIEW_HOME):
+                with Container(id="home-hero-banner"):
+                    yield Static(
+                        "🏎️  [bold #58a6ff]isiMotorRawUDP[/] [bold #3fb950]Manager[/] [dim]│ Low-Latency SIMP Telemetry & Bidirectional Inbound Bridge[/]",
+                        id="home-hero-text",
+                    )
+                with Horizontal(id="home-cards-container"):
+                    with Vertical(id="card-install", classes="home-card"):
+                        yield Static("📦 [bold #58a6ff]1. Installation & DLL[/]", classes="home-card-header")
+                        yield self.lbl_home_install
+                        with Horizontal(classes="home-card-actions"):
+                            yield Button(
+                                "🚀 Copy DLL",
+                                id="btn-home-copy-dll",
+                                variant="success",
+                                classes="home-card-btn",
+                            )
+                            yield Button(
+                                "📂 Manage ➔",
+                                id="btn-home-goto-install",
+                                variant="primary",
+                                classes="home-card-btn",
+                            )
 
-        with Container(id="table-container"):
-            yield self.table
+                    with Vertical(id="card-config", classes="home-card"):
+                        yield Static("⚙️ [bold #e3b341]2. Active Config[/]", classes="home-card-header")
+                        yield self.lbl_home_config
+                        with Horizontal(classes="home-card-actions"):
+                            yield Button(
+                                "⚙️ View Config Details ➔",
+                                id="btn-home-goto-config",
+                                variant="primary",
+                                classes="home-card-btn",
+                            )
+
+                    with Vertical(id="card-network", classes="home-card"):
+                        yield Static("🌐 [bold #3fb950]3. UDP Network & Live[/]", classes="home-card-header")
+                        yield self.lbl_home_network
+                        with Horizontal(classes="home-card-actions"):
+                            yield Button(
+                                "🔍 Explorer ➔",
+                                id="btn-home-goto-explorer",
+                                variant="primary",
+                                classes="home-card-btn",
+                            )
+                            yield Button(
+                                "🎮 Controls ➔",
+                                id="btn-home-goto-commands",
+                                variant="default",
+                                classes="home-card-btn",
+                            )
+
+            # ── 2. Install / Config View ──────────────────────────────
+            with Vertical(id=VIEW_INSTALL):
+                with Horizontal(id="install-controls"):
+                    yield self.search_install
+                    with Horizontal(classes="actions-box"):
+                        yield Button("📦 Copy DLL", id="btn-install-copy-dll", variant="success", classes="btn-action")
+                        yield Button("📋 Copy JSON", id="btn-install-copy-json", variant="primary", classes="btn-action")
+                        yield Button("📑 Copy Table", id="btn-install-copy-table", variant="default", classes="btn-action")
+                        yield Button("🔄 Refresh", id="btn-install-refresh", variant="default", classes="btn-action")
+                with Container(id="table-container-install"):
+                    yield self.table_install
+
+            # ── 3. Packet Explorer View ───────────────────────────────
+            with Vertical(id=VIEW_EXPLORER):
+                with Horizontal(id="explorer-controls"):
+                    yield self.packet_tabs
+                    yield self.search_explorer
+                    with Horizontal(classes="actions-box"):
+                        yield Button("📋 Copy JSON", id="btn-explorer-copy-json", variant="primary", classes="btn-action")
+                        yield Button("📑 Copy Table", id="btn-explorer-copy-table", variant="default", classes="btn-action")
+                        yield Button("🔄 Reset Stats", id="btn-explorer-reset-stats", variant="default", classes="btn-action")
+                with Container(id="table-container-explorer"):
+                    yield self.table_explorer
+
+            # ── 4. Commands View ──────────────────────────────────────
+            with Vertical(id=VIEW_COMMANDS):
+                yield self.lbl_commands_status
+                with Horizontal(id="commands-panels-container"):
+                    with Vertical(classes="cmd-panel"):
+                        yield Static("⛽ [bold #e3b341]Pit Menu (Type 100)[/]", classes="cmd-panel-title")
+                        with Grid(classes="cmd-grid"):
+                            yield Button("⬆️ Up", id="btn-cmd-pit-up", classes="cmd-btn")
+                            yield Button("⬇️ Down", id="btn-cmd-pit-down", classes="cmd-btn")
+                            yield Button("⬅️ Prev", id="btn-cmd-pit-prev", classes="cmd-btn")
+                            yield Button("➡️ Next", id="btn-cmd-pit-next", classes="cmd-btn")
+                        yield Button("✅ Select / Enter", id="btn-cmd-pit-select", variant="success", classes="cmd-btn")
+
+                    with Vertical(classes="cmd-panel"):
+                        yield Static("🌦️ [bold #58a6ff]Weather Override (Type 101)[/]", classes="cmd-panel-title")
+                        with Grid(classes="cmd-grid"):
+                            yield Button("☀️ Clear (0%)", id="btn-cmd-weather-sun", classes="cmd-btn")
+                            yield Button("⛅ Drizzle (25%)", id="btn-cmd-weather-drizzle", classes="cmd-btn")
+                            yield Button("🌧️ Rain (60%)", id="btn-cmd-weather-rain", classes="cmd-btn")
+                            yield Button("⛈️ Storm (95%)", id="btn-cmd-weather-storm", classes="cmd-btn")
+
+                    with Vertical(classes="cmd-panel"):
+                        yield Static("🏎️ [bold #3fb950]Vehicle Aids & Controls[/]", classes="cmd-panel-title")
+                        with Grid(classes="cmd-grid"):
+                            yield Button("🔑 Ignition", id="btn-cmd-ignition", classes="cmd-btn")
+                            yield Button("🌧️ Wipers", id="btn-cmd-wipers", classes="cmd-btn")
+                            yield Button("🏎️ TC +", id="btn-cmd-tc-up", classes="cmd-btn")
+                            yield Button("🏎️ TC -", id="btn-cmd-tc-down", classes="cmd-btn")
+                            yield Button("🛑 ABS +", id="btn-cmd-abs-up", classes="cmd-btn")
+                            yield Button("🛑 ABS -", id="btn-cmd-abs-down", classes="cmd-btn")
+
+                    with Vertical(classes="cmd-panel"):
+                        yield Static("📤 [bold #bc8cff]Custom Command Sender[/]", classes="cmd-panel-title")
+                        yield self.input_cmd_name
+                        yield self.input_cmd_val
+                        yield Button("📤 Send Command", id="btn-cmd-send-custom", variant="primary", classes="cmd-btn")
+
+                with Container(id="table-container-commands"):
+                    yield self.table_commands
 
         yield Footer()
 
     def on_mount(self) -> None:
-        self.title = "isiMotor UDP Raw Telemetry Explorer"
-        self.sub_title = "Zero-Overhead Binary Struct Inspector"
+        self.title = "isiMotorRawUDP Manager"
+        self.sub_title = "Le Mans Ultimate & rFactor 2 Telemetry Hub"
 
         # Initialize DataTable columns
-        self.table.add_column("Field Key", key="col_key", width=34)
-        self.table.add_column("Current Value", key="col_val", width=32)
-        self.table.add_column("Field Description & Units", key="col_desc")
+        for dt in [self.table_explorer, self.table_install, self.table_commands]:
+            dt.add_column("Field / Key", key="col_key", width=34)
+            dt.add_column("Current Value", key="col_val", width=32)
+            dt.add_column("Description & Units", key="col_desc")
 
         # Start UDP receiver engine
         self.engine.start()
 
-        # Populate initial table
-        self._rebuild_table_rows()
+        # Populate tables and home cards
+        self._update_home_cards()
+        self._rebuild_explorer_rows()
+        self._rebuild_install_rows()
+        self._rebuild_commands_rows()
 
         # High-frequency UI tick (30 FPS)
         self.timer = self.set_interval(0.033, self._update_ui)
 
-    # ── Tab & Search Handlers ──────────────────────────────────────────────────
+    # ── Tab & Navigation Handlers ──────────────────────────────────────────────
 
     def on_tabs_tab_activated(self, event: Tabs.TabActivated) -> None:
-        if event.tab and event.tab.id:
-            self.active_tab = event.tab.id
-            if self.active_tab == TAB_CONFIG:
-                self.refresh_config_overview()
-            self._rebuild_table_rows()
+        switcher = self.query_one(ContentSwitcher)
+        if event.tabs.id == "main-nav-tabs":
+            if event.tab and event.tab.id:
+                self.active_nav = event.tab.id
+                if self.active_nav == NAV_HOME:
+                    switcher.current = VIEW_HOME
+                    self.refresh_config_overview()
+                    self._update_home_cards()
+                elif self.active_nav == NAV_INSTALL:
+                    switcher.current = VIEW_INSTALL
+                    self.refresh_config_overview()
+                    self._rebuild_install_rows()
+                elif self.active_nav == NAV_EXPLORER:
+                    switcher.current = VIEW_EXPLORER
+                    self._rebuild_explorer_rows()
+                elif self.active_nav == NAV_COMMANDS:
+                    switcher.current = VIEW_COMMANDS
+                    self._rebuild_commands_rows()
+        elif event.tabs.id == "packet-tabs":
+            if event.tab and event.tab.id:
+                self.active_tab = event.tab.id
+                self._rebuild_explorer_rows()
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "search-box":
-            self.search_query = event.value.strip().lower()
-            self._rebuild_table_rows()
+            self.search_query_explorer = event.value.strip().lower()
+            self._rebuild_explorer_rows()
+        elif event.input.id == "install-search-box":
+            self.search_query_install = event.value.strip().lower()
+            self._rebuild_install_rows()
+
+    # ── Keyboard Action Handlers ───────────────────────────────────────────────
+
+    def action_select_nav_home(self) -> None:
+        self.main_tabs.active = NAV_HOME
+
+    def action_select_nav_install(self) -> None:
+        self.main_tabs.active = NAV_INSTALL
+
+    def action_select_nav_explorer(self) -> None:
+        self.main_tabs.active = NAV_EXPLORER
+
+    def action_select_nav_commands(self) -> None:
+        self.main_tabs.active = NAV_COMMANDS
 
     def action_focus_search(self) -> None:
-        self.search_input.focus()
+        if self.active_nav == NAV_EXPLORER:
+            self.search_explorer.focus()
+        elif self.active_nav == NAV_INSTALL:
+            self.search_install.focus()
+        elif self.active_nav == NAV_COMMANDS:
+            self.input_cmd_name.focus()
 
     def action_select_tab_telem(self) -> None:
-        self.tabs.active = TAB_TELEM
+        self.main_tabs.active = NAV_EXPLORER
+        self.packet_tabs.active = TAB_TELEM
 
     def action_select_tab_scoring(self) -> None:
-        self.tabs.active = TAB_SCORING
+        self.main_tabs.active = NAV_EXPLORER
+        self.packet_tabs.active = TAB_SCORING
 
     def action_select_tab_rules(self) -> None:
-        self.tabs.active = TAB_RULES
+        self.main_tabs.active = NAV_EXPLORER
+        self.packet_tabs.active = TAB_RULES
 
     def action_select_tab_pit(self) -> None:
-        self.tabs.active = TAB_PIT
+        self.main_tabs.active = NAV_EXPLORER
+        self.packet_tabs.active = TAB_PIT
 
     def action_select_tab_weather(self) -> None:
-        self.tabs.active = TAB_WEATHER
+        self.main_tabs.active = NAV_EXPLORER
+        self.packet_tabs.active = TAB_WEATHER
 
     def action_select_tab_ffb(self) -> None:
-        self.tabs.active = TAB_FFB
+        self.main_tabs.active = NAV_EXPLORER
+        self.packet_tabs.active = TAB_FFB
 
     def action_select_tab_graphics(self) -> None:
-        self.tabs.active = TAB_GRAPHICS
+        self.main_tabs.active = NAV_EXPLORER
+        self.packet_tabs.active = TAB_GRAPHICS
 
     def action_select_tab_physics(self) -> None:
-        self.tabs.active = TAB_PHYSICS
+        self.main_tabs.active = NAV_EXPLORER
+        self.packet_tabs.active = TAB_PHYSICS
 
     def action_select_tab_event(self) -> None:
-        self.tabs.active = TAB_EVENT
-
-    def action_select_tab_inbound(self) -> None:
-        self.tabs.active = TAB_INBOUND
-
-    def action_select_tab_config(self) -> None:
-        self.tabs.active = TAB_CONFIG
+        self.main_tabs.active = NAV_EXPLORER
+        self.packet_tabs.active = TAB_EVENT
 
     def action_select_tab_stats(self) -> None:
-        self.tabs.active = TAB_STATS
+        self.main_tabs.active = NAV_EXPLORER
+        self.packet_tabs.active = TAB_STATS
 
     def action_copy_dll_action(self) -> None:
         self.action_copy_dll()
@@ -2645,63 +3119,134 @@ class IsiMotorBenchmarkApp(App):
         """Copies compiled DLL to detected games and configures JSON settings."""
         success, msg, _paths = copy_and_install_dll(project_root=project_root)
         self.refresh_config_overview()
-        if self.active_tab == TAB_CONFIG:
-            self._rebuild_table_rows()
+        self._update_home_cards()
+        self._rebuild_install_rows()
         if success:
-            self.notify(msg, title="📦 DLL Copiée avec Succès !", severity="information")
+            self.notify(msg, title="📦 DLL Copied Successfully!", severity="information")
         else:
-            self.notify(msg, title="❌ Erreur d'Installation DLL", severity="error")
+            self.notify(msg, title="❌ DLL Installation Error", severity="error")
 
     def action_inbound_pit_up(self) -> None:
         self.engine.send_hw_control("PitMenuUp", 1.0, 50)
-        self.notify("Sent PitMenuUp command", title="Inbound Control")
-        if self.active_tab == TAB_INBOUND:
-            self._rebuild_table_rows()
+        self.notify("Sent command: PitMenuUp", title="Inbound Control")
+        self._rebuild_commands_rows()
 
     def action_inbound_pit_down(self) -> None:
         self.engine.send_hw_control("PitMenuDown", 1.0, 50)
-        self.notify("Sent PitMenuDown command", title="Inbound Control")
-        if self.active_tab == TAB_INBOUND:
-            self._rebuild_table_rows()
+        self.notify("Sent command: PitMenuDown", title="Inbound Control")
+        self._rebuild_commands_rows()
 
     def action_inbound_pit_prev(self) -> None:
         self.engine.send_hw_control("PitMenuPrev", 1.0, 50)
-        self.notify("Sent PitMenuPrev command", title="Inbound Control")
-        if self.active_tab == TAB_INBOUND:
-            self._rebuild_table_rows()
+        self.notify("Sent command: PitMenuPrev", title="Inbound Control")
+        self._rebuild_commands_rows()
 
     def action_inbound_pit_next(self) -> None:
         self.engine.send_hw_control("PitMenuNext", 1.0, 50)
-        self.notify("Sent PitMenuNext command", title="Inbound Control")
-        if self.active_tab == TAB_INBOUND:
-            self._rebuild_table_rows()
+        self.notify("Sent command: PitMenuNext", title="Inbound Control")
+        self._rebuild_commands_rows()
 
     def action_inbound_pit_select(self) -> None:
         self.engine.send_hw_control("PitMenuSelect", 1.0, 50)
-        self.notify("Sent PitMenuSelect command", title="Inbound Control")
-        if self.active_tab == TAB_INBOUND:
-            self._rebuild_table_rows()
+        self.notify("Sent command: PitMenuSelect", title="Inbound Control")
+        self._rebuild_commands_rows()
 
     def action_inbound_rain_toggle(self) -> None:
         current_rain = self.engine.latest_weather.origin_raining if self.engine.latest_weather else 0.0
         new_rain = 0.0 if current_rain > 0.3 else 0.85
         self.engine.send_weather_override(ambient_temp=25.0, raining=new_rain)
         self.notify(f"Injected Weather: Rain={new_rain * 100:.0f}%", title="Weather Override")
-        if self.active_tab == TAB_INBOUND:
-            self._rebuild_table_rows()
+        self._rebuild_commands_rows()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn-copy-dll":
+        bid = event.button.id
+        if bid in ["btn-home-goto-install", "btn-hub-install", "btn-home-goto-config"]:
+            self.main_tabs.active = NAV_INSTALL
+        elif bid in ["btn-home-goto-explorer", "btn-hub-explorer"]:
+            self.main_tabs.active = NAV_EXPLORER
+        elif bid in ["btn-home-goto-commands", "btn-hub-commands"]:
+            self.main_tabs.active = NAV_COMMANDS
+        elif bid in ["btn-home-copy-dll", "btn-install-copy-dll"]:
             self.action_copy_dll()
-        elif event.button.id == "btn-copy-json":
+        elif bid == "btn-install-refresh":
+            self.refresh_config_overview()
+            self._update_home_cards()
+            self._rebuild_install_rows()
+            self.notify("Configuration overview refreshed.", title="🔄 Refresh")
+        elif bid in ["btn-explorer-copy-json", "btn-install-copy-json"]:
             self.action_copy_json()
-        elif event.button.id == "btn-copy-table":
+        elif bid in ["btn-explorer-copy-table", "btn-install-copy-table"]:
             self.action_copy_table()
+        elif bid == "btn-explorer-reset-stats":
+            self.action_reset_stats()
+        elif bid == "btn-cmd-pit-up":
+            self.action_inbound_pit_up()
+        elif bid == "btn-cmd-pit-down":
+            self.action_inbound_pit_down()
+        elif bid == "btn-cmd-pit-prev":
+            self.action_inbound_pit_prev()
+        elif bid == "btn-cmd-pit-next":
+            self.action_inbound_pit_next()
+        elif bid == "btn-cmd-pit-select":
+            self.action_inbound_pit_select()
+        elif bid == "btn-cmd-weather-sun":
+            self.engine.send_weather_override(ambient_temp=25.0, raining=0.0)
+            self.notify("Injected Weather: Clear (0% rain)", title="Weather Override")
+            self._rebuild_commands_rows()
+        elif bid == "btn-cmd-weather-drizzle":
+            self.engine.send_weather_override(ambient_temp=22.0, raining=0.25)
+            self.notify("Injected Weather: Drizzle (25% rain)", title="Weather Override")
+            self._rebuild_commands_rows()
+        elif bid == "btn-cmd-weather-rain":
+            self.engine.send_weather_override(ambient_temp=19.0, raining=0.60)
+            self.notify("Injected Weather: Rain (60% rain)", title="Weather Override")
+            self._rebuild_commands_rows()
+        elif bid == "btn-cmd-weather-storm":
+            self.engine.send_weather_override(ambient_temp=16.0, raining=0.95)
+            self.notify("Injected Weather: Storm (95% rain)", title="Weather Override")
+            self._rebuild_commands_rows()
+        elif bid == "btn-cmd-ignition":
+            self.engine.send_hw_control("Ignition", 1.0, 50)
+            self.notify("Sent command: Ignition", title="HW Control")
+            self._rebuild_commands_rows()
+        elif bid == "btn-cmd-wipers":
+            self.engine.send_hw_control("Wipers", 1.0, 50)
+            self.notify("Sent command: Wipers", title="HW Control")
+            self._rebuild_commands_rows()
+        elif bid == "btn-cmd-tc-up":
+            self.engine.send_hw_control("TCIncrease", 1.0, 50)
+            self.notify("Sent command: TCIncrease", title="HW Control")
+            self._rebuild_commands_rows()
+        elif bid == "btn-cmd-tc-down":
+            self.engine.send_hw_control("TCDecrease", 1.0, 50)
+            self.notify("Sent command: TCDecrease", title="HW Control")
+            self._rebuild_commands_rows()
+        elif bid == "btn-cmd-abs-up":
+            self.engine.send_hw_control("ABSIncrease", 1.0, 50)
+            self.notify("Sent command: ABSIncrease", title="HW Control")
+            self._rebuild_commands_rows()
+        elif bid == "btn-cmd-abs-down":
+            self.engine.send_hw_control("ABSDecrease", 1.0, 50)
+            self.notify("Sent command: ABSDecrease", title="HW Control")
+            self._rebuild_commands_rows()
+        elif bid == "btn-cmd-send-custom":
+            name = self.input_cmd_name.value.strip()
+            val_str = self.input_cmd_val.value.strip()
+            if not name:
+                self.notify("Please enter a control identifier", title="Error", severity="error")
+            else:
+                try:
+                    val = float(val_str) if val_str else 1.0
+                except ValueError:
+                    val = 1.0
+                self.engine.send_hw_control(name, val, 50)
+                self.notify(f"Sent command: {name}={val}", title="HW Control")
+                self._rebuild_commands_rows()
 
     # ── Data Extraction Helpers ────────────────────────────────────────────────
 
-    def _get_active_rows(self) -> list[tuple[str, Any, str, str]]:
-        """Returns the raw rows for the currently selected tab."""
+    def _get_active_explorer_rows(self) -> list[tuple[str, Any, str, str]]:
+        """Returns the raw rows for the currently selected stream in the Explorer."""
         if self.active_tab == TAB_TELEM:
             return extract_telemetry_rows(self.engine.latest_telemetry, self.engine.stats[PKT_RAW_TELEMETRY])
         elif self.active_tab == TAB_SCORING:
@@ -2727,16 +3272,25 @@ class IsiMotorBenchmarkApp(App):
             return extract_event_rows(
                 self.engine.latest_event, self.engine.stats[PKT_SYSTEM_EVENT], self.engine.latest_event_time
             )
-        elif self.active_tab == TAB_INBOUND:
-            return extract_inbound_rows(self.engine)
-        elif self.active_tab == TAB_CONFIG:
-            return extract_config_rows(self.config_overview)
         elif self.active_tab == TAB_STATS:
             return extract_stats_rows(self.engine)
         return []
 
     def _get_active_model_dict(self) -> dict[str, Any]:
-        """Returns clean dictionary for JSON export."""
+        """Returns clean dictionary for JSON export based on active navigation mode."""
+        if self.active_nav == NAV_INSTALL:
+            return self.config_overview
+        elif self.active_nav == NAV_COMMANDS:
+            rows = extract_inbound_rows(self.engine)
+            return {k: raw for k, raw, _, _ in rows}
+        elif self.active_nav == NAV_HOME:
+            return {
+                "config_overview": self.config_overview,
+                "engine_stats": {k: s.count for k, s in self.engine.stats.items()},
+                "total_packets": self.engine.total_packets,
+            }
+
+        # Explorer view export
         if self.active_tab == TAB_TELEM:
             st = self.engine.stats[PKT_RAW_TELEMETRY]
             if self.engine.latest_telemetry:
@@ -2866,11 +3420,6 @@ class IsiMotorBenchmarkApp(App):
                 }
                 return d
             return {"status": "No SystemEvent packet received yet"}
-        elif self.active_tab == TAB_INBOUND:
-            rows = extract_inbound_rows(self.engine)
-            return {k: raw for k, raw, _, _ in rows}
-        elif self.active_tab == TAB_CONFIG:
-            return self.config_overview
         elif self.active_tab == TAB_STATS:
             rows = extract_stats_rows(self.engine)
             return {k: raw for k, raw, _, _ in rows}
@@ -2879,51 +3428,67 @@ class IsiMotorBenchmarkApp(App):
     # ── Clipboard Export Actions ───────────────────────────────────────────────
 
     def action_copy_json(self) -> None:
-        """Copies JSON representation of currently active packet to clipboard."""
+        """Copies JSON representation of currently active view/packet to clipboard."""
         data_dict = self._get_active_model_dict()
         json_text = json.dumps(data_dict, indent=2)
         try:
             self.copy_to_clipboard(json_text)
-            self.notify(
-                f"Copied {len(data_dict)} items from {self.active_tab} to clipboard (JSON)!", title="📋 JSON Copied"
-            )
+            self.notify(f"JSON copied to clipboard ({len(data_dict)} items)!", title="📋 JSON Copied")
         except Exception as e:
-            self.notify(f"Could not copy to clipboard: {e}", title="Copy Error", severity="error")
+            self.notify(f"Could not copy to clipboard: {e}", title="Error", severity="error")
 
     def action_copy_table(self) -> None:
         """Copies formatted table (Key, Value, Description) to clipboard."""
-        rows = self._get_active_rows()
+        if self.active_nav == NAV_INSTALL:
+            rows = extract_config_rows(self.config_overview)
+        elif self.active_nav == NAV_COMMANDS:
+            rows = extract_inbound_rows(self.engine)
+        else:
+            rows = self._get_active_explorer_rows()
+
         lines = ["Key\tValue\tDescription"]
         for key, _raw_val, fmt_val, desc in rows:
-            # Strip rich color tags for plain text table
-            clean_fmt = fmt_val.replace("[bold]", "").replace("[/bold]", "")
             clean_fmt = (
-                clean_fmt.replace("[bold #58a6ff]", "").replace("[bold #3fb950]", "").replace("[bold #f85149]", "")
+                fmt_val.replace("[bold]", "")
+                .replace("[/bold]", "")
+                .replace("[bold #58a6ff]", "")
+                .replace("[bold #3fb950]", "")
+                .replace("[bold #f85149]", "")
+                .replace("[bold #e3b341]", "")
+                .replace("[bold #f1e05a]", "")
+                .replace("[bold #bc8cff]", "")
+                .replace("[#a5d6ff]", "")
+                .replace("[dim]", "")
+                .replace("[/dim]", "")
+                .replace("[/]", "")
             )
-            clean_fmt = (
-                clean_fmt.replace("[bold #e3b341]", "").replace("[bold #f1e05a]", "").replace("[bold #bc8cff]", "")
-            )
-            clean_fmt = clean_fmt.replace("[#a5d6ff]", "").replace("[dim]", "").replace("[/dim]", "").replace("[/]", "")
             lines.append(f"{key}\t{clean_fmt}\t{desc}")
 
         table_text = "\n".join(lines)
         try:
             self.copy_to_clipboard(table_text)
-            self.notify(f"Copied {len(rows)} table rows to clipboard (TSV)!", title="📑 Table Copied")
+            self.notify(f"Table copied to clipboard ({len(rows)} rows)!", title="📑 Table Copied")
         except Exception as e:
-            self.notify(f"Could not copy to clipboard: {e}", title="Copy Error", severity="error")
+            self.notify(f"Could not copy to clipboard: {e}", title="Error", severity="error")
 
     def action_reset_stats(self) -> None:
         self.engine.reset_stats()
-        self._rebuild_table_rows()
-        self.notify("Statistics & packet counters reset.", title="Reset Complete")
+        self._rebuild_explorer_rows()
+        self.notify("Statistics & packet counters reset.", title="🔄 Reset Complete")
 
-    # ── Table Rendering & Updating ─────────────────────────────────────────────
+    # ── Table & UI Rendering Helpers ───────────────────────────────────────────
 
-    def _rebuild_table_rows(self) -> None:
-        """Rebuilds the table rows (called on tab switch or search filter change)."""
-        all_rows = self._get_active_rows()
-        query = self.search_query.lower()
+    def _update_home_cards(self) -> None:
+        """Updates the 3 dashboard cards on the Home page."""
+        elapsed = time.time() - self.engine.start_time
+        self.lbl_home_install.update(render_home_install_summary(self.config_overview))
+        self.lbl_home_config.update(render_home_config_summary(self.config_overview))
+        self.lbl_home_network.update(render_home_network_summary(self.engine, elapsed))
+
+    def _rebuild_explorer_rows(self) -> None:
+        """Rebuilds the Explorer DataTable rows."""
+        all_rows = self._get_active_explorer_rows()
+        query = self.search_query_explorer.lower()
 
         if query:
             filtered_rows = [
@@ -2932,17 +3497,51 @@ class IsiMotorBenchmarkApp(App):
         else:
             filtered_rows = all_rows
 
-        self.table.clear()
-        self._current_table_keys = []
+        self.table_explorer.clear()
+        self._current_explorer_keys = []
 
         for key, _raw_val, fmt_val, desc in filtered_rows:
-            self.table.add_row(f"[bold #58a6ff]{key}[/]", fmt_val, desc, key=key)
-            self._current_table_keys.append(key)
+            self.table_explorer.add_row(f"[bold #58a6ff]{key}[/]", fmt_val, desc, key=key)
+            self._current_explorer_keys.append(key)
 
         self.lbl_visible_rows.update(f"🔍 Fields: [bold cyan]{len(filtered_rows)} / {len(all_rows)}[/]")
 
+    def _rebuild_install_rows(self) -> None:
+        """Rebuilds the Install / Config DataTable rows."""
+        all_rows = extract_config_rows(self.config_overview)
+        query = self.search_query_install.lower()
+
+        if query:
+            filtered_rows = [
+                r for r in all_rows if query in r[0].lower() or query in r[3].lower() or query in str(r[1]).lower()
+            ]
+        else:
+            filtered_rows = all_rows
+
+        self.table_install.clear()
+        self._current_install_keys = []
+
+        for key, _raw_val, fmt_val, desc in filtered_rows:
+            self.table_install.add_row(f"[bold #58a6ff]{key}[/]", fmt_val, desc, key=key)
+            self._current_install_keys.append(key)
+
+    def _rebuild_commands_rows(self) -> None:
+        """Rebuilds the Commands / Inbound DataTable rows."""
+        all_rows = extract_inbound_rows(self.engine)
+        self.table_commands.clear()
+        self._current_commands_keys = []
+
+        for key, _raw_val, fmt_val, desc in all_rows:
+            self.table_commands.add_row(f"[bold #58a6ff]{key}[/]", fmt_val, desc, key=key)
+            self._current_commands_keys.append(key)
+
+        self.lbl_commands_status.update(
+            f"🎮 Inbound Target: [bold cyan]{self.engine.inbound_target_host}:{self.engine.inbound_target_port}[/] | "
+            f"Last Command: [bold #58a6ff]{self.engine.last_inbound_cmd_sent}[/] | Pulse: [bold yellow]50 ms[/]"
+        )
+
     def _update_ui(self) -> None:
-        """Periodic UI update: polls UDP socket and refreshes table cells in place."""
+        """Periodic UI update: polls UDP socket and refreshes active view cells."""
         if not self.is_running:
             return
 
@@ -2953,82 +3552,104 @@ class IsiMotorBenchmarkApp(App):
         current_kb_s = sum(s.bandwidth_kb_s for s in self.engine.stats.values())
         current_total_freq = sum(s.current_freq for s in self.engine.stats.values())
 
-        # Update Top Status Bar
+        # Update Top Global Metrics Bar
         self.lbl_elapsed.update(f"⏱️ Elapsed: [bold green]{int(elapsed // 60):02d}:{int(elapsed % 60):02d}s[/]")
         self.lbl_packets.update(f"📦 Packets: [bold yellow]{self.engine.total_packets:,}[/]")
         self.lbl_rate.update(f"⚡ Total: [bold magenta]{current_kb_s:5.1f} KB/s[/]")
 
-        # Update Selected Channel Real Reception Frequency
-        if self.active_tab == TAB_TELEM:
-            st = self.engine.stats[PKT_RAW_TELEMETRY]
-            self.lbl_channel_freq.update(
-                f"📶 [bold cyan]TelemInfo:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
-            )
-        elif self.active_tab == TAB_SCORING:
-            st = (
-                self.engine.stats[PKT_FULL_SCORING]
-                if self.engine.latest_full_scoring
-                else self.engine.stats[PKT_COMPACT_SCORING]
-            )
-            self.lbl_channel_freq.update(
-                f"📶 [bold cyan]Scoring:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
-            )
-        elif self.active_tab == TAB_RULES:
-            st = self.engine.stats[PKT_TRACK_RULES]
-            self.lbl_channel_freq.update(
-                f"📶 [bold cyan]TrackRules:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
-            )
-        elif self.active_tab == TAB_PIT:
-            st = self.engine.stats[PKT_PIT_MENU]
-            self.lbl_channel_freq.update(
-                f"📶 [bold cyan]PitMenu:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
-            )
-        elif self.active_tab == TAB_WEATHER:
-            st = self.engine.stats[PKT_WEATHER]
-            self.lbl_channel_freq.update(
-                f"📶 [bold cyan]Weather:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
-            )
-        elif self.active_tab == TAB_FFB:
-            st = self.engine.stats[PKT_FORCE_FEEDBACK]
-            self.lbl_channel_freq.update(
-                f"📶 [bold cyan]FFB (400Hz):[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
-            )
-        elif self.active_tab == TAB_GRAPHICS:
-            st = self.engine.stats[PKT_GRAPHICS]
-            self.lbl_channel_freq.update(
-                f"📶 [bold cyan]Graphics:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
-            )
-        elif self.active_tab == TAB_PHYSICS:
-            st = self.engine.stats[PKT_EXTENDED_STATE]
-            self.lbl_channel_freq.update(
-                f"📶 [bold cyan]Physics & Aids:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
-            )
-        elif self.active_tab == TAB_EVENT:
-            st = self.engine.stats[PKT_SYSTEM_EVENT]
-            self.lbl_channel_freq.update(f"📶 [bold cyan]Events:[/] [bold yellow]{st.count}[/] [dim]pkts[/dim]")
-        elif self.active_tab == TAB_INBOUND:
-            self.lbl_channel_freq.update(
-                f"📶 [bold cyan]Inbound:[/] [bold yellow]{self.engine.inbound_target_host}:{self.engine.inbound_target_port}[/]"
-            )
-        elif self.active_tab == TAB_CONFIG:
+        # Update Channel Real Reception Frequency
+        if self.active_nav == NAV_HOME:
+            self.lbl_channel_freq.update(f"📶 [bold cyan]All Streams:[/] [bold yellow]{current_total_freq:5.1f} Hz[/]")
+            self._update_home_cards()
+        elif self.active_nav == NAV_INSTALL:
             src = self.config_overview.get("source_dll", {})
-            status = "Compilée" if src.get("exists") else "Non Compilée"
+            status = "Compiled" if src.get("exists") else "Not Compiled"
             self.lbl_channel_freq.update(
                 f"⚙️ [bold cyan]Config JSON:[/] [bold {'green' if src.get('exists') else 'red'}]{status}[/]"
             )
-        elif self.active_tab == TAB_STATS:
-            self.lbl_channel_freq.update(f"📶 [bold cyan]All Streams:[/] [bold yellow]{current_total_freq:5.1f} Hz[/]")
+            # In-place cell update for Install table
+            rows = extract_config_rows(self.config_overview)
+            row_map = {r[0]: r[2] for r in rows}
+            for key in self._current_install_keys:
+                if key in row_map:
+                    try:
+                        self.table_install.update_cell(key, "col_val", row_map[key])
+                    except Exception:
+                        pass
+        elif self.active_nav == NAV_COMMANDS:
+            self.lbl_channel_freq.update(
+                f"📶 [bold cyan]Inbound:[/] [bold yellow]{self.engine.inbound_target_host}:{self.engine.inbound_target_port}[/]"
+            )
+            # In-place cell update for Commands table
+            rows = extract_inbound_rows(self.engine)
+            row_map = {r[0]: r[2] for r in rows}
+            for key in self._current_commands_keys:
+                if key in row_map:
+                    try:
+                        self.table_commands.update_cell(key, "col_val", row_map[key])
+                    except Exception:
+                        pass
+        elif self.active_nav == NAV_EXPLORER:
+            if self.active_tab == TAB_TELEM:
+                st = self.engine.stats[PKT_RAW_TELEMETRY]
+                self.lbl_channel_freq.update(
+                    f"📶 [bold cyan]TelemInfo:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+                )
+            elif self.active_tab == TAB_SCORING:
+                st = (
+                    self.engine.stats[PKT_FULL_SCORING]
+                    if self.engine.latest_full_scoring
+                    else self.engine.stats[PKT_COMPACT_SCORING]
+                )
+                self.lbl_channel_freq.update(
+                    f"📶 [bold cyan]Scoring:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+                )
+            elif self.active_tab == TAB_RULES:
+                st = self.engine.stats[PKT_TRACK_RULES]
+                self.lbl_channel_freq.update(
+                    f"📶 [bold cyan]TrackRules:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+                )
+            elif self.active_tab == TAB_PIT:
+                st = self.engine.stats[PKT_PIT_MENU]
+                self.lbl_channel_freq.update(
+                    f"📶 [bold cyan]PitMenu:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+                )
+            elif self.active_tab == TAB_WEATHER:
+                st = self.engine.stats[PKT_WEATHER]
+                self.lbl_channel_freq.update(
+                    f"📶 [bold cyan]Weather:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+                )
+            elif self.active_tab == TAB_FFB:
+                st = self.engine.stats[PKT_FORCE_FEEDBACK]
+                self.lbl_channel_freq.update(
+                    f"📶 [bold cyan]FFB (400Hz):[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+                )
+            elif self.active_tab == TAB_GRAPHICS:
+                st = self.engine.stats[PKT_GRAPHICS]
+                self.lbl_channel_freq.update(
+                    f"📶 [bold cyan]Graphics:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+                )
+            elif self.active_tab == TAB_PHYSICS:
+                st = self.engine.stats[PKT_EXTENDED_STATE]
+                self.lbl_channel_freq.update(
+                    f"📶 [bold cyan]Physics & Aids:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+                )
+            elif self.active_tab == TAB_EVENT:
+                st = self.engine.stats[PKT_SYSTEM_EVENT]
+                self.lbl_channel_freq.update(f"📶 [bold cyan]Events:[/] [bold yellow]{st.count}[/] [dim]pkts[/dim]")
+            elif self.active_tab == TAB_STATS:
+                self.lbl_channel_freq.update(f"📶 [bold cyan]All Streams:[/] [bold yellow]{current_total_freq:5.1f} Hz[/]")
 
-        # In-place table cell updates for smooth 30 FPS rendering
-        rows = self._get_active_rows()
-        row_map = {r[0]: r[2] for r in rows}
+            # In-place table cell updates for smooth 30 FPS rendering
+            rows = self._get_active_explorer_rows()
+            row_map = {r[0]: r[2] for r in rows}
 
-        for key in self._current_table_keys:
-            if key in row_map:
-                try:
-                    self.table.update_cell(key, "col_val", row_map[key])
-                except Exception:
-                    pass
+            for key in self._current_explorer_keys:
+                if key in row_map:
+                    try:
+                        self.table_explorer.update_cell(key, "col_val", row_map[key])
+                    except Exception:
+                        pass
 
     def on_unmount(self) -> None:
         self.engine.stop()
@@ -3046,3 +3667,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
