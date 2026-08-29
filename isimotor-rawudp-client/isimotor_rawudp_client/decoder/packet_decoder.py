@@ -3,48 +3,50 @@ Central packet decoding dispatcher and registry.
 Open/Closed Principle compliant: packet types and decoders can be registered and extended.
 """
 
-from typing import Optional, Union, Callable, Dict, Any
+from collections.abc import Callable
+from typing import Any, Union
+
 from ..constants import (
     HEADER_SIZE,
-    TELEMINFO_SIZE,
-    PKT_TYPE_TELEMETRY,
     PKT_TYPE_COMPACT_SCORING,
-    PKT_TYPE_SYSTEM_EVENT,
-    PKT_TYPE_FULL_SCORING,
-    PKT_TYPE_TRACK_RULES,
-    PKT_TYPE_PIT_MENU,
-    PKT_TYPE_WEATHER,
     PKT_TYPE_EXTENDED_STATE,
     PKT_TYPE_FORCE_FEEDBACK,
+    PKT_TYPE_FULL_SCORING,
     PKT_TYPE_GRAPHICS,
     PKT_TYPE_HW_CONTROL,
+    PKT_TYPE_PIT_MENU,
+    PKT_TYPE_SYSTEM_EVENT,
+    PKT_TYPE_TELEMETRY,
+    PKT_TYPE_TRACK_RULES,
+    PKT_TYPE_WEATHER,
     PKT_TYPE_WEATHER_CONTROL,
+    TELEMINFO_SIZE,
 )
 from ..models import (
-    TelemInfo,
     CompactScoring,
-    FullScoringSession,
-    TrackRulesSession,
-    PitMenu,
-    WeatherControl,
     ExtendedState,
     ForceFeedback,
+    FullScoringSession,
     Graphics,
-    SystemEvent,
     HWControlCommand,
+    PitMenu,
+    SystemEvent,
+    TelemInfo,
+    TrackRulesSession,
+    WeatherControl,
     WeatherControlCommand,
 )
-from .header import decode_header
-from .telemetry import decode_telemetry
-from .scoring import decode_compact_scoring, decode_full_scoring
-from .rules import decode_track_rules
-from .pit import decode_pit_menu
-from .weather import decode_weather
-from .physics import decode_extended_state
+from .commands import decode_hw_control, decode_weather_control
+from .events import decode_system_event
 from .feedback import decode_force_feedback
 from .graphics import decode_graphics
-from .events import decode_system_event
-from .commands import decode_hw_control, decode_weather_control
+from .header import decode_header
+from .physics import decode_extended_state
+from .pit import decode_pit_menu
+from .rules import decode_track_rules
+from .scoring import decode_compact_scoring, decode_full_scoring
+from .telemetry import decode_telemetry
+from .weather import decode_weather
 
 AnyPacket = Union[
     TelemInfo,
@@ -61,7 +63,7 @@ AnyPacket = Union[
     WeatherControlCommand,
 ]
 
-DecoderFunc = Callable[[bytes], Optional[Any]]
+DecoderFunc = Callable[[bytes], Any | None]
 
 
 class PacketDecoderRegistry:
@@ -71,7 +73,7 @@ class PacketDecoderRegistry:
     """
 
     def __init__(self) -> None:
-        self._decoders: Dict[int, DecoderFunc] = {}
+        self._decoders: dict[int, DecoderFunc] = {}
         self._register_defaults()
 
     def _register_defaults(self) -> None:
@@ -92,11 +94,11 @@ class PacketDecoderRegistry:
         """Registers or overrides a payload decoder for a given packet type."""
         self._decoders[packet_type] = decoder
 
-    def get_decoder(self, packet_type: int) -> Optional[DecoderFunc]:
+    def get_decoder(self, packet_type: int) -> DecoderFunc | None:
         """Retrieves registered decoder for a packet type."""
         return self._decoders.get(packet_type)
 
-    def decode_standard_packet(self, data: bytes) -> Optional[AnyPacket]:
+    def decode_standard_packet(self, data: bytes) -> AnyPacket | None:
         """Decodes a packet with a standardized 24-byte SIMP header."""
         if len(data) < HEADER_SIZE or not data.startswith(b"SIMP"):
             return None
@@ -125,7 +127,7 @@ class PacketDecoderRegistry:
 _DEFAULT_REGISTRY = PacketDecoderRegistry()
 
 
-def decode_packet(data: bytes, registry: Optional[PacketDecoderRegistry] = None) -> Optional[AnyPacket]:
+def decode_packet(data: bytes, registry: PacketDecoderRegistry | None = None) -> AnyPacket | None:
     """
     Main decoder entrypoint. Identifies and parses any supported isiMotor UDP packet.
     Supports both legacy raw/SIMP packets and new standardized 24-byte header packets.

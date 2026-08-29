@@ -3,19 +3,20 @@ Thread-safe client state and latest telemetry / scoring cache store.
 """
 
 import threading
-from typing import Optional, Any
+from typing import Any
+
 from ..models import (
-    TelemInfo,
     CompactScoring,
-    FullScoringSession,
-    TrackRulesSession,
-    PitMenu,
-    WeatherControl,
     ExtendedState,
     ForceFeedback,
+    FullScoringSession,
     Graphics,
-    SystemEvent,
     HWControlCommand,
+    PitMenu,
+    SystemEvent,
+    TelemInfo,
+    TrackRulesSession,
+    WeatherControl,
     WeatherControlCommand,
 )
 
@@ -27,18 +28,18 @@ class StateStore:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._latest_telemetry: Optional[TelemInfo] = None
-        self._latest_scoring: Optional[CompactScoring] = None
-        self._latest_full_scoring: Optional[FullScoringSession] = None
-        self._latest_track_rules: Optional[TrackRulesSession] = None
-        self._latest_pit_menu: Optional[PitMenu] = None
-        self._latest_weather: Optional[WeatherControl] = None
-        self._latest_extended_state: Optional[ExtendedState] = None
-        self._latest_force_feedback: Optional[ForceFeedback] = None
-        self._latest_graphics: Optional[Graphics] = None
-        self._latest_system_event: Optional[SystemEvent] = None
-        self._latest_hw_control: Optional[HWControlCommand] = None
-        self._latest_weather_control: Optional[WeatherControlCommand] = None
+        self._latest_telemetry: TelemInfo | None = None
+        self._latest_scoring: CompactScoring | None = None
+        self._latest_full_scoring: FullScoringSession | None = None
+        self._latest_track_rules: TrackRulesSession | None = None
+        self._latest_pit_menu: PitMenu | None = None
+        self._latest_weather: WeatherControl | None = None
+        self._latest_extended_state: ExtendedState | None = None
+        self._latest_force_feedback: ForceFeedback | None = None
+        self._latest_graphics: Graphics | None = None
+        self._latest_system_event: SystemEvent | None = None
+        self._latest_hw_control: HWControlCommand | None = None
+        self._latest_weather_control: WeatherControlCommand | None = None
         self._last_packet_time: float = 0.0
         self._packet_count: int = 0
 
@@ -73,62 +74,62 @@ class StateStore:
             elif isinstance(packet, WeatherControlCommand):
                 self._latest_weather_control = packet
 
-    def get_telemetry(self) -> Optional[TelemInfo]:
+    def get_telemetry(self) -> TelemInfo | None:
         """Returns the most recently received TelemInfo frame thread-safely."""
         with self._lock:
             return self._latest_telemetry
 
-    def get_scoring(self) -> Optional[CompactScoring]:
+    def get_scoring(self) -> CompactScoring | None:
         """Returns the most recently received CompactScoring frame thread-safely."""
         with self._lock:
             return self._latest_scoring
 
-    def get_full_scoring(self) -> Optional[FullScoringSession]:
+    def get_full_scoring(self) -> FullScoringSession | None:
         """Returns the most recently received FullScoringSession frame thread-safely."""
         with self._lock:
             return self._latest_full_scoring
 
-    def get_track_rules(self) -> Optional[TrackRulesSession]:
+    def get_track_rules(self) -> TrackRulesSession | None:
         """Returns the most recently received TrackRulesSession frame thread-safely."""
         with self._lock:
             return self._latest_track_rules
 
-    def get_pit_menu(self) -> Optional[PitMenu]:
+    def get_pit_menu(self) -> PitMenu | None:
         """Returns the most recently received PitMenu frame thread-safely."""
         with self._lock:
             return self._latest_pit_menu
 
-    def get_weather(self) -> Optional[WeatherControl]:
+    def get_weather(self) -> WeatherControl | None:
         """Returns the most recently received WeatherControl frame thread-safely."""
         with self._lock:
             return self._latest_weather
 
-    def get_extended_state(self) -> Optional[ExtendedState]:
+    def get_extended_state(self) -> ExtendedState | None:
         """Returns the most recently received ExtendedState frame thread-safely."""
         with self._lock:
             return self._latest_extended_state
 
-    def get_force_feedback(self) -> Optional[ForceFeedback]:
+    def get_force_feedback(self) -> ForceFeedback | None:
         """Returns the most recently received ForceFeedback frame thread-safely."""
         with self._lock:
             return self._latest_force_feedback
 
-    def get_graphics(self) -> Optional[Graphics]:
+    def get_graphics(self) -> Graphics | None:
         """Returns the most recently received Graphics frame thread-safely."""
         with self._lock:
             return self._latest_graphics
 
-    def get_system_event(self) -> Optional[SystemEvent]:
+    def get_system_event(self) -> SystemEvent | None:
         """Returns the most recently received SystemEvent thread-safely."""
         with self._lock:
             return self._latest_system_event
 
-    def get_hw_control(self) -> Optional[HWControlCommand]:
+    def get_hw_control(self) -> HWControlCommand | None:
         """Returns the most recently received HWControlCommand thread-safely."""
         with self._lock:
             return self._latest_hw_control
 
-    def get_weather_control(self) -> Optional[WeatherControlCommand]:
+    def get_weather_control(self) -> WeatherControlCommand | None:
         """Returns the most recently received WeatherControlCommand thread-safely."""
         with self._lock:
             return self._latest_weather_control

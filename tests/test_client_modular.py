@@ -3,56 +3,36 @@ Unit Tests for Modular Python Client Architecture (SOLID, SRP, SLAP).
 Tests decoupled components: Codecs, Reassembler, StateStore, EventDispatcher, Transport, and Facade.
 """
 
-import time
 import struct
+import time
 import unittest
+
 from isimotor_rawudp_client import (
-    IsiMotorClient,
-    TelemInfo,
-    TelemWheel,
-    TelemVect3,
     CompactScoring,
-    FullScoringSession,
-    VehicleScoring,
-    TrackRulesParticipant,
-    TrackRulesSession,
-    PitMenu,
-    WeatherControl,
-    PhysicsOptions,
     ExtendedState,
     ForceFeedback,
-    Graphics,
+    IsiMotorClient,
+    PhysicsOptions,
     SystemEvent,
-    PitAction,
-    HWControlCommand,
-    WeatherControlCommand,
+    TelemInfo,
+    TelemVect3,
+    TelemWheel,
+    TrackRulesSession,
 )
 from isimotor_rawudp_client.constants import (
-    HEADER_SIZE,
-    PKT_TYPE_TELEMETRY,
-    PKT_TYPE_COMPACT_SCORING,
-    PKT_TYPE_SYSTEM_EVENT,
-    PKT_TYPE_FULL_SCORING,
     PKT_TYPE_TRACK_RULES,
 )
 from isimotor_rawudp_client.decoder import (
-    decode_header,
-    encode_header,
-    decode_packet,
     PacketDecoderRegistry,
-    encode_hw_control,
-    decode_hw_control,
-    encode_weather_control,
-    decode_weather_control,
+    decode_packet,
+    encode_header,
 )
-from isimotor_rawudp_client.state import StateStore
-from isimotor_rawudp_client.reassembly import ChunkReassembler
 from isimotor_rawudp_client.dispatcher import EventDispatcher
-from isimotor_rawudp_client.transport import UdpSender
+from isimotor_rawudp_client.reassembly import ChunkReassembler
+from isimotor_rawudp_client.state import StateStore
 
 
 class TestModularArchitecture(unittest.TestCase):
-
     def test_all_models_instantiation(self):
         """Validates that all domain models can be constructed and have expected properties."""
         v = TelemVect3(3.0, 4.0, 0.0)
@@ -63,10 +43,13 @@ class TestModularArchitecture(unittest.TestCase):
             temperature=(300.0, 310.0, 320.0),
             tire_carcass_temperature=330.0,
             longitudinal_patch_vel=10.0,
+            longitudinal_ground_vel=8.0,
         )
         self.assertAlmostEqual(wheel.temperature_celsius[0], 300.0 - 273.15, places=2)
         self.assertAlmostEqual(wheel.carcass_temp_celsius, 330.0 - 273.15, places=2)
         self.assertAlmostEqual(wheel.patch_speed_kmh, 36.0, places=2)
+        self.assertAlmostEqual(wheel.ground_speed_kmh, 28.8, places=2)
+        self.assertAlmostEqual(wheel.slip_ratio, 0.25, places=2)
 
         telem = TelemInfo(
             gear=1,
@@ -89,8 +72,12 @@ class TestModularArchitecture(unittest.TestCase):
         ffb = ForceFeedback(force_value=0.75)
         self.assertAlmostEqual(ffb.percentage, 75.0)
 
-        ext = ExtendedState(current_pit_speed_limit=16.67)
+        po = PhysicsOptions(stability_control=2)
+        self.assertEqual(po.stability_control_str, "Medium")
+
+        ext = ExtendedState(current_pit_speed_limit=16.67, physics=po)
         self.assertAlmostEqual(ext.current_pit_speed_limit_kmh, 60.012, places=2)
+        self.assertEqual(ext.physics.stability_control_str, "Medium")
 
     def test_state_store_thread_safety_and_isolation(self):
         """Tests that StateStore updates and retrieves packet types thread-safely."""

@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "isimotor-rawudp-manager"
+version = "1.4.0"
+description = "Complete Manager, Telemetry Diagnostics & Automated Plugin Installer for Le Mans Ultimate and rFactor 2"
+readme = "README.md"
+authors = [{ name = "Marc GARDENT" }]
+license = "Apache-2.0"
+requires-python = ">=3.8"
+dependencies = [
+    "textual>=0.50.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+isi-manager = "isimotor_rawudp_manager.app:main"
+isimotor-manager = "isimotor_rawudp_manager.app:main"
+isi-benchmark = "isimotor_rawudp_manager.app:main"
+isi-install = "isimotor_rawudp_manager.installer:main"
+isi-installer = "isimotor_rawudp_manager.installer:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["isimotor_rawudp_manager*"]
+
+[tool.setuptools.package-data]
+isimotor_rawudp_manager = ["resources/*"]
+
+[tool.briefcase]
+project_name = "isiMotor RawUDP Manager"
+bundle = "com.github.marcgardent"
+version = "1.4.0"
+url = "https://github.com/marcgardent/isiMotor-RawUDP-Plugin"
+license.text = "Apache-2.0"
+author = "Marc GARDENT"
+author_email = "marc.gardent@example.com"
+
+[tool.briefcase.app.isimotor_rawudp_manager]
+formal_name = "isiMotor RawUDP Manager"
+description = "Complete Manager, Telemetry Diagnostics & Automated Plugin Installer for Le Mans Ultimate and rFactor 2"
+icon = "resources/icon"
+sources = [
+    "isimotor_rawudp_manager",
+]
+test_sources = []
+requires = [
+    "textual>=0.50.0",
+    "rich>=13.0.0",
+]
+
+[tool.briefcase.app.isimotor_rawudp_manager.windows]
+requires = [
+    "textual>=0.50.0",
+    "rich>=13.0.0",
+]
+
+[tool.briefcase.app.isimotor_rawudp_manager.linux]
+requires = [
+    "textual>=0.50.0",
+    "rich>=13.0.0",
+]

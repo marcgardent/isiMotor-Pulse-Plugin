@@ -12,36 +12,43 @@ High-performance, zero-overhead telemetry and scoring plugin for **Le Mans Ultim
 
 ```
 isiMotor-RawUDP-Plugin/
-├── CMakeLists.txt              # Cross-platform CMake build configuration
 ├── Makefile                    # Makefile shortcuts (make cross, make build, make benchmark)
-├── toolchain.cmake             # MinGW-w64 toolchain definition for Linux
-├── main.cpp                    # Zero-allocation C++ plugin source
-├── instruction.md              # Architectural design notes & SDK guide
 ├── README.md                   # Plugin documentation
 ├── LICENSE                     # Apache License 2.0
 ├── .gitignore                  # Git ignore rules
-├── include/
-│   ├── InternalsPlugin.hpp     # Official isiMotor Internals SDK interface
-│   └── PluginObjects.hpp       # Plugin object type declarations
+├── isimotor-rawudp-plugin/     # 🏎️ C++ Native Plugin subproject
+│   ├── CMakeLists.txt          # Standalone C++ build definitions
+│   ├── toolchain.cmake         # MinGW-w64 toolchain definition for Linux
+│   ├── src/                    # C++ Plugin source (main.cpp)
+│   │   └── main.cpp
+│   └── include/                # isiMotor Internals SDK headers (V07)
+│       ├── InternalsPlugin.hpp
+│       └── PluginObjects.hpp
 ├── isimotor-rawudp-client/     # 🐍 Dedicated Python client subproject
 │   ├── pyproject.toml          # PEP 517/621 Python package configuration
-│   ├── setup.py                # Legacy pip compatibility
 │   ├── README.md               # Python client documentation
 │   └── isimotor_rawudp_client/ # Package source (models, decoders, client)
-└── benchmark/                  # 📊 Real-time UDP sniffer & frequency benchmark (Textual TUI)
-    ├── pyproject.toml
+└── isimotor-rawudp-manager/    # 📊 Manager, Telemetry Diagnostics & Installer (Textual TUI / Briefcase)
+    ├── pyproject.toml          # Package and Briefcase configuration
     ├── README.md
-    └── sniffer.py
+    ├── sniffer.py              # CLI launcher
+    ├── install_plugin.py       # Installer launcher
+    └── isimotor_rawudp_manager/
+        ├── app.py
+        ├── sniffer.py
+        └── installer.py
 ```
 
 ---
 
-## 📊 Raw Telemetry Explorer & Benchmark (`Textual` TUI)
+## 📊 Raw Telemetry Explorer & Manager (`Textual` TUI)
 
-An interactive terminal raw data inspector is provided in [`benchmark/`](benchmark) to explore raw binary packets (`Key`, `Value`, `Description`), filter fields in real-time, copy data to clipboard (JSON/TSV), and benchmark stream frequencies (Hz):
+An interactive terminal raw data inspector & management app is provided in [`isimotor-rawudp-manager/`](isimotor-rawudp-manager) to explore raw binary packets (`Key`, `Value`, `Description`), filter fields in real-time, copy data to clipboard (JSON/TSV), install DLLs in 1-click, and benchmark stream frequencies (Hz):
 
 ```bash
-# Launch live explorer on default UDP port 5000:
+# Launch live manager / telemetry explorer on default UDP port 5000:
+make manager
+# Or:
 make benchmark
 ```
 
@@ -67,13 +74,18 @@ from isimotor_rawudp_client import IsiMotorClient, TelemInfo, CompactScoring
 
 client = IsiMotorClient(host="0.0.0.0", port=5000)
 
+
 @client.on_telemetry
 def handle_telemetry(t: TelemInfo):
-    print(f"Speed: {t.forward_speed_kmh:5.1f} km/h | Gear: {t.gear_str:>2} | RPM: {t.engine_rpm:5.0f} | Fuel: {t.fuel:4.1f}L")
+    print(
+        f"Speed: {t.forward_speed_kmh:5.1f} km/h | Gear: {t.gear_str:>2} | RPM: {t.engine_rpm:5.0f} | Fuel: {t.fuel:4.1f}L"
+    )
+
 
 @client.on_scoring
 def handle_scoring(s: CompactScoring):
     print(f"Track: {s.track_name} | Lap: {s.total_laps} | S1: {s.cur_sector1:.3f}s")
+
 
 client.start()
 ```
@@ -123,7 +135,7 @@ make build
 
 ## ⚡ Automated Game Installation & Configuration
 
-The repository includes an auto-installer ([`scripts/install_plugin.py`](scripts/install_plugin.py)) that detects **Le Mans Ultimate** and **rFactor 2** across Steam libraries (Windows registry, multi-drive paths, Linux Native, Flatpak, and SteamDeck Proton paths), copies `isiMotor_RawUDP.dll` to `Plugins/`, and auto-configures `CustomPluginVariables.JSON` / `Settings.JSON`:
+The repository includes an auto-installer ([`isimotor-rawudp-manager/install_plugin.py`](isimotor-rawudp-manager/install_plugin.py)) that detects **Le Mans Ultimate** and **rFactor 2** across Steam libraries (Windows registry, multi-drive paths, Linux Native, Flatpak, and SteamDeck Proton paths), copies `isiMotor_RawUDP.dll` to `Plugins/`, and auto-configures `CustomPluginVariables.JSON` / `Settings.JSON`:
 
 ```bash
 # Check detected games and installation status:

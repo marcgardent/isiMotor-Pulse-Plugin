@@ -3,7 +3,7 @@ Track rules, yellow flag procedures, and safety car decoders.
 """
 
 import struct
-from typing import Optional, List
+
 from ..constants import (
     TRACK_RULES_PARTICIPANT_SIZE,
     TRACK_RULES_PARTICIPANT_STRUCT,
@@ -14,9 +14,7 @@ from ..models import TrackRulesParticipant, TrackRulesSession
 from .base import _decode_string
 
 
-def decode_track_rules_participant(
-    data: bytes, offset: int = 0
-) -> TrackRulesParticipant:
+def decode_track_rules_participant(data: bytes, offset: int = 0) -> TrackRulesParticipant:
     """Decodes a 140-byte TrackRulesParticipant struct at specified offset."""
     (
         slot_id,
@@ -49,7 +47,7 @@ def decode_track_rules_participant(
     )
 
 
-def decode_track_rules(data: bytes, offset: int = 0) -> Optional[TrackRulesSession]:
+def decode_track_rules(data: bytes, offset: int = 0) -> TrackRulesSession | None:
     """
     Decodes full TrackRulesSession packet (Type 5).
     Header: 192 bytes, followed by N * 140 bytes of participant records.
@@ -86,7 +84,7 @@ def decode_track_rules(data: bytes, offset: int = 0) -> Optional[TrackRulesSessi
         raw_msg,
     ) = struct.unpack_from(TRACK_RULES_SESSION_STRUCT, data, offset)
 
-    participants: List[TrackRulesParticipant] = []
+    participants: list[TrackRulesParticipant] = []
     part_offset = offset + TRACK_RULES_SESSION_SIZE
     valid_count = max(0, min(num_participants, 128))
 

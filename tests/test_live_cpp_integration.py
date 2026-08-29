@@ -5,24 +5,19 @@ UDP packet reception and decoding over 127.0.0.1.
 """
 
 import os
+import socket
 import subprocess
 import time
-import socket
 import unittest
+
 from isimotor_rawudp_client.client import IsiMotorClient
 from isimotor_rawudp_client.models import PitAction
-from isimotor_rawudp_client.decoder import (
-    decode_telemetry,
-    decode_compact_scoring,
-    decode_system_event,
-)
 
 MOCK_BIN = os.path.join(os.path.dirname(__file__), "cpp_mock", "isi_mock_host")
 TEST_PORT = 5066
 
 
 class TestLiveCppIntegration(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         if not os.path.exists(MOCK_BIN):
@@ -83,9 +78,7 @@ class TestLiveCppIntegration(unittest.TestCase):
         self.assertGreaterEqual(len(event_list), 1, "Expected SystemEvent packet")
         self.assertEqual(event_list[0].event_id, 1)
 
-        self.assertGreaterEqual(
-            len(telem_list), 50, f"Expected 50+ telemetry packets, received {len(telem_list)}"
-        )
+        self.assertGreaterEqual(len(telem_list), 50, f"Expected 50+ telemetry packets, received {len(telem_list)}")
         self.assertGreaterEqual(
             len(compact_scoring_list), 1, f"Expected compact scoring packets, received {len(compact_scoring_list)}"
         )
@@ -95,21 +88,13 @@ class TestLiveCppIntegration(unittest.TestCase):
         self.assertGreaterEqual(
             len(track_rules_list), 1, f"Expected track rules packets, received {len(track_rules_list)}"
         )
-        self.assertGreaterEqual(
-            len(pit_menu_list), 10, f"Expected pit menu packets, received {len(pit_menu_list)}"
-        )
-        self.assertGreaterEqual(
-            len(weather_list), 1, f"Expected weather packets, received {len(weather_list)}"
-        )
+        self.assertGreaterEqual(len(pit_menu_list), 10, f"Expected pit menu packets, received {len(pit_menu_list)}")
+        self.assertGreaterEqual(len(weather_list), 1, f"Expected weather packets, received {len(weather_list)}")
         self.assertGreaterEqual(
             len(ext_state_list), 1, f"Expected extended state packets, received {len(ext_state_list)}"
         )
-        self.assertGreaterEqual(
-            len(ffb_list), 50, f"Expected 50+ FFB packets, received {len(ffb_list)}"
-        )
-        self.assertGreaterEqual(
-            len(gfx_list), 10, f"Expected 10+ graphics packets, received {len(gfx_list)}"
-        )
+        self.assertGreaterEqual(len(ffb_list), 50, f"Expected 50+ FFB packets, received {len(ffb_list)}")
+        self.assertGreaterEqual(len(gfx_list), 10, f"Expected 10+ graphics packets, received {len(gfx_list)}")
 
         # Validate multi-car full scoring
         latest_fs = full_scoring_list[-1]
@@ -197,7 +182,7 @@ class TestLiveCppIntegration(unittest.TestCase):
                     data, _ = sock.recvfrom(65535)
                     if len(data) == 1888:
                         received_count += 1
-                except socket.timeout:
+                except TimeoutError:
                     break
         finally:
             sock.close()
@@ -208,12 +193,8 @@ class TestLiveCppIntegration(unittest.TestCase):
             proc.wait(timeout=2)
 
         # Expected ~30 packets for 1.0s stream at 30Hz (allow +/- 5 frames tolerance)
-        self.assertGreaterEqual(
-            received_count, target_hz - 5, f"Expected ~{target_hz} pkts, got {received_count}"
-        )
-        self.assertLessEqual(
-            received_count, target_hz + 5, f"Expected ~{target_hz} pkts, got {received_count}"
-        )
+        self.assertGreaterEqual(received_count, target_hz - 5, f"Expected ~{target_hz} pkts, got {received_count}")
+        self.assertLessEqual(received_count, target_hz + 5, f"Expected ~{target_hz} pkts, got {received_count}")
 
     def test_live_bidirectional_control(self):
         """
@@ -265,8 +246,10 @@ class TestLiveCppIntegration(unittest.TestCase):
             proc.wait(timeout=2)
 
         # Validate that the weather override was received by the mock host and reflected in the live stream
-        self.assertTrue(any(abs(w.ambient_temp_c - 36.5) < 0.5 for w in weather_updates),
-                        f"Expected weather override (36.5°C) in stream: {[w.ambient_temp_c for w in weather_updates]}")
+        self.assertTrue(
+            any(abs(w.ambient_temp_c - 36.5) < 0.5 for w in weather_updates),
+            f"Expected weather override (36.5°C) in stream: {[w.ambient_temp_c for w in weather_updates]}",
+        )
 
 
 if __name__ == "__main__":

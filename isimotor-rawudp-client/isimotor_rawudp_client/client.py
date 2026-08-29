@@ -7,28 +7,30 @@ Architectural Design:
 - OCP: Extensible packet decoder registry and event subscription bus.
 """
 
-from typing import Optional, Callable, Union, Type
-from .models import (
-    TelemInfo,
-    CompactScoring,
-    FullScoringSession,
-    TrackRulesSession,
-    PitMenu,
-    WeatherControl,
-    ExtendedState,
-    ForceFeedback,
-    Graphics,
-    SystemEvent,
-    PitAction,
-    HWControlCommand,
-    WeatherControlCommand,
-)
+from collections.abc import Callable
+from typing import Any
+
 from .constants import HEADER_SIZE
 from .decoder.header import decode_header
-from .decoder.packet_decoder import decode_packet, PacketDecoderRegistry, AnyPacket
+from .decoder.packet_decoder import AnyPacket, PacketDecoderRegistry, decode_packet
+from .dispatcher import EventDispatcher, PacketCallback
+from .models import (
+    CompactScoring,
+    ExtendedState,
+    ForceFeedback,
+    FullScoringSession,
+    Graphics,
+    HWControlCommand,
+    PitAction,
+    PitMenu,
+    SystemEvent,
+    TelemInfo,
+    TrackRulesSession,
+    WeatherControl,
+    WeatherControlCommand,
+)
 from .reassembly import ChunkReassembler
 from .state import StateStore
-from .dispatcher import EventDispatcher, PacketCallback
 from .transport import UdpReceiver, UdpSender
 
 
@@ -89,7 +91,7 @@ class IsiMotorClient:
         self.start()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.stop()
 
     # ── Lifecycle Orchestration (SLAP) ─────────────────────────────────────────
@@ -122,22 +124,16 @@ class IsiMotorClient:
             self._state.update(packet, timestamp)
             self._dispatcher.dispatch(packet)
 
-    def _decode_or_reassemble(self, data: bytes, timestamp: float) -> Optional[AnyPacket]:
+    def _decode_or_reassemble(self, data: bytes, timestamp: float) -> AnyPacket | None:
         """Parses chunked multipart frames or decodes single datagrams."""
-        if (
-            data.startswith(b"SIMP")
-            and len(data) >= HEADER_SIZE
-            and data[4] == 1
-        ):
+        if data.startswith(b"SIMP") and len(data) >= HEADER_SIZE and data[4] == 1:
             hdr = decode_header(data)
             if hdr and hdr.total_chunks > 1:
                 return self._reassembler.process(data, timestamp)
 
         return decode_packet(data, registry=self._decoder_registry)
 
-    def _process_chunk(
-        self, data: bytes, now: float
-    ) -> Optional[Union[FullScoringSession, TrackRulesSession]]:
+    def _process_chunk(self, data: bytes, now: float) -> FullScoringSession | TrackRulesSession | None:
         """Backward compatibility delegate for chunk reassembly."""
         return self._reassembler.process(data, now)
 
@@ -147,51 +143,51 @@ class IsiMotorClient:
 
     # ── State Accessors (Thread-Safe) ──────────────────────────────────────────
 
-    def get_latest_telemetry(self) -> Optional[TelemInfo]:
+    def get_latest_telemetry(self) -> TelemInfo | None:
         """Returns the most recently received TelemInfo frame thread-safely."""
         return self._state.get_telemetry()
 
-    def get_latest_scoring(self) -> Optional[CompactScoring]:
+    def get_latest_scoring(self) -> CompactScoring | None:
         """Returns the most recently received CompactScoring frame thread-safely."""
         return self._state.get_scoring()
 
-    def get_latest_full_scoring(self) -> Optional[FullScoringSession]:
+    def get_latest_full_scoring(self) -> FullScoringSession | None:
         """Returns the most recently received FullScoringSession frame thread-safely."""
         return self._state.get_full_scoring()
 
-    def get_latest_track_rules(self) -> Optional[TrackRulesSession]:
+    def get_latest_track_rules(self) -> TrackRulesSession | None:
         """Returns the most recently received TrackRulesSession frame thread-safely."""
         return self._state.get_track_rules()
 
-    def get_latest_pit_menu(self) -> Optional[PitMenu]:
+    def get_latest_pit_menu(self) -> PitMenu | None:
         """Returns the most recently received PitMenu frame thread-safely."""
         return self._state.get_pit_menu()
 
-    def get_latest_weather(self) -> Optional[WeatherControl]:
+    def get_latest_weather(self) -> WeatherControl | None:
         """Returns the most recently received WeatherControl frame thread-safely."""
         return self._state.get_weather()
 
-    def get_latest_extended_state(self) -> Optional[ExtendedState]:
+    def get_latest_extended_state(self) -> ExtendedState | None:
         """Returns the most recently received ExtendedState frame thread-safely."""
         return self._state.get_extended_state()
 
-    def get_latest_force_feedback(self) -> Optional[ForceFeedback]:
+    def get_latest_force_feedback(self) -> ForceFeedback | None:
         """Returns the most recently received ForceFeedback frame thread-safely."""
         return self._state.get_force_feedback()
 
-    def get_latest_graphics(self) -> Optional[Graphics]:
+    def get_latest_graphics(self) -> Graphics | None:
         """Returns the most recently received Graphics frame thread-safely."""
         return self._state.get_graphics()
 
-    def get_latest_system_event(self) -> Optional[SystemEvent]:
+    def get_latest_system_event(self) -> SystemEvent | None:
         """Returns the most recently received SystemEvent thread-safely."""
         return self._state.get_system_event()
 
-    def get_latest_hw_control(self) -> Optional[HWControlCommand]:
+    def get_latest_hw_control(self) -> HWControlCommand | None:
         """Returns the most recently received HWControlCommand thread-safely."""
         return self._state.get_hw_control()
 
-    def get_latest_weather_control(self) -> Optional[WeatherControlCommand]:
+    def get_latest_weather_control(self) -> WeatherControlCommand | None:
         """Returns the most recently received WeatherControlCommand thread-safely."""
         return self._state.get_weather_control()
 
@@ -212,8 +208,8 @@ class IsiMotorClient:
         control_name: str,
         control_value: float = 1.0,
         duration_ms: int = 50,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
+        host: str | None = None,
+        port: int | None = None,
     ) -> bool:
         """
         Transmits a hardware / pit menu control command (SIMP Type 100) to the game plugin.
@@ -234,10 +230,10 @@ class IsiMotorClient:
 
     def send_pit_action(
         self,
-        action: Union[PitAction, str],
+        action: PitAction | str,
         duration_ms: int = 50,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
+        host: str | None = None,
+        port: int | None = None,
     ) -> bool:
         """
         Convenience helper to send pit menu navigation actions (Up, Down, Prev, Next, Select).
@@ -259,8 +255,8 @@ class IsiMotorClient:
         wind_direction: float = 0.0,
         min_path_wetness: float = 0.0,
         max_path_wetness: float = 0.0,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
+        host: str | None = None,
+        port: int | None = None,
     ) -> bool:
         """
         Injects dynamic weather and ambient environmental conditions (SIMP Type 101) into the game session.
@@ -291,120 +287,120 @@ class IsiMotorClient:
 
     # ── Extensible Event Dispatching (Open/Closed Principle) ───────────────────
 
-    def subscribe(self, packet_cls: Type, callback: PacketCallback) -> None:
+    def subscribe(self, packet_cls: type, callback: PacketCallback) -> None:
         """Subscribes a callback to a specific packet type."""
         self._dispatcher.subscribe(packet_cls, callback)
 
-    def unsubscribe(self, packet_cls: Type, callback: PacketCallback) -> None:
+    def unsubscribe(self, packet_cls: type, callback: PacketCallback) -> None:
         """Unsubscribes a callback from a specific packet type."""
         self._dispatcher.unsubscribe(packet_cls, callback)
 
-    def register_decoder(self, packet_type: int, decoder: Callable[[bytes], Optional[AnyPacket]]) -> None:
+    def register_decoder(self, packet_type: int, decoder: Callable[[bytes], AnyPacket | None]) -> None:
         """Registers or overrides a payload decoder for a given packet type."""
         self._decoder_registry.register(packet_type, decoder)
 
     # ── Property Delegations for Direct Callbacks ──────────────────────────────
 
     @property
-    def on_telemetry(self) -> Optional[Callable[[TelemInfo], None]]:
+    def on_telemetry(self) -> Callable[[TelemInfo], None] | None:
         return self._dispatcher.on_telemetry
 
     @on_telemetry.setter
-    def on_telemetry(self, value: Optional[Callable[[TelemInfo], None]]) -> None:
+    def on_telemetry(self, value: Callable[[TelemInfo], None] | None) -> None:
         self._dispatcher.on_telemetry = value
 
     @property
-    def on_scoring(self) -> Optional[Callable[[CompactScoring], None]]:
+    def on_scoring(self) -> Callable[[CompactScoring], None] | None:
         return self._dispatcher.on_scoring
 
     @on_scoring.setter
-    def on_scoring(self, value: Optional[Callable[[CompactScoring], None]]) -> None:
+    def on_scoring(self, value: Callable[[CompactScoring], None] | None) -> None:
         self._dispatcher.on_scoring = value
 
     @property
-    def on_full_scoring(self) -> Optional[Callable[[FullScoringSession], None]]:
+    def on_full_scoring(self) -> Callable[[FullScoringSession], None] | None:
         return self._dispatcher.on_full_scoring
 
     @on_full_scoring.setter
-    def on_full_scoring(self, value: Optional[Callable[[FullScoringSession], None]]) -> None:
+    def on_full_scoring(self, value: Callable[[FullScoringSession], None] | None) -> None:
         self._dispatcher.on_full_scoring = value
 
     @property
-    def on_track_rules(self) -> Optional[Callable[[TrackRulesSession], None]]:
+    def on_track_rules(self) -> Callable[[TrackRulesSession], None] | None:
         return self._dispatcher.on_track_rules
 
     @on_track_rules.setter
-    def on_track_rules(self, value: Optional[Callable[[TrackRulesSession], None]]) -> None:
+    def on_track_rules(self, value: Callable[[TrackRulesSession], None] | None) -> None:
         self._dispatcher.on_track_rules = value
 
     @property
-    def on_pit_menu(self) -> Optional[Callable[[PitMenu], None]]:
+    def on_pit_menu(self) -> Callable[[PitMenu], None] | None:
         return self._dispatcher.on_pit_menu
 
     @on_pit_menu.setter
-    def on_pit_menu(self, value: Optional[Callable[[PitMenu], None]]) -> None:
+    def on_pit_menu(self, value: Callable[[PitMenu], None] | None) -> None:
         self._dispatcher.on_pit_menu = value
 
     @property
-    def on_weather(self) -> Optional[Callable[[WeatherControl], None]]:
+    def on_weather(self) -> Callable[[WeatherControl], None] | None:
         return self._dispatcher.on_weather
 
     @on_weather.setter
-    def on_weather(self, value: Optional[Callable[[WeatherControl], None]]) -> None:
+    def on_weather(self, value: Callable[[WeatherControl], None] | None) -> None:
         self._dispatcher.on_weather = value
 
     @property
-    def on_extended_state(self) -> Optional[Callable[[ExtendedState], None]]:
+    def on_extended_state(self) -> Callable[[ExtendedState], None] | None:
         return self._dispatcher.on_extended_state
 
     @on_extended_state.setter
-    def on_extended_state(self, value: Optional[Callable[[ExtendedState], None]]) -> None:
+    def on_extended_state(self, value: Callable[[ExtendedState], None] | None) -> None:
         self._dispatcher.on_extended_state = value
 
     @property
-    def on_force_feedback(self) -> Optional[Callable[[ForceFeedback], None]]:
+    def on_force_feedback(self) -> Callable[[ForceFeedback], None] | None:
         return self._dispatcher.on_force_feedback
 
     @on_force_feedback.setter
-    def on_force_feedback(self, value: Optional[Callable[[ForceFeedback], None]]) -> None:
+    def on_force_feedback(self, value: Callable[[ForceFeedback], None] | None) -> None:
         self._dispatcher.on_force_feedback = value
 
     @property
-    def on_graphics(self) -> Optional[Callable[[Graphics], None]]:
+    def on_graphics(self) -> Callable[[Graphics], None] | None:
         return self._dispatcher.on_graphics
 
     @on_graphics.setter
-    def on_graphics(self, value: Optional[Callable[[Graphics], None]]) -> None:
+    def on_graphics(self, value: Callable[[Graphics], None] | None) -> None:
         self._dispatcher.on_graphics = value
 
     @property
-    def on_system_event(self) -> Optional[Callable[[SystemEvent], None]]:
+    def on_system_event(self) -> Callable[[SystemEvent], None] | None:
         return self._dispatcher.on_system_event
 
     @on_system_event.setter
-    def on_system_event(self, value: Optional[Callable[[SystemEvent], None]]) -> None:
+    def on_system_event(self, value: Callable[[SystemEvent], None] | None) -> None:
         self._dispatcher.on_system_event = value
 
     @property
-    def on_hw_control(self) -> Optional[Callable[[HWControlCommand], None]]:
+    def on_hw_control(self) -> Callable[[HWControlCommand], None] | None:
         return self._dispatcher.on_hw_control
 
     @on_hw_control.setter
-    def on_hw_control(self, value: Optional[Callable[[HWControlCommand], None]]) -> None:
+    def on_hw_control(self, value: Callable[[HWControlCommand], None] | None) -> None:
         self._dispatcher.on_hw_control = value
 
     @property
-    def on_weather_control(self) -> Optional[Callable[[WeatherControlCommand], None]]:
+    def on_weather_control(self) -> Callable[[WeatherControlCommand], None] | None:
         return self._dispatcher.on_weather_control
 
     @on_weather_control.setter
-    def on_weather_control(self, value: Optional[Callable[[WeatherControlCommand], None]]) -> None:
+    def on_weather_control(self, value: Callable[[WeatherControlCommand], None] | None) -> None:
         self._dispatcher.on_weather_control = value
 
     @property
-    def on_packet(self) -> Optional[Callable[[AnyPacket], None]]:
+    def on_packet(self) -> Callable[[AnyPacket], None] | None:
         return self._dispatcher.on_packet
 
     @on_packet.setter
-    def on_packet(self, value: Optional[Callable[[AnyPacket], None]]) -> None:
+    def on_packet(self, value: Callable[[AnyPacket], None] | None) -> None:
         self._dispatcher.on_packet = value

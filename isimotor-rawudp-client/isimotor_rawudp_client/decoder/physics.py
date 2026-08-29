@@ -3,12 +3,12 @@ Extended game state, physics options, and damage decoder.
 """
 
 import struct
-from typing import Optional
+
 from ..constants import EXTENDED_STATE_SIZE, EXTENDED_STATE_STRUCT
-from ..models import PhysicsOptions, ExtendedState
+from ..models import ExtendedState, PhysicsOptions
 
 
-def decode_extended_state(data: bytes, offset: int = 0) -> Optional[ExtendedState]:
+def decode_extended_state(data: bytes, offset: int = 0) -> ExtendedState | None:
     """Decodes a 68-byte ExtendedState packet (Type 8)."""
     if len(data) - offset < EXTENDED_STATE_SIZE:
         return None

@@ -1,6 +1,8 @@
-# isiMotor Telemetry Raw Packet Explorer & Benchmark (Textual TUI)
+# isiMotor RawUDP Manager & Telemetry Diagnostics (Textual TUI)
 
-Modern, interactive terminal raw data inspector built with **[Textual](https://textual.textualize.io/)** for **Le Mans Ultimate** and **rFactor 2** binary telemetry streams.
+Modern, interactive terminal telemetry diagnostics, stream inspector, and automated plugin installer for **Le Mans Ultimate** and **rFactor 2**.
+
+Packaged and distributed as a standalone application using **[Briefcase](https://briefcase.readthedocs.io/)** / **[Textual](https://textual.textualize.io/)**.
 
 ---
 
@@ -20,14 +22,17 @@ Modern, interactive terminal raw data inspector built with **[Textual](https://t
   * `🔧 Physics & Aids` : 22 driving aids, session damage tracking, pit limiter.
   * `🔔 Events (6 B)` : System state transitions (Enter/Exit Realtime, Start/End Session).
   * `🎮 Inbound Tester` : Interactive keyboard commands (`U`/`D`/`L`/`R`/`Enter`/`W`) for pit navigation and weather overrides.
+  * `⚙️ Config JSON` : Auto-detected Steam game paths (LMU / rF2), DLL status, active `CustomPluginVariables.JSON` & `Settings.JSON`.
   * `📊 Stream Rates` : Real-time reception frequency (Hz), average delay (ms), jitter (±ms), and bandwidth (KB/s).
 * **Search & Filter Bar:**
   * Real-time instant filtering by field key, value, or description (press `/` to focus).
-* **One-Click Clipboard Export:**
+* **One-Click Actions & Clipboard Export:**
+  * `📦 Copier DLL` (`k` key) : Automatically copies `isiMotor_RawUDP.dll` to detected game folders and configures default JSON profiles.
   * `📋 Copy JSON` (`c` key) : Exports full active packet dictionary to clipboard in pretty-printed JSON.
   * `📑 Copy Table` (`t` key) : Exports visible/filtered key-value-desc rows in TSV table format.
 * **Keyboard Shortcuts:**
-  * `1` - `0`, `i` : Switch packet explorer tabs.
+  * `1` - `0`, `i`, `p` : Switch packet explorer and config tabs.
+  * `k` : Copy and install compiled DLL into detected games.
   * `/` : Focus search filter bar.
   * `c` : Copy active packet as JSON.
   * `t` : Copy active table as TSV.
@@ -39,11 +44,15 @@ Modern, interactive terminal raw data inspector built with **[Textual](https://t
 ## 🛠️ Usage
 
 ```bash
-# Listen to live game telemetry on default port 5000:
+# Launch interactive TUI explorer:
 python sniffer.py
+# or after installing benchmark package:
+isi-benchmark
 
-# Listen on custom host/port:
-python sniffer.py --host 0.0.0.0 --port 5000
+# Run game detector & plugin installer:
+python install_plugin.py
+# or via entrypoint:
+isi-install --status
 ```
 
 

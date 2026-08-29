@@ -2,11 +2,11 @@
 Non-blocking UDP receiver thread and socket transport.
 """
 
-import socket
 import select
+import socket
 import threading
 import time
-from typing import Optional, Callable
+from collections.abc import Callable
 
 DataReceivedCallback = Callable[[bytes, float], None]
 
@@ -19,10 +19,10 @@ class UdpReceiver:
     def __init__(self, host: str = "0.0.0.0", port: int = 5000) -> None:
         self.host = host
         self.port = port
-        self._socket: Optional[socket.socket] = None
-        self._thread: Optional[threading.Thread] = None
+        self._socket: socket.socket | None = None
+        self._thread: threading.Thread | None = None
         self._running = False
-        self._on_data_received: Optional[DataReceivedCallback] = None
+        self._on_data_received: DataReceivedCallback | None = None
 
     @property
     def is_running(self) -> bool:
@@ -41,9 +41,7 @@ class UdpReceiver:
         self._socket.setblocking(False)
         self._socket.bind((self.host, self.port))
 
-        self._thread = threading.Thread(
-            target=self._listen_loop, daemon=True, name="IsiMotorUdpReceiver"
-        )
+        self._thread = threading.Thread(target=self._listen_loop, daemon=True, name="IsiMotorUdpReceiver")
         self._thread.start()
 
     def stop(self) -> None:
@@ -77,7 +75,7 @@ class UdpReceiver:
                             now = time.time()
                             if self._on_data_received:
                                 self._on_data_received(data, now)
-                        except (BlockingIOError, socket.error):
+                        except (OSError, BlockingIOError):
                             break
             except Exception:
                 if not self._running:

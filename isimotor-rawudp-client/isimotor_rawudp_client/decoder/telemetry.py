@@ -3,9 +3,9 @@ High-frequency vehicle telemetry (TelemInfoV01) and wheel decoder.
 """
 
 import struct
-from typing import Optional
+
 from ..constants import TELEMINFO_SIZE
-from ..models import TelemVect3, TelemWheel, TelemInfo
+from ..models import TelemInfo, TelemVect3, TelemWheel
 from .base import _decode_string
 
 
@@ -76,7 +76,7 @@ def decode_wheel(data: bytes, offset: int) -> TelemWheel:
     )
 
 
-def decode_telemetry(data: bytes, offset: int = 0) -> Optional[TelemInfo]:
+def decode_telemetry(data: bytes, offset: int = 0) -> TelemInfo | None:
     """Decodes a 1888-byte native TelemInfoV01 memory dump."""
     if len(data) - offset < TELEMINFO_SIZE:
         return None

@@ -1,23 +1,29 @@
-.PHONY: help all build cross test benchmark install uninstall status info clean
+.PHONY: help all build cross test benchmark install uninstall status info clean lint format typecheck check
 
 BUILD_DIR = build
 BIN_DIR   = bin
 
-# Autonomous Python resolution (uses benchmark's dedicated .venv)
-VENV_PYTHON = $(shell if [ -x benchmark/.venv/bin/python ]; then echo "benchmark/.venv/bin/python"; \
+# Autonomous Python & UV resolution
+VENV_PYTHON = $(shell if [ -x isimotor-rawudp-manager/.venv/bin/python ]; then echo "isimotor-rawudp-manager/.venv/bin/python"; \
                elif [ -x .venv/bin/python ]; then echo ".venv/bin/python"; \
                else echo "python3"; fi)
 PYTHON ?= $(VENV_PYTHON)
+UV ?= $(shell which uv 2>/dev/null || if [ -x $$HOME/.local/bin/uv ]; then echo "$$HOME/.local/bin/uv"; else echo "uv"; fi)
 
 help:
 	@echo "=================================================================="
 	@echo "  🏎️  isiMotor-RawUDP-Plugin — Build & Tooling Menu"
 	@echo "=================================================================="
 	@echo "  make                - Display this help menu"
+	@echo "  make lint           - Run Ruff fast static linter"
+	@echo "  make format         - Auto-format codebase with Ruff"
+	@echo "  make typecheck      - Run Mypy strict static type checker"
+	@echo "  make check          - Run all static checks (lint + typecheck + test)"
+	@echo "  make test           - Run full C++ mock & golden dataset integration tests"
 	@echo "  make cross          - Cross-compile DLL using MinGW-w64 (on Linux)"
 	@echo "  make build          - Native compile DLL (on Windows MSVC / MinGW)"
-	@echo "  make test           - Run full C++ mock & golden dataset integration tests"
-	@echo "  make benchmark      - Run live Textual UDP packet sniffer & protocol inspector"
+	@echo "  make manager        - Run live Textual telemetry diagnostics & manager"
+	@echo "  make benchmark      - Alias for 'make manager'"
 	@echo "  make install        - Install plugin DLL into Le Mans Ultimate / rFactor 2"
 	@echo "  make uninstall      - Remove plugin DLL from detected game installations"
 	@echo "  make status         - Display detected game installations & plugin status"
@@ -27,38 +33,55 @@ help:
 
 all: help
 
+lint:
+	@echo "==> Running Ruff static linter..."
+	@$(UV) run --with ruff ruff check .
+
+format:
+	@echo "==> Auto-formatting codebase with Ruff..."
+	@$(UV) run --with ruff ruff format .
+
+typecheck:
+	@echo "==> Running Mypy static type checker..."
+	@$(UV) run --with mypy --with textual --with rich mypy
+
+check: lint typecheck test
+	@echo "==> All static analysis checks and test suites passed successfully!"
+
 test:
 	@echo "==> Building C++ mock host and running integration tests..."
 	@make -C tests/cpp_mock --silent
 	@./tests/cpp_mock/isi_mock_host --dump-truth tests/golden
-	@PYTHONPATH=isimotor-rawudp-client $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v
+	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v
 
 cross:
 	@echo "==> Cross-compiling isiMotor_RawUDP.dll with MinGW..."
 	@mkdir -p $(BUILD_DIR)
-	cmake -B $(BUILD_DIR) -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake -DCMAKE_BUILD_TYPE=Release
+	cmake -S isimotor-rawudp-plugin -B $(BUILD_DIR) -DCMAKE_TOOLCHAIN_FILE=isimotor-rawudp-plugin/toolchain.cmake -DCMAKE_BUILD_TYPE=Release
 	cmake --build $(BUILD_DIR) --config Release
 	@echo "==> Build complete: $(BUILD_DIR)/isiMotor_RawUDP.dll"
 
 build:
 	@echo "==> Compiling isiMotor_RawUDP.dll natively..."
 	@mkdir -p $(BUILD_DIR)
-	cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
+	cmake -S isimotor-rawudp-plugin -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
 	cmake --build $(BUILD_DIR) --config Release
 	@echo "==> Build complete: $(BUILD_DIR)/isiMotor_RawUDP.dll"
 
+manager:
+	@echo "==> Launching isiMotor-RawUDP-Manager on UDP port 5000..."
+	@$(PYTHON) isimotor-rawudp-manager/sniffer.py
+
+benchmark: manager
+
 install:
-	@$(PYTHON) scripts/install_plugin.py
+	@$(PYTHON) isimotor-rawudp-manager/install_plugin.py
 
 uninstall:
-	@$(PYTHON) scripts/install_plugin.py --uninstall
+	@$(PYTHON) isimotor-rawudp-manager/install_plugin.py --uninstall
 
 status:
-	@$(PYTHON) scripts/install_plugin.py --status
-
-benchmark:
-	@echo "==> Launching Textual telemetry sniffer on UDP port 5000..."
-	@$(PYTHON) benchmark/sniffer.py
+	@$(PYTHON) isimotor-rawudp-manager/install_plugin.py --status
 
 info:
 	@echo "=================================================================="

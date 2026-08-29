@@ -3,12 +3,12 @@ Graphics rendering and camera viewpoint packet decoder.
 """
 
 import struct
-from typing import Optional
+
 from ..constants import GRAPHICS_SIZE, GRAPHICS_STRUCT
-from ..models import TelemVect3, Graphics
+from ..models import Graphics, TelemVect3
 
 
-def decode_graphics(data: bytes, offset: int = 0) -> Optional[Graphics]:
+def decode_graphics(data: bytes, offset: int = 0) -> Graphics | None:
     """Decodes a 128-byte Graphics packet (Type 10)."""
     if len(data) - offset < GRAPHICS_SIZE:
         return None

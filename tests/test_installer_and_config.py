@@ -4,18 +4,18 @@ Validates default values injection, game JSON structure, and settings preservati
 """
 
 import json
-import tempfile
 import shutil
+import tempfile
 import unittest
 from pathlib import Path
-from scripts.install_plugin import (
-    configure_game_json,
+
+from isimotor_rawudp_manager.installer import (
     DEFAULT_PLUGIN_VARIABLES,
+    configure_game_json,
 )
 
 
 class TestInstallerAndConfig(unittest.TestCase):
-
     def setUp(self):
         self.test_dir = Path(tempfile.mkdtemp(prefix="isimotor_install_test_"))
 
@@ -83,8 +83,8 @@ class TestInstallerAndConfig(unittest.TestCase):
             "isiMotor_RawUDP": {
                 " Enabled": 1,
                 "TargetIP": "239.255.0.1",  # User customized to Multicast
-                "TargetPort": "9000",       # User customized to Port 9000
-                "TelemetryRate": "60Hz",    # User customized to 60Hz
+                "TargetPort": "9000",  # User customized to Port 9000
+                "TelemetryRate": "60Hz",  # User customized to 60Hz
             }
         }
         json_path = player_dir / "CustomPluginVariables.JSON"
@@ -103,6 +103,59 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertEqual(entry["InboundControl"], "Enabled")
         self.assertEqual(entry["FullScoringRate"], "5Hz")
         self.assertEqual(entry["PitMenuRate"], "100Hz")
+
+    def test_get_configuration_overview_and_extract_rows(self):
+        from isimotor_rawudp_manager.installer import (
+            copy_and_install_dll,
+            get_configuration_overview,
+            read_plugin_json_variables,
+        )
+        from isimotor_rawudp_manager.sniffer import extract_config_rows
+
+        # 1. Test read_plugin_json_variables on non-existent file returns defaults
+        non_existent = self.test_dir / "does_not_exist.json"
+        defaults = read_plugin_json_variables(non_existent)
+        self.assertEqual(defaults["TargetIP"], "127.0.0.1")
+        self.assertEqual(defaults["TargetPort"], "5000")
+
+        # 2. Setup mock game directory and fake source DLL
+        game_dir = self.test_dir / "MockGame"
+        game_dir.mkdir(parents=True)
+        fake_dll = self.test_dir / "isiMotor_RawUDP.dll"
+        fake_dll.write_bytes(b"MZ_MOCK_DLL_BINARY")
+
+        # 3. Test copy_and_install_dll with custom dll and target
+        success, msg, installed_paths = copy_and_install_dll(
+            custom_dll=fake_dll,
+            target_dir=game_dir,
+        )
+        self.assertTrue(success, f"copy_and_install_dll failed: {msg}")
+        self.assertGreaterEqual(len(installed_paths), 1)
+
+        # Check files were copied
+        dest_plugin_dll = game_dir / "Plugins" / "isiMotor_RawUDP.dll"
+        self.assertTrue(dest_plugin_dll.exists())
+        self.assertEqual(dest_plugin_dll.read_bytes(), b"MZ_MOCK_DLL_BINARY")
+
+        # 4. Test get_configuration_overview
+        overview = get_configuration_overview(custom_dll=fake_dll, custom_target=game_dir)
+        self.assertTrue(overview["source_dll"]["exists"])
+        self.assertEqual(overview["source_dll"]["size_bytes"], len(b"MZ_MOCK_DLL_BINARY"))
+        self.assertEqual(len(overview["games"]), 1)
+        g = overview["games"][0]
+        self.assertTrue(g["dll_installed"])
+        self.assertTrue(g["json_exists"])
+        self.assertEqual(g["variables"]["TargetIP"], "127.0.0.1")
+
+        # 5. Test extract_config_rows
+        rows = extract_config_rows(overview)
+        self.assertGreaterEqual(len(rows), 15)
+        row_keys = [r[0] for r in rows]
+        self.assertIn("dll.status", row_keys)
+        self.assertIn("config.TargetIP", row_keys)
+        self.assertIn("config.TargetPort", row_keys)
+        self.assertIn("config.TelemetryRate", row_keys)
+        self.assertIn("hotreload.architecture", row_keys)
 
 
 if __name__ == "__main__":

@@ -91,9 +91,7 @@ client.on_extended_state = lambda e: print(
 )
 
 # Ultra-High-Rate FFB (400Hz)
-client.on_force_feedback = lambda f: print(
-    f"FFB Torque: {f.percentage:.1f}% ({f.force_value:+.3f})"
-)
+client.on_force_feedback = lambda f: print(f"FFB Torque: {f.percentage:.1f}% ({f.force_value:+.3f})")
 
 client.start()
 ```

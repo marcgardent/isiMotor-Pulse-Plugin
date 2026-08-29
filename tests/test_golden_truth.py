@@ -7,37 +7,30 @@ import json
 import os
 import struct
 import unittest
-from isimotor_rawudp_client.models import (
-    RawUdpHeader,
-    PitAction,
-    HWControlCommand,
-    WeatherControlCommand,
-)
+
+from isimotor_rawudp_client.client import IsiMotorClient
 from isimotor_rawudp_client.decoder import (
-    decode_header,
-    decode_telemetry,
+    HEADER_SIZE,
     decode_compact_scoring,
     decode_full_scoring,
-    decode_system_event,
-    decode_pit_menu,
-    decode_weather,
-    decode_extended_state,
-    decode_force_feedback,
-    decode_graphics,
+    decode_header,
     decode_hw_control,
+    decode_packet,
+    decode_system_event,
+    decode_telemetry,
     decode_weather_control,
     encode_hw_control,
     encode_weather_control,
-    decode_packet,
-    HEADER_SIZE,
 )
-from isimotor_rawudp_client.client import IsiMotorClient
+from isimotor_rawudp_client.models import (
+    HWControlCommand,
+    WeatherControlCommand,
+)
 
 GOLDEN_DIR = os.path.join(os.path.dirname(__file__), "golden")
 
 
 class TestGoldenTruth(unittest.TestCase):
-
     def test_telemetry_golden_decoding(self):
         bin_path = os.path.join(GOLDEN_DIR, "telemetry_golden.bin")
         json_path = os.path.join(GOLDEN_DIR, "telemetry_golden.json")
@@ -47,7 +40,7 @@ class TestGoldenTruth(unittest.TestCase):
 
         with open(bin_path, "rb") as f:
             data = f.read()
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
         self.assertEqual(len(data), 1888, f"Expected 1888 bytes, got {len(data)}")
@@ -113,7 +106,7 @@ class TestGoldenTruth(unittest.TestCase):
 
         with open(bin_path, "rb") as f:
             data = f.read()
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
         self.assertEqual(len(data), 168, f"Expected 168 bytes, got {len(data)}")
@@ -140,7 +133,7 @@ class TestGoldenTruth(unittest.TestCase):
 
         with open(bin_path, "rb") as f:
             data = f.read()
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
         expected_size = 284 + 3 * 584
@@ -203,15 +196,13 @@ class TestGoldenTruth(unittest.TestCase):
 
         with open(bin_path, "rb") as f:
             data = f.read()
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
         expected_size = 192 + 3 * 140
         self.assertEqual(len(data), expected_size, f"Expected {expected_size} bytes, got {len(data)}")
 
-        rules = decode_packet(
-            struct.pack("<4sBBHIdBBH", b"SIMP", 1, 5, len(data), 1, 1250.456, 0, 1, 3) + data
-        )
+        rules = decode_packet(struct.pack("<4sBBHIdBBH", b"SIMP", 1, 5, len(data), 1, 1250.456, 0, 1, 3) + data)
         self.assertIsNotNone(rules, "Track rules decode returned None")
 
         self.assertEqual(rules.stage, truth["stage"])
@@ -264,13 +255,11 @@ class TestGoldenTruth(unittest.TestCase):
 
         with open(bin_path, "rb") as f:
             data = f.read()
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
         self.assertEqual(len(data), 76)
-        pit = decode_packet(
-            struct.pack("<4sBBHIdBBH", b"SIMP", 1, 6, 76, 10, 0.0, 0, 1, 0) + data
-        )
+        pit = decode_packet(struct.pack("<4sBBHIdBBH", b"SIMP", 1, 6, 76, 10, 0.0, 0, 1, 0) + data)
         self.assertIsNotNone(pit)
         self.assertEqual(pit.category_index, truth["category_index"])
         self.assertEqual(pit.category_name, truth["category_name"])
@@ -288,19 +277,18 @@ class TestGoldenTruth(unittest.TestCase):
 
         with open(bin_path, "rb") as f:
             data = f.read()
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
         self.assertEqual(len(data), 108)
-        w = decode_packet(
-            struct.pack("<4sBBHIdBBH", b"SIMP", 1, 7, 108, 11, 1250.456, 0, 1, 0) + data
-        )
+        w = decode_packet(struct.pack("<4sBBHIdBBH", b"SIMP", 1, 7, 108, 11, 1250.456, 0, 1, 0) + data)
         self.assertIsNotNone(w)
         self.assertAlmostEqual(w.et, truth["et"], places=3)
         self.assertAlmostEqual(w.cloudiness, truth["cloudiness"], places=2)
         self.assertAlmostEqual(w.ambient_temp_k, truth["ambient_temp_k"], places=2)
         self.assertAlmostEqual(w.ambient_temp_c, 24.5, places=1)
         self.assertAlmostEqual(w.wind_max_speed, truth["wind_max_speed"], places=2)
+
     def test_extended_state_golden_decoding(self):
         bin_path = os.path.join(GOLDEN_DIR, "extended_golden.bin")
         json_path = os.path.join(GOLDEN_DIR, "extended_golden.json")
@@ -310,13 +298,11 @@ class TestGoldenTruth(unittest.TestCase):
 
         with open(bin_path, "rb") as f:
             data = f.read()
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
         self.assertEqual(len(data), 68)
-        ext = decode_packet(
-            struct.pack("<4sBBHIdBBH", b"SIMP", 1, 8, 68, 20, 125.456, 0, 1, 0) + data
-        )
+        ext = decode_packet(struct.pack("<4sBBHIdBBH", b"SIMP", 1, 8, 68, 20, 125.456, 0, 1, 0) + data)
         self.assertIsNotNone(ext)
         self.assertEqual(ext.physics.traction_control, truth["traction_control"])
         self.assertEqual(ext.physics.traction_control_str, "Medium")
@@ -343,13 +329,11 @@ class TestGoldenTruth(unittest.TestCase):
 
         with open(bin_path, "rb") as f:
             data = f.read()
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
         self.assertEqual(len(data), 8)
-        ffb = decode_packet(
-            struct.pack("<4sBBHIdBBH", b"SIMP", 1, 9, 8, 30, 0.0, 0, 1, 0) + data
-        )
+        ffb = decode_packet(struct.pack("<4sBBHIdBBH", b"SIMP", 1, 9, 8, 30, 0.0, 0, 1, 0) + data)
         self.assertIsNotNone(ffb)
         self.assertAlmostEqual(ffb.force_value, truth["force_value"], places=4)
         self.assertAlmostEqual(ffb.percentage, 68.5, places=1)
@@ -363,13 +347,11 @@ class TestGoldenTruth(unittest.TestCase):
 
         with open(bin_path, "rb") as f:
             data = f.read()
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
         self.assertEqual(len(data), 128)
-        gfx = decode_packet(
-            struct.pack("<4sBBHIdBBH", b"SIMP", 1, 10, 128, 40, 0.0, 0, 1, 42) + data
-        )
+        gfx = decode_packet(struct.pack("<4sBBHIdBBH", b"SIMP", 1, 10, 128, 40, 0.0, 0, 1, 42) + data)
         self.assertIsNotNone(gfx)
         self.assertAlmostEqual(gfx.cam_pos.x, truth["cam_pos"][0], places=2)
         self.assertAlmostEqual(gfx.cam_pos.y, truth["cam_pos"][1], places=2)
@@ -433,7 +415,7 @@ class TestGoldenTruth(unittest.TestCase):
             full_data = f.read()
 
         client = IsiMotorClient()
-        chunk_size = 300 # Split 612 bytes into 3 chunks of 300, 300, 12 bytes
+        chunk_size = 300  # Split 612 bytes into 3 chunks of 300, 300, 12 bytes
         total_chunks = (len(full_data) + chunk_size - 1) // chunk_size
 
         chunks = []
@@ -471,7 +453,7 @@ class TestGoldenTruth(unittest.TestCase):
 
         with open(bin_path, "rb") as f:
             data = f.read()
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
         self.assertEqual(len(data), 44)
@@ -501,7 +483,7 @@ class TestGoldenTruth(unittest.TestCase):
 
         with open(bin_path, "rb") as f:
             data = f.read()
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
         self.assertEqual(len(data), 64)

@@ -2,11 +2,10 @@
 System state event packet decoder.
 """
 
-from typing import Optional
 from ..models import SystemEvent
 
 
-def decode_system_event(data: bytes, offset: int = 0) -> Optional[SystemEvent]:
+def decode_system_event(data: bytes, offset: int = 0) -> SystemEvent | None:
     """Decodes a 6-byte SIMP Type 3 system event packet."""
     if len(data) - offset < 2:
         return None

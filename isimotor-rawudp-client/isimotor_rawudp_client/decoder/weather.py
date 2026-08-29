@@ -3,12 +3,12 @@ Environmental conditions and weather grid decoder.
 """
 
 import struct
-from typing import Optional
+
 from ..constants import WEATHER_SIZE, WEATHER_STRUCT
 from ..models import WeatherControl
 
 
-def decode_weather(data: bytes, offset: int = 0) -> Optional[WeatherControl]:
+def decode_weather(data: bytes, offset: int = 0) -> WeatherControl | None:
     """Decodes a 108-byte WeatherControl packet (Type 7)."""
     if len(data) - offset < WEATHER_SIZE:
         return None

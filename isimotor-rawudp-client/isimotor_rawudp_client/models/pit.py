@@ -11,6 +11,7 @@ class PitMenu:
     """
     Live in-car pit stop menu state (SIMP Type 6, 76 bytes).
     """
+
     category_index: int = 0
     category_name: str = ""
     choice_index: int = 0
@@ -24,6 +25,7 @@ class PitMenu:
 
 class PitAction(str, Enum):
     """Convenience pit menu navigation actions for button boxes / Stream Deck."""
+
     MENU_UP = "PitMenuUp"
     MENU_DOWN = "PitMenuDown"
     MENU_PREV = "PitMenuPrev"

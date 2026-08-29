@@ -3,18 +3,18 @@ Standardized SIMP packet header decoder and encoder.
 """
 
 import struct
-from typing import Optional
+
 from ..constants import HEADER_SIZE, HEADER_STRUCT
 from ..models import RawUdpHeader
 
 
-def decode_header(data: bytes) -> Optional[RawUdpHeader]:
+def decode_header(data: bytes) -> RawUdpHeader | None:
     """Decodes 24-byte standardized SIMP protocol header."""
     if len(data) < HEADER_SIZE or not data.startswith(b"SIMP"):
         return None
 
-    magic, ver, pkt_type, payload_sz, seq, session_et, chunk_idx, total_chunks, sub_id = (
-        struct.unpack_from(HEADER_STRUCT, data, 0)
+    magic, ver, pkt_type, payload_sz, seq, session_et, chunk_idx, total_chunks, sub_id = struct.unpack_from(
+        HEADER_STRUCT, data, 0
     )
     return RawUdpHeader(
         magic=magic,

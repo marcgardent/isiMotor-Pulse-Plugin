@@ -4,9 +4,9 @@ Outbound UDP command transmitter for hardware controls, pit menu actions, and we
 
 import socket
 import threading
-from typing import Optional, Union
-from ..models import PitAction
+
 from ..decoder.commands import encode_hw_control, encode_weather_control
+from ..models import PitAction
 
 
 class UdpSender:
@@ -30,8 +30,8 @@ class UdpSender:
         control_name: str,
         control_value: float = 1.0,
         duration_ms: int = 50,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
+        host: str | None = None,
+        port: int | None = None,
     ) -> bool:
         """
         Transmits a hardware / pit menu control command (SIMP Type 100) to the game plugin.
@@ -58,10 +58,10 @@ class UdpSender:
 
     def send_pit_action(
         self,
-        action: Union[PitAction, str],
+        action: PitAction | str,
         duration_ms: int = 50,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
+        host: str | None = None,
+        port: int | None = None,
     ) -> bool:
         """
         Convenience helper to send pit menu navigation actions (Up, Down, Prev, Next, Select).
@@ -85,8 +85,8 @@ class UdpSender:
         wind_direction: float = 0.0,
         min_path_wetness: float = 0.0,
         max_path_wetness: float = 0.0,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
+        host: str | None = None,
+        port: int | None = None,
     ) -> bool:
         """
         Injects dynamic weather and ambient environmental conditions (SIMP Type 101) into the game session.

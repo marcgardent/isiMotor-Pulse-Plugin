@@ -2,19 +2,21 @@
 Event dispatching layer for routing typed telemetry & scoring packets to callbacks.
 """
 
-from typing import Optional, Callable, Dict, List, Type, Any, Union
+from collections.abc import Callable
+from typing import Any
+
 from ..models import (
-    TelemInfo,
     CompactScoring,
-    FullScoringSession,
-    TrackRulesSession,
-    PitMenu,
-    WeatherControl,
     ExtendedState,
     ForceFeedback,
+    FullScoringSession,
     Graphics,
-    SystemEvent,
     HWControlCommand,
+    PitMenu,
+    SystemEvent,
+    TelemInfo,
+    TrackRulesSession,
+    WeatherControl,
     WeatherControlCommand,
 )
 
@@ -28,30 +30,30 @@ class EventDispatcher:
 
     def __init__(self) -> None:
         # Standard callback attributes for direct property access
-        self.on_telemetry: Optional[Callable[[TelemInfo], None]] = None
-        self.on_scoring: Optional[Callable[[CompactScoring], None]] = None
-        self.on_full_scoring: Optional[Callable[[FullScoringSession], None]] = None
-        self.on_track_rules: Optional[Callable[[TrackRulesSession], None]] = None
-        self.on_pit_menu: Optional[Callable[[PitMenu], None]] = None
-        self.on_weather: Optional[Callable[[WeatherControl], None]] = None
-        self.on_extended_state: Optional[Callable[[ExtendedState], None]] = None
-        self.on_force_feedback: Optional[Callable[[ForceFeedback], None]] = None
-        self.on_graphics: Optional[Callable[[Graphics], None]] = None
-        self.on_system_event: Optional[Callable[[SystemEvent], None]] = None
-        self.on_hw_control: Optional[Callable[[HWControlCommand], None]] = None
-        self.on_weather_control: Optional[Callable[[WeatherControlCommand], None]] = None
-        self.on_packet: Optional[Callable[[Any], None]] = None
+        self.on_telemetry: Callable[[TelemInfo], None] | None = None
+        self.on_scoring: Callable[[CompactScoring], None] | None = None
+        self.on_full_scoring: Callable[[FullScoringSession], None] | None = None
+        self.on_track_rules: Callable[[TrackRulesSession], None] | None = None
+        self.on_pit_menu: Callable[[PitMenu], None] | None = None
+        self.on_weather: Callable[[WeatherControl], None] | None = None
+        self.on_extended_state: Callable[[ExtendedState], None] | None = None
+        self.on_force_feedback: Callable[[ForceFeedback], None] | None = None
+        self.on_graphics: Callable[[Graphics], None] | None = None
+        self.on_system_event: Callable[[SystemEvent], None] | None = None
+        self.on_hw_control: Callable[[HWControlCommand], None] | None = None
+        self.on_weather_control: Callable[[WeatherControlCommand], None] | None = None
+        self.on_packet: Callable[[Any], None] | None = None
 
         # Dynamic type-based listeners (Open/Closed principle)
-        self._listeners: Dict[Type, List[PacketCallback]] = {}
+        self._listeners: dict[type, list[PacketCallback]] = {}
 
-    def subscribe(self, packet_cls: Type, callback: PacketCallback) -> None:
+    def subscribe(self, packet_cls: type, callback: PacketCallback) -> None:
         """Subscribes a callback to a specific packet class type."""
         if packet_cls not in self._listeners:
             self._listeners[packet_cls] = []
         self._listeners[packet_cls].append(callback)
 
-    def unsubscribe(self, packet_cls: Type, callback: PacketCallback) -> None:
+    def unsubscribe(self, packet_cls: type, callback: PacketCallback) -> None:
         """Unsubscribes a callback from a specific packet class type."""
         if packet_cls in self._listeners and callback in self._listeners[packet_cls]:
             self._listeners[packet_cls].remove(callback)

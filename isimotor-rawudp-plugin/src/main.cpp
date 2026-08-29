@@ -69,7 +69,7 @@ struct WSADATA {};
 #define WSACleanup() ((void)0)
 #endif
 
-#include "include/InternalsPlugin.hpp"
+#include "InternalsPlugin.hpp"
 
 #define PLUGIN_NAME "isiMotor-RawUDP"
 #define DEFAULT_UDP_PORT 5000
@@ -679,17 +679,64 @@ public:
             }
         }
         else if (std::strcmp(var.mCaption, "InboundControl") == 0) {
+            bool oldVal = config.enableInboundControl;
             if (cleanStr[0] != '\0') {
                 config.enableInboundControl = ParseBoolString(cleanStr, true);
             } else {
                 config.enableInboundControl = (var.mCurrentSetting != 0);
             }
+            if (initialized && oldVal != config.enableInboundControl) {
+                if (!config.enableInboundControl && inboundSocket != INVALID_SOCKET) {
+                    closesocket(inboundSocket);
+                    inboundSocket = INVALID_SOCKET;
+                } else if (config.enableInboundControl && inboundSocket == INVALID_SOCKET) {
+                    inboundSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+                    if (inboundSocket != INVALID_SOCKET) {
+                        int reuse = 1;
+                        setsockopt(inboundSocket, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+#ifdef _WIN32
+                        u_long nonBlocking = 1;
+                        ioctlsocket(inboundSocket, FIONBIO, &nonBlocking);
+#else
+                        int flags = fcntl(inboundSocket, F_GETFL, 0);
+                        fcntl(inboundSocket, F_SETFL, flags | O_NONBLOCK);
+#endif
+                        inboundAddr.sin_family = AF_INET;
+                        inboundAddr.sin_port = htons(static_cast<u_short>(config.inboundPort));
+                        inboundAddr.sin_addr.s_addr = INADDR_ANY;
+                        bind(inboundSocket, reinterpret_cast<const sockaddr*>(&inboundAddr), sizeof(inboundAddr));
+                    }
+                }
+            }
         }
         else if (std::strcmp(var.mCaption, "InboundPort") == 0) {
+            int oldPort = config.inboundPort;
             if (cleanStr[0] != '\0') {
                 config.inboundPort = ParseIntString(cleanStr, 5001);
             } else if (var.mCurrentSetting > 0) {
                 config.inboundPort = static_cast<int>(var.mCurrentSetting);
+            }
+            if (initialized && config.enableInboundControl && oldPort != config.inboundPort) {
+                if (inboundSocket != INVALID_SOCKET) {
+                    closesocket(inboundSocket);
+                    inboundSocket = INVALID_SOCKET;
+                }
+                inboundSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+                if (inboundSocket != INVALID_SOCKET) {
+                    int reuse = 1;
+                    setsockopt(inboundSocket, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+#ifdef _WIN32
+                    u_long nonBlocking = 1;
+                    ioctlsocket(inboundSocket, FIONBIO, &nonBlocking);
+#else
+                    int flags = fcntl(inboundSocket, F_GETFL, 0);
+                    fcntl(inboundSocket, F_SETFL, flags | O_NONBLOCK);
+#endif
+                    inboundAddr.sin_family = AF_INET;
+                    inboundAddr.sin_port = htons(static_cast<u_short>(config.inboundPort));
+                    inboundAddr.sin_addr.s_addr = INADDR_ANY;
+                    bind(inboundSocket, reinterpret_cast<const sockaddr*>(&inboundAddr), sizeof(inboundAddr));
+                }
             }
         }
         else if (std::strcmp(var.mCaption, "TelemetryRate") == 0) {

@@ -1,0 +1,82 @@
+[project]
+name = "isimotor-rawudp-workspace"
+version = "1.4.0"
+description = "High-performance zero-overhead UDP telemetry & scoring plugin for isiMotor (Le Mans Ultimate & rFactor 2) with Python SDK and Textual Manager"
+readme = "README.md"
+authors = [{ name = "Marc GARDENT" }]
+license = "Apache-2.0"
+requires-python = ">=3.8"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+    "isimotor-rawudp-client",
+    "isimotor-rawudp-manager",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+exclude = [
+    ".git",
+    ".venv",
+    "build",
+    "bin",
+    "isimotor-rawudp-plugin",
+    "tests/cpp_mock",
+    "__pycache__",
+    "*.egg-info",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # Ruff-specific rules
+]
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "E402",   # Module level import not at top of file (used for path setup)
+    "SIM105", # Use contextlib.suppress (explicit try-except-pass is preferred for performance in high-freq telemetry)
+    "SIM102", # Nested if statements
+    "SIM112", # Environment variable capitalization
+    "B008",   # Do not perform function calls in argument defaults
+    "RUF012", # Mutable class attributes in dataclasses
+    "UP007",  # Use X | Y for type annotations (kept Union for Python 3.8/3.9 compat)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["isimotor_rawudp_client", "isimotor_rawudp_manager", "scripts", "sniffer", "installer"]
+
+[tool.mypy]
+python_version = "3.10"
+mypy_path = "isimotor-rawudp-client"
+files = [
+    "isimotor-rawudp-client/isimotor_rawudp_client",
+    "isimotor-rawudp-manager/isimotor_rawudp_manager",
+    "isimotor-rawudp-manager/sniffer.py",
+    "isimotor-rawudp-manager/install_plugin.py",
+    "scripts/install_plugin.py",
+]
+warn_return_any = true
+warn_unused_configs = true
+warn_unused_ignores = true
+check_untyped_defs = true
+ignore_missing_imports = true
+show_error_codes = true
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = "isimotor_rawudp_client.*"
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+pythonpath = ["isimotor-rawudp-client", "isimotor-rawudp-manager"]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

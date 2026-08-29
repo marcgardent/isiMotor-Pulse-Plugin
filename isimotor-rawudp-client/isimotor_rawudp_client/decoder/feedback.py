@@ -3,12 +3,12 @@ Steering shaft force feedback packet decoder.
 """
 
 import struct
-from typing import Optional
+
 from ..constants import FORCE_FEEDBACK_SIZE, FORCE_FEEDBACK_STRUCT
 from ..models import ForceFeedback
 
 
-def decode_force_feedback(data: bytes, offset: int = 0) -> Optional[ForceFeedback]:
+def decode_force_feedback(data: bytes, offset: int = 0) -> ForceFeedback | None:
     """Decodes an 8-byte ForceFeedback packet (Type 9)."""
     if len(data) - offset < FORCE_FEEDBACK_SIZE:
         return None

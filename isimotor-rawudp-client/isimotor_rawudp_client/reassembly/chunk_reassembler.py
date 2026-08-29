@@ -3,12 +3,13 @@ Multipart / sliced UDP packet chunk reassembler.
 Handles SIMP protocol chunk joining and stale chunk eviction.
 """
 
-from typing import Optional, Dict, Tuple, Union, Any
+from typing import Any, Union
+
 from ..constants import HEADER_SIZE, PKT_TYPE_FULL_SCORING, PKT_TYPE_TRACK_RULES
-from ..models import FullScoringSession, TrackRulesSession
 from ..decoder.header import decode_header
-from ..decoder.scoring import decode_full_scoring
 from ..decoder.rules import decode_track_rules
+from ..decoder.scoring import decode_full_scoring
+from ..models import FullScoringSession, TrackRulesSession
 
 ReassembledSession = Union[FullScoringSession, TrackRulesSession]
 
@@ -21,10 +22,10 @@ class ChunkReassembler:
     def __init__(self, timeout_seconds: float = 1.0, cleanup_interval_seconds: float = 0.5) -> None:
         self.timeout_seconds = timeout_seconds
         self.cleanup_interval_seconds = cleanup_interval_seconds
-        self._buffers: Dict[Tuple[int, int], Dict[str, Any]] = {}
+        self._buffers: dict[tuple[int, int], dict[str, Any]] = {}
         self._last_cleanup: float = 0.0
 
-    def process(self, data: bytes, now: float) -> Optional[ReassembledSession]:
+    def process(self, data: bytes, now: float) -> ReassembledSession | None:
         """
         Processes a raw UDP frame. If it is a multipart chunk, buffers it and returns
         the decoded fully reassembled session when all chunks have arrived.
@@ -64,11 +65,7 @@ class ChunkReassembler:
 
         # Check if all chunks received
         if len(buf["chunks"]) == buf["total_chunks"]:
-            ordered_slices = [
-                buf["chunks"][i]
-                for i in range(buf["total_chunks"])
-                if i in buf["chunks"]
-            ]
+            ordered_slices = [buf["chunks"][i] for i in range(buf["total_chunks"]) if i in buf["chunks"]]
             del self._buffers[key]
             assembled_payload = b"".join(ordered_slices)
 
@@ -84,11 +81,7 @@ class ChunkReassembler:
         if now - self._last_cleanup < self.cleanup_interval_seconds:
             return
         self._last_cleanup = now
-        stale_keys = [
-            k
-            for k, v in self._buffers.items()
-            if now - v.get("timestamp", 0) > self.timeout_seconds
-        ]
+        stale_keys = [k for k, v in self._buffers.items() if now - v.get("timestamp", 0) > self.timeout_seconds]
         for k in stale_keys:
             del self._buffers[k]
 

@@ -3,17 +3,17 @@ Scoring, timing, and multi-vehicle leaderboard decoders.
 """
 
 import struct
-from typing import Optional, List
+
 from ..constants import (
     COMPACT_SCORING_SIZE,
     FULL_SCORING_SESSION_SIZE,
     VEHICLE_SCORING_SIZE,
 )
-from ..models import TelemVect3, CompactScoring, VehicleScoring, FullScoringSession
+from ..models import CompactScoring, FullScoringSession, TelemVect3, VehicleScoring
 from .base import _decode_string
 
 
-def decode_compact_scoring(data: bytes, offset: int = 0) -> Optional[CompactScoring]:
+def decode_compact_scoring(data: bytes, offset: int = 0) -> CompactScoring | None:
     """Decodes a 168-byte SIMP Type 2 compact scoring packet."""
     if len(data) - offset < COMPACT_SCORING_SIZE:
         return None
@@ -202,7 +202,7 @@ def decode_vehicle_scoring(data: bytes, offset: int = 0) -> VehicleScoring:
     )
 
 
-def decode_full_scoring(data: bytes, offset: int = 0) -> Optional[FullScoringSession]:
+def decode_full_scoring(data: bytes, offset: int = 0) -> FullScoringSession | None:
     """Decodes a FullScoringSession packet along with all embedded vehicle records."""
     if len(data) - offset < FULL_SCORING_SESSION_SIZE:
         return None
@@ -232,7 +232,7 @@ def decode_full_scoring(data: bytes, offset: int = 0) -> Optional[FullScoringSes
     max_path_wetness = struct.unpack_from("<d", data, offset + 268)[0]
     avg_path_wetness = struct.unpack_from("<d", data, offset + 276)[0]
 
-    vehicles: List[VehicleScoring] = []
+    vehicles: list[VehicleScoring] = []
     v_base = offset + FULL_SCORING_SESSION_SIZE
     for i in range(num_vehicles):
         v_offset = v_base + (i * VEHICLE_SCORING_SIZE)

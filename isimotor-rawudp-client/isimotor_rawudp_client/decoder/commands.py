@@ -3,7 +3,7 @@ Inbound hardware control and weather override encoders and decoders.
 """
 
 import struct
-from typing import Optional
+
 from ..constants import (
     HW_CONTROL_COMMAND_SIZE,
     HW_CONTROL_COMMAND_STRUCT,
@@ -33,7 +33,7 @@ def encode_hw_control(
     return payload
 
 
-def decode_hw_control(data: bytes, offset: int = 0) -> Optional[HWControlCommand]:
+def decode_hw_control(data: bytes, offset: int = 0) -> HWControlCommand | None:
     """Decodes a 44-byte HWControlCommand packet (Type 100)."""
     if len(data) - offset < HW_CONTROL_COMMAND_SIZE:
         return None
@@ -77,7 +77,7 @@ def encode_weather_control(
     return payload
 
 
-def decode_weather_control(data: bytes, offset: int = 0) -> Optional[WeatherControlCommand]:
+def decode_weather_control(data: bytes, offset: int = 0) -> WeatherControlCommand | None:
     """Decodes a 64-byte WeatherControlCommand packet (Type 101)."""
     if len(data) - offset < WEATHER_CONTROL_COMMAND_SIZE:
         return None
