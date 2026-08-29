@@ -16,8 +16,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
+*.dist-info/
 dist/
 .venv/
+.briefcase/
+logs/
 .pytest_cache/
 .coverage
 htmlcov/

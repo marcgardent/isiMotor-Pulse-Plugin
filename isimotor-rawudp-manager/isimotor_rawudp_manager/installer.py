@@ -387,10 +387,6 @@ def install_plugin(
             shutil.copy2(src_dll, target_plugin_dll)
             logger.info(f"  ✓ Copied DLL -> {target_plugin_dll}")
 
-            # Also place copy in game root directory for direct loader compatibility
-            root_dll = gdir / src_dll.name
-            shutil.copy2(src_dll, root_dll)
-
             # Configure JSON settings
             configure_game_json(gdir, src_dll.name)
             installed_count += 1

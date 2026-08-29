@@ -342,7 +342,7 @@ struct WeatherControlCommandPacket {
 
 #pragma pack(pop)
 
-// Buffer unsubscription bitmask (rF2SharedMemoryMapPlugin compatibility)
+// Buffer unsubscription bitmask flags
 enum UnsubscribedBufferMaskFlags {
     UNSUB_TELEMETRY      = 1,
     UNSUB_SCORING        = 2,

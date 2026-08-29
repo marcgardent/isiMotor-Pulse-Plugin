@@ -399,11 +399,11 @@ class TestGoldenTruth(unittest.TestCase):
         pkt1 = hdr1 + chunk1_payload
 
         # Process chunk 0 (incomplete)
-        res0 = client._process_chunk(pkt0, 1000.0)
+        res0 = client.reassembler.process(pkt0, 1000.0)
         self.assertIsNone(res0, "Expected None while chunks are incomplete")
 
         # Process chunk 1 (complete)
-        res1 = client._process_chunk(pkt1, 1000.0)
+        res1 = client.reassembler.process(pkt1, 1000.0)
         self.assertIsNotNone(res1, "Expected FullScoringSession upon assembling all chunks")
         self.assertEqual(res1.num_vehicles, 3)
         self.assertEqual(res1.track_name, "Circuit de la Sarthe - Le Mans")
@@ -425,9 +425,9 @@ class TestGoldenTruth(unittest.TestCase):
             chunks.append(hdr + payload)
 
         for i in range(total_chunks - 1):
-            self.assertIsNone(client._process_chunk(chunks[i], 1000.0))
+            self.assertIsNone(client.reassembler.process(chunks[i], 1000.0))
 
-        final_rules = client._process_chunk(chunks[-1], 1000.0)
+        final_rules = client.reassembler.process(chunks[-1], 1000.0)
         self.assertIsNotNone(final_rules)
         self.assertEqual(final_rules.num_participants, 3)
         self.assertEqual(len(final_rules.participants), 3)

@@ -20,7 +20,6 @@ from ..constants import (
     PKT_TYPE_TRACK_RULES,
     PKT_TYPE_WEATHER,
     PKT_TYPE_WEATHER_CONTROL,
-    TELEMINFO_SIZE,
 )
 from ..models import (
     CompactScoring,
@@ -129,30 +128,11 @@ _DEFAULT_REGISTRY = PacketDecoderRegistry()
 
 def decode_packet(data: bytes, registry: PacketDecoderRegistry | None = None) -> AnyPacket | None:
     """
-    Main decoder entrypoint. Identifies and parses any supported isiMotor UDP packet.
-    Supports both legacy raw/SIMP packets and new standardized 24-byte header packets.
+    Main decoder entrypoint. Identifies and parses standardized isiMotor SIMP UDP packets.
+    Strictly decodes packets conforming to the 24-byte SIMP header protocol.
     """
-    if not data:
+    if not data or len(data) < HEADER_SIZE or not data.startswith(b"SIMP") or data[4] != 1:
         return None
 
     active_registry = registry or _DEFAULT_REGISTRY
-
-    # 1. Check for standardized 24-byte RawUdpHeader (protocolVersion == 1)
-    if data.startswith(b"SIMP") and len(data) >= HEADER_SIZE and data[4] == 1:
-        pkt = active_registry.decode_standard_packet(data)
-        if pkt is not None:
-            return pkt
-
-    # 2. Legacy SIMP Packet Types (CompactScoring=2, SystemEvent=3)
-    if data.startswith(b"SIMP") and len(data) >= 5:
-        pkt_type = data[4]
-        if pkt_type == PKT_TYPE_COMPACT_SCORING:
-            return decode_compact_scoring(data)
-        elif pkt_type == PKT_TYPE_SYSTEM_EVENT:
-            return decode_system_event(data)
-
-    # 3. Legacy Raw Telemetry (1888 bytes without SIMP header)
-    if len(data) >= TELEMINFO_SIZE:
-        return decode_telemetry(data)
-
-    return None
+    return active_registry.decode_standard_packet(data)

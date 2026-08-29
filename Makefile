@@ -24,6 +24,9 @@ help:
 	@echo "  make build          - Native compile DLL (on Windows MSVC / MinGW)"
 	@echo "  make manager        - Run live Textual telemetry diagnostics & manager"
 	@echo "  make benchmark      - Alias for 'make manager'"
+	@echo "  make package        - Package Manager into standalone executable with Briefcase"
+	@echo "  make briefcase-dev  - Run Manager in Briefcase isolated dev environment"
+	@echo "  make briefcase-build- Build Manager standalone native bundle"
 	@echo "  make install        - Install plugin DLL into Le Mans Ultimate / rFactor 2"
 	@echo "  make uninstall      - Remove plugin DLL from detected game installations"
 	@echo "  make status         - Display detected game installations & plugin status"
@@ -55,6 +58,16 @@ test:
 	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v
 
 cross:
+	@which x86_64-w64-mingw32-g++ >/dev/null 2>&1 || ( \
+		echo "" && \
+		echo "❌ Erreur : Le compilateur MinGW-w64 (x86_64-w64-mingw32-g++) est introuvable." && \
+		echo "   Pour cross-compiler la DLL Windows sous Linux, installez MinGW-w64 :" && \
+		echo "     • Ubuntu / Debian : sudo apt update && sudo apt install -y mingw-w64 g++-mingw-w64-x86-64" && \
+		echo "     • Fedora          : sudo dnf install mingw64-gcc-c++" && \
+		echo "     • Arch Linux      : sudo pacman -S mingw-w64-gcc" && \
+		echo "" && \
+		exit 1 \
+	)
 	@echo "==> Cross-compiling isiMotor_RawUDP.dll with MinGW..."
 	@mkdir -p $(BUILD_DIR)
 	cmake -S isimotor-rawudp-plugin -B $(BUILD_DIR) -DCMAKE_TOOLCHAIN_FILE=isimotor-rawudp-plugin/toolchain.cmake -DCMAKE_BUILD_TYPE=Release
@@ -73,6 +86,35 @@ manager:
 	@$(PYTHON) isimotor-rawudp-manager/sniffer.py
 
 benchmark: manager
+
+sync-resources:
+	@echo "==> Syncing compiled DLL and resources into Manager package..."
+	@mkdir -p isimotor-rawudp-manager/isimotor_rawudp_manager/resources isimotor-rawudp-manager/resources
+	@if [ -f $(BUILD_DIR)/isiMotor_RawUDP.dll ]; then \
+		cp $(BUILD_DIR)/isiMotor_RawUDP.dll isimotor-rawudp-manager/isimotor_rawudp_manager/resources/; \
+		cp $(BUILD_DIR)/isiMotor_RawUDP.dll isimotor-rawudp-manager/resources/; \
+		echo "  ✓ Copied $(BUILD_DIR)/isiMotor_RawUDP.dll to manager resources"; \
+	elif [ -f $(BIN_DIR)/isiMotor_RawUDP.dll ]; then \
+		cp $(BIN_DIR)/isiMotor_RawUDP.dll isimotor-rawudp-manager/isimotor_rawudp_manager/resources/; \
+		cp $(BIN_DIR)/isiMotor_RawUDP.dll isimotor-rawudp-manager/resources/; \
+		echo "  ✓ Copied $(BIN_DIR)/isiMotor_RawUDP.dll to manager resources"; \
+	elif [ -f isiMotor_RawUDP.dll ]; then \
+		cp isiMotor_RawUDP.dll isimotor-rawudp-manager/isimotor_rawudp_manager/resources/; \
+		cp isiMotor_RawUDP.dll isimotor-rawudp-manager/resources/; \
+		echo "  ✓ Copied isiMotor_RawUDP.dll to manager resources"; \
+	fi
+
+package: sync-resources
+	@echo "==> Packaging isiMotor-RawUDP-Manager with Briefcase..."
+	@cd isimotor-rawudp-manager && $(UV) run --with briefcase briefcase package --no-input
+
+briefcase-dev:
+	@echo "==> Running isiMotor-RawUDP-Manager in Briefcase dev mode..."
+	@cd isimotor-rawudp-manager && $(UV) run --with briefcase briefcase dev
+
+briefcase-build: sync-resources
+	@echo "==> Building isiMotor-RawUDP-Manager with Briefcase..."
+	@cd isimotor-rawudp-manager && $(UV) run --with briefcase briefcase build --no-input
 
 install:
 	@$(PYTHON) isimotor-rawudp-manager/install_plugin.py

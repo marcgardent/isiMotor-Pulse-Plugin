@@ -11,6 +11,7 @@ import time
 import unittest
 
 from isimotor_rawudp_client.client import IsiMotorClient
+from isimotor_rawudp_client.decoder.header import decode_header
 from isimotor_rawudp_client.models import PitAction
 
 MOCK_BIN = os.path.join(os.path.dirname(__file__), "cpp_mock", "isi_mock_host")
@@ -180,7 +181,8 @@ class TestLiveCppIntegration(unittest.TestCase):
             while time.time() - start_time < duration + 0.5:
                 try:
                     data, _ = sock.recvfrom(65535)
-                    if len(data) == 1888:
+                    hdr = decode_header(data)
+                    if hdr and hdr.packet_type == 1 and hdr.chunk_index == 0:
                         received_count += 1
                 except TimeoutError:
                     break

@@ -56,9 +56,10 @@ try:
         Tabs,
     )
 except ImportError:
-    print("\n[!] The 'textual' package is required to run the benchmark dashboard.")
-    print("    Install dependencies in the benchmark environment:")
-    print("      cd benchmark && uv venv && uv pip install -e ../isimotor-rawudp-client textual rich\n")
+    print("\n[!] The 'textual' package is required to run the manager dashboard.")
+    print("    Install dependencies in the manager environment:")
+    print("      cd isimotor-rawudp-manager && uv venv && uv pip install -e ../isimotor-rawudp-client textual rich\n")
+    print("    Or run with Makefile: make manager")
     sys.exit(1)
 
 from isimotor_rawudp_client.decoder import (
@@ -422,28 +423,6 @@ class TelemetryEngine:
                     pkt_type = PKT_HW_CONTROL
                 elif hdr.packet_type == 101:
                     pkt_type = PKT_WEATHER_CONTROL
-
-        # 2. Legacy Raw Telemetry
-        elif size >= 1888:
-            pkt_type = PKT_RAW_TELEMETRY
-            telem = decode_telemetry(data)
-            if telem:
-                self.latest_telemetry = telem
-
-        # 3. Legacy Compact Scoring (168/176 bytes)
-        elif data.startswith(b"SIMP") and size >= 5 and data[4] == 2:
-            pkt_type = PKT_COMPACT_SCORING
-            scoring = decode_compact_scoring(data)
-            if scoring:
-                self.latest_scoring = scoring
-
-        # 4. Legacy System Event (6 bytes)
-        elif data.startswith(b"SIMP") and size >= 5 and data[4] == 3:
-            pkt_type = PKT_SYSTEM_EVENT
-            ev = decode_system_event(data)
-            if ev:
-                self.latest_event = ev
-                self.latest_event_time = now
 
         self.stats[pkt_type].record(size, now)
 

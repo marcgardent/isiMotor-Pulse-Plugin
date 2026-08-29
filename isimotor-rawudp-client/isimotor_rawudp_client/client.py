@@ -10,9 +10,7 @@ Architectural Design:
 from collections.abc import Callable
 from typing import Any
 
-from .constants import HEADER_SIZE
-from .decoder.header import decode_header
-from .decoder.packet_decoder import AnyPacket, PacketDecoderRegistry, decode_packet
+from .decoder.packet_decoder import AnyPacket, PacketDecoderRegistry
 from .dispatcher import EventDispatcher, PacketCallback
 from .models import (
     CompactScoring,
@@ -80,10 +78,10 @@ class IsiMotorClient:
         # Subsystems (Single Responsibility Principle)
         self._receiver = UdpReceiver(host=self.host, port=self.port)
         self._sender = UdpSender(default_host=self.inbound_host, default_port=self.inbound_port)
-        self._reassembler = ChunkReassembler(timeout_seconds=reassembly_timeout)
+        self._decoder_registry = PacketDecoderRegistry()
+        self._reassembler = ChunkReassembler(registry=self._decoder_registry, timeout_seconds=reassembly_timeout)
         self._state = StateStore()
         self._dispatcher = EventDispatcher()
-        self._decoder_registry = PacketDecoderRegistry()
 
     # ── Context Manager Protocol ───────────────────────────────────────────────
 
@@ -110,6 +108,11 @@ class IsiMotorClient:
         """True if the UDP background listener thread is active."""
         return self._receiver.is_running
 
+    @property
+    def reassembler(self) -> ChunkReassembler:
+        """Multipart packet chunk reassembler."""
+        return self._reassembler
+
     # ── Internal Ingestion Pipeline (SLAP) ─────────────────────────────────────
 
     def _on_datagram_received(self, data: bytes, timestamp: float) -> None:
@@ -126,20 +129,7 @@ class IsiMotorClient:
 
     def _decode_or_reassemble(self, data: bytes, timestamp: float) -> AnyPacket | None:
         """Parses chunked multipart frames or decodes single datagrams."""
-        if data.startswith(b"SIMP") and len(data) >= HEADER_SIZE and data[4] == 1:
-            hdr = decode_header(data)
-            if hdr and hdr.total_chunks > 1:
-                return self._reassembler.process(data, timestamp)
-
-        return decode_packet(data, registry=self._decoder_registry)
-
-    def _process_chunk(self, data: bytes, now: float) -> FullScoringSession | TrackRulesSession | None:
-        """Backward compatibility delegate for chunk reassembly."""
-        return self._reassembler.process(data, now)
-
-    def _cleanup_old_reassemblies(self, now: float) -> None:
-        """Backward compatibility delegate for reassembly pruning."""
-        self._reassembler.cleanup_stale(now)
+        return self._reassembler.process(data, timestamp)
 
     # ── State Accessors (Thread-Safe) ──────────────────────────────────────────
 

@@ -20,7 +20,7 @@ def decode_compact_scoring(data: bytes, offset: int = 0) -> CompactScoring | Non
 
     # Check magic if starting at 0
     if offset == 0 and data.startswith(b"SIMP") and len(data) >= 5 and data[4] == 2:
-        # Legacy SIMP Type 2 layout
+        # SIMP Type 2 compact scoring layout
         track = _decode_string(data[5:69])
         session = struct.unpack_from("<i", data, 72)[0]
         current_et = struct.unpack_from("<d", data, 76)[0]

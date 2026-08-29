@@ -9,6 +9,7 @@ description = "Complete Manager, Telemetry Diagnostics & Automated Plugin Instal
 readme = "README.md"
 authors = [{ name = "Marc GARDENT" }]
 license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.8"
 dependencies = [
     "textual>=0.50.0",
@@ -34,16 +35,19 @@ project_name = "isiMotor RawUDP Manager"
 bundle = "com.github.marcgardent"
 version = "1.4.0"
 url = "https://github.com/marcgardent/isiMotor-RawUDP-Plugin"
-license.text = "Apache-2.0"
+license = "Apache-2.0"
+license_files = ["LICENSE"]
 author = "Marc GARDENT"
 author_email = "marc.gardent@example.com"
 
-[tool.briefcase.app.isimotor_rawudp_manager]
+[tool.briefcase.app.isimotor-rawudp-manager]
 formal_name = "isiMotor RawUDP Manager"
-description = "Complete Manager, Telemetry Diagnostics & Automated Plugin Installer for Le Mans Ultimate and rFactor 2"
+description = "isiMotor telemetry diagnostics, stream inspector & automated plugin installer"
 icon = "resources/icon"
+console_app = true
 sources = [
     "isimotor_rawudp_manager",
+    "../isimotor-rawudp-client/isimotor_rawudp_client",
 ]
 test_sources = []
 requires = [
@@ -51,13 +55,13 @@ requires = [
     "rich>=13.0.0",
 ]
 
-[tool.briefcase.app.isimotor_rawudp_manager.windows]
+[tool.briefcase.app.isimotor-rawudp-manager.windows]
 requires = [
     "textual>=0.50.0",
     "rich>=13.0.0",
 ]
 
-[tool.briefcase.app.isimotor_rawudp_manager.linux]
+[tool.briefcase.app.isimotor-rawudp-manager.linux]
 requires = [
     "textual>=0.50.0",
     "rich>=13.0.0",

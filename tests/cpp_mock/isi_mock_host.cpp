@@ -34,7 +34,7 @@ typedef void* HWND;
 
 // Force 32-bit long as in Windows x64 MSVC ABI
 #define long int
-#include "../../include/InternalsPlugin.hpp"
+#include "InternalsPlugin.hpp"
 #undef long
 
 #pragma pack(push, 4)
@@ -1087,6 +1087,9 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
     SystemEventPacket ev;
     populate_golden_event(ev, 1);
 
+    unsigned int event_seq = 0;
+    unsigned int telem_seq = 0;
+    unsigned int scoring_seq = 0;
     unsigned int full_scoring_seq = 0;
     unsigned int rules_seq = 0;
     unsigned int pit_seq = 0;
@@ -1095,9 +1098,8 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
     unsigned int ffb_seq = 0;
     unsigned int gfx_seq = 0;
 
-    // Send initial system event
-    sendto(sock, reinterpret_cast<const char*>(&ev), sizeof(ev), 0,
-           reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
+    // Send initial system event (Type 3)
+    send_sliced_udp_mock(sock, dest, 3, 0, &ev, sizeof(ev), 0.0, event_seq);
 
     int total_frames = hz * duration_sec;
     int scoring_divider = std::max(1, hz / 5);    // 5Hz scoring
@@ -1153,9 +1155,8 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
             }
         }
 
-        // 1. Send telemetry (1888 bytes)
-        sendto(sock, reinterpret_cast<const char*>(&telem), sizeof(telem), 0,
-               reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
+        // 1. Send telemetry (Type 1, 1888 bytes)
+        send_sliced_udp_mock(sock, dest, 1, 0, &telem, sizeof(telem), telem.mElapsedTime, telem_seq);
 
         // 2. Send PitMenu (Type 6 @ 100Hz)
         send_sliced_udp_mock(sock, dest, 6, 0, &pit_menu, sizeof(pit_menu), 0.0, pit_seq);
@@ -1169,11 +1170,10 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
             send_sliced_udp_mock(sock, dest, 10, static_cast<unsigned short>(gfx.slotId), &gfx, sizeof(gfx), 0.0, gfx_seq);
         }
 
-        // 5. Send Scoring (Compact + Full Sliced @ 5Hz)
+        // 5. Send Scoring (Compact Type 2 + Full Sliced Type 4 @ 5Hz)
         if (frame % scoring_divider == 0) {
             scoring.currentET = 1250.0 + sim_time;
-            sendto(sock, reinterpret_cast<const char*>(&scoring), sizeof(scoring), 0,
-                   reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
+            send_sliced_udp_mock(sock, dest, 2, 0, &scoring, sizeof(scoring), scoring.currentET, scoring_seq);
 
             full_sess.currentET = 1250.0 + sim_time;
             std::memcpy(full_scoring_buf.data(), &full_sess, sizeof(full_sess));

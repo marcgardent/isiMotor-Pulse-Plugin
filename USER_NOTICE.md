@@ -108,7 +108,7 @@ This file is hot-reloaded by the simulation engine and can also be adjusted dire
 | **`ForceFeedbackRate`**| `"unlimited"` | `"off"`, `"unlimited"` (400Hz), `"200Hz"`, `"100Hz"`, `"60Hz"` | Steering shaft FFB torque output |
 | **`GraphicsRate`** | `"60Hz"` | `"off"`, `"unlimited"`, `"100Hz"`, `"60Hz"`, `"30Hz"` | Camera world position, orientation matrix & ambient lighting |
 | **`SystemEvents`** | `"Enabled"` | `"Enabled"`, `"Disabled"`, `"on"`, `"off"` | State transition notifications (Garage, Realtime, Session) |
-| **`UnsubscribedBuffersMask`** | `"0"` | `"0"` (all streams enabled), or bitmask integer (e.g. `"1"` to cut telemetry) | Compatibility buffer mask |
+| **`UnsubscribedBuffersMask`** | `"0"` | `"0"` (all streams enabled), or bitmask integer (e.g. `"1"` to cut telemetry) | Stream disabling bitmask |
 
 ---
 

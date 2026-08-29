@@ -3,34 +3,36 @@ Multipart / sliced UDP packet chunk reassembler.
 Handles SIMP protocol chunk joining and stale chunk eviction.
 """
 
-from typing import Any, Union
+from typing import Any
 
-from ..constants import HEADER_SIZE, PKT_TYPE_FULL_SCORING, PKT_TYPE_TRACK_RULES
+from ..constants import HEADER_SIZE
 from ..decoder.header import decode_header
-from ..decoder.rules import decode_track_rules
-from ..decoder.scoring import decode_full_scoring
-from ..models import FullScoringSession, TrackRulesSession
-
-ReassembledSession = Union[FullScoringSession, TrackRulesSession]
+from ..decoder.packet_decoder import _DEFAULT_REGISTRY, AnyPacket, PacketDecoderRegistry
 
 
 class ChunkReassembler:
     """
-    Thread-safe buffer for reassembling multi-chunk SIMP packets (e.g. Type 4 Full Scoring & Type 5 Track Rules).
+    Thread-safe buffer for reassembling multi-chunk SIMP packets (e.g. Full Scoring, Track Rules, Telemetry).
     """
 
-    def __init__(self, timeout_seconds: float = 1.0, cleanup_interval_seconds: float = 0.5) -> None:
+    def __init__(
+        self,
+        registry: PacketDecoderRegistry | None = None,
+        timeout_seconds: float = 1.0,
+        cleanup_interval_seconds: float = 0.5,
+    ) -> None:
+        self.registry = registry or _DEFAULT_REGISTRY
         self.timeout_seconds = timeout_seconds
         self.cleanup_interval_seconds = cleanup_interval_seconds
         self._buffers: dict[tuple[int, int], dict[str, Any]] = {}
         self._last_cleanup: float = 0.0
 
-    def process(self, data: bytes, now: float) -> ReassembledSession | None:
+    def process(self, data: bytes, now: float) -> AnyPacket | None:
         """
         Processes a raw UDP frame. If it is a multipart chunk, buffers it and returns
-        the decoded fully reassembled session when all chunks have arrived.
+        the decoded fully reassembled packet when all chunks have arrived.
         If it is a single-chunk packet, decodes and returns it directly.
-        Returns None if chunk is buffered or packet is not a chunked session packet.
+        Returns None if chunk is buffered or packet is unknown.
         """
         self.cleanup_stale(now)
 
@@ -45,10 +47,9 @@ class ChunkReassembler:
 
         # Single-chunk packet
         if hdr.total_chunks == 1:
-            if hdr.packet_type == PKT_TYPE_FULL_SCORING:
-                return decode_full_scoring(payload)
-            elif hdr.packet_type == PKT_TYPE_TRACK_RULES:
-                return decode_track_rules(payload)
+            decoder = self.registry.get_decoder(hdr.packet_type)
+            if decoder:
+                return decoder(payload)
             return None
 
         # Multi-chunk packet
@@ -69,10 +70,9 @@ class ChunkReassembler:
             del self._buffers[key]
             assembled_payload = b"".join(ordered_slices)
 
-            if hdr.packet_type == PKT_TYPE_FULL_SCORING:
-                return decode_full_scoring(assembled_payload)
-            elif hdr.packet_type == PKT_TYPE_TRACK_RULES:
-                return decode_track_rules(assembled_payload)
+            decoder = self.registry.get_decoder(hdr.packet_type)
+            if decoder:
+                return decoder(assembled_payload)
 
         return None
 
