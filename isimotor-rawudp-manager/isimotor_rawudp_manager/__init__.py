@@ -2,7 +2,7 @@
 isiMotor-RawUDP-Manager — Telemetry Diagnostics, Stream Inspector & Plugin Installer.
 """
 
-__version__ = "1.4.0"
+__version__ = "1.0.0"
 
 from .constants import (
     NAV_COMMANDS,

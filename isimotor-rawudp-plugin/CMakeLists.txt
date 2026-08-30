@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(isiMotor_RawUDP VERSION 1.4.0 LANGUAGES CXX)
+project(isiMotor_RawUDP VERSION 1.0.0 LANGUAGES CXX)
 
 # --- C++ Standard ---
 set(CMAKE_CXX_STANDARD 17)
