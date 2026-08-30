@@ -74,7 +74,7 @@ cross:
 	)
 	@echo "==> Cross-compiling standard isiMotor_RawUDP.dll with MinGW..."
 	@mkdir -p $(BUILD_DIR)
-	cmake -S isimotor-rawudp-plugin -B $(BUILD_DIR) -DCMAKE_TOOLCHAIN_FILE=isimotor-rawudp-plugin/toolchain.cmake -DCMAKE_BUILD_TYPE=Release
+	cmake -S isimotor-rawudp-plugin -B $(BUILD_DIR) -DCMAKE_TOOLCHAIN_FILE=$(CURDIR)/isimotor-rawudp-plugin/toolchain.cmake -DCMAKE_BUILD_TYPE=Release
 	cmake --build $(BUILD_DIR) --config Release
 	@echo "==> Build complete: $(BUILD_DIR)/isiMotor_RawUDP.dll"
 
