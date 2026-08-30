@@ -175,6 +175,8 @@ jobs:
           ## 🏎️ isiMotor-RawUDP Plugin ${TAG}
 
           Native telemetry streaming plugin for **Le Mans Ultimate** and **rFactor 2** (isiMotor 2.5 / 3.0 engine).
+          Includes a **Python client library** (`isimotor-rawudp-client`) ready to use out-of-the-box for custom dashboards, data loggers, and hardware integrations.
+          **Linux / Steam Deck / Proton**: zero-config — the DLL loads natively, no Wine overrides or launch options required.
 
           ---
 
