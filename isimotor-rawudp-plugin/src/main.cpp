@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <ctime>
 #include <cmath>
+#include <cstdarg>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -67,21 +68,49 @@ struct WSADATA {};
 #define MAKEWORD(a, b) 0
 #define WSAStartup(v, d) 0
 #define WSACleanup() ((void)0)
+#define GetCurrentProcessId() 0
 #endif
 
 #include "InternalsPlugin.hpp"
 
-#define PLUGIN_NAME "isiMotor-RawUDP"
+#define PLUGIN_NAME "isiMotor_RawUDP.dll"
 #define DEFAULT_UDP_PORT 5000
 #define DEFAULT_UDP_HOST "127.0.0.1"
 
 // Module handle saved at DLL injection time
 static HINSTANCE g_hModule = NULL;
 
+static inline void PluginLog(const char* fmt, ...) {
+    char path[MAX_PATH] = {0};
+#ifdef _WIN32
+    if (g_hModule) {
+        GetModuleFileNameA(static_cast<HMODULE>(g_hModule), path, sizeof(path));
+        char* lastSlash = std::strrchr(path, '\\');
+        if (!lastSlash) lastSlash = std::strrchr(path, '/');
+        if (lastSlash) {
+            std::strcpy(lastSlash + 1, "isiMotor_RawUDP.log");
+        }
+    }
+#endif
+    FILE* f = path[0] ? std::fopen(path, "a") : nullptr;
+    if (!f) f = std::fopen("Plugins/isiMotor_RawUDP.log", "a");
+    if (!f) f = std::fopen("isiMotor_RawUDP.log", "a");
+    if (!f) f = std::fopen("UserData/Log/isiMotor_RawUDP.log", "a");
+    if (!f) f = std::fopen("UserData/isiMotor_RawUDP.log", "a");
+    if (!f) return;
+    va_list args;
+    va_start(args, fmt);
+    std::vfprintf(f, fmt, args);
+    std::fprintf(f, "\n");
+    va_end(args);
+    std::fclose(f);
+}
+
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
     (void)lpReserved;
     if (ul_reason_for_call == DLL_PROCESS_ATTACH) {
         g_hModule = hModule;
+        PluginLog("=== isiMotor_RawUDP.dll Loaded (DLL_PROCESS_ATTACH, PID=%lu) ===", static_cast<unsigned long>(GetCurrentProcessId()));
     }
     return TRUE;
 }
@@ -425,6 +454,7 @@ public:
 };
 
 struct PluginConfig {
+    bool enabled;
     char targetIp[64];
     int targetPort;
     int inboundPort;
@@ -432,8 +462,6 @@ struct PluginConfig {
     double telemetryHz;
     double compactScoringHz;
     double fullScoringHz;
-    double trackRulesHz;
-    double pitMenuHz;
     double weatherHz;
     double extendedStateHz;
     double forceFeedbackHz;
@@ -445,10 +473,9 @@ struct PluginConfig {
 // Static working buffers (zero dynamic allocations)
 static const size_t MAX_UDP_CHUNK_SIZE = 1200;
 static char s_scoringBuffer[sizeof(FullScoringSessionPacket) + 128 * sizeof(VehicleScoringInfoV01)];
-static char s_trackRulesBuffer[sizeof(TrackRulesSessionPacket) + 128 * sizeof(TrackRulesParticipantPacket)];
 static char s_chunkPacketBuffer[sizeof(RawUdpHeader) + MAX_UDP_CHUNK_SIZE];
 
-class IsiMotorRawUdpPlugin : public InternalsPluginV07 {
+class IsiMotorRawUdpPlugin : public InternalsPluginV06 {
 private:
     SOCKET udpSocket;
     SOCKET inboundSocket;
@@ -458,8 +485,6 @@ private:
     RateLimiter telemetryLimiter;
     RateLimiter compactScoringLimiter;
     RateLimiter fullScoringLimiter;
-    RateLimiter trackRulesLimiter;
-    RateLimiter pitMenuLimiter;
     RateLimiter weatherLimiter;
     RateLimiter extendedStateLimiter;
     RateLimiter forceFeedbackLimiter;
@@ -494,12 +519,8 @@ private:
     float currentPitSpeedLimit;
 
     // -------------------------------------------------------------------------
-    // Custom Plugin Variables Table & Metadata (InternalsPluginV07 String Standard API)
+    // Safe Zero-Allocation JSON Parser & Configuration Helpers
     // -------------------------------------------------------------------------
-    struct CustomVarDef {
-        const char* caption;
-        const char* defaultValue;
-    };
 
     static inline void TrimString(const char* src, char* dst, size_t maxLen) {
         if (!src || !dst || maxLen == 0) return;
@@ -575,29 +596,38 @@ private:
         return static_cast<int>(val);
     }
 
-    static inline const CustomVarDef* GetCustomVarDefs(int& count) {
-        static const CustomVarDef s_defs[] = {
-            { "TargetIP",                "127.0.0.1" },
-            { "TargetPort",              "5000" },
-            { "InboundControl",          "Enabled" },
-            { "InboundPort",             "5001" },
-            { "TelemetryRate",           "unlimited" },
-            { "CompactScoringRate",      "unlimited" },
-            { "FullScoringRate",         "5Hz" },
-            { "TrackRulesRate",          "3Hz" },
-            { "PitMenuRate",             "100Hz" },
-            { "WeatherRate",             "1Hz" },
-            { "ExtendedStateRate",       "5Hz" },
-            { "ForceFeedbackRate",       "unlimited" },
-            { "GraphicsRate",            "60Hz" },
-            { "SystemEvents",            "Enabled" },
-            { "UnsubscribedBuffersMask", "0" }
-        };
-        count = static_cast<int>(sizeof(s_defs) / sizeof(s_defs[0]));
-        return s_defs;
+    static inline void ExtractJsonString(const char* json, const char* key, char* dst, size_t maxLen, const char* defaultVal) {
+        if (!dst || maxLen == 0) return;
+        std::strncpy(dst, defaultVal, maxLen - 1);
+        dst[maxLen - 1] = '\0';
+        if (!json || !key) return;
+
+        char searchKey[128];
+        std::snprintf(searchKey, sizeof(searchKey), "\"%s\"", key);
+        const char* pos = std::strstr(json, searchKey);
+        if (!pos) return;
+
+        pos += std::strlen(searchKey);
+        while (*pos == ' ' || *pos == '\t' || *pos == ':') ++pos;
+
+        if (*pos == '\"') {
+            ++pos;
+            size_t i = 0;
+            while (*pos && *pos != '\"' && *pos != '\r' && *pos != '\n' && i < maxLen - 1) {
+                dst[i++] = *pos++;
+            }
+            dst[i] = '\0';
+        } else {
+            size_t i = 0;
+            while (*pos && *pos != ',' && *pos != '}' && *pos != '\r' && *pos != '\n' && *pos != ' ' && *pos != '\t' && i < maxLen - 1) {
+                dst[i++] = *pos++;
+            }
+            dst[i] = '\0';
+        }
     }
 
     void InitDefaults() {
+        config.enabled = true;
         std::strncpy(config.targetIp, DEFAULT_UDP_HOST, sizeof(config.targetIp) - 1);
         config.targetIp[sizeof(config.targetIp) - 1] = '\0';
         config.targetPort = DEFAULT_UDP_PORT;
@@ -606,8 +636,6 @@ private:
         config.telemetryHz = -1.0;     // unlimited
         config.compactScoringHz = -1.0;// unlimited
         config.fullScoringHz = 5.0;    // 5Hz
-        config.trackRulesHz = 3.0;     // 3Hz
-        config.pitMenuHz = 100.0;      // 100Hz
         config.weatherHz = 1.0;        // 1Hz
         config.extendedStateHz = 5.0;  // 5Hz
         config.forceFeedbackHz = -1.0; // unlimited (up to 400Hz)
@@ -618,8 +646,80 @@ private:
         telemetryLimiter.SetRate(config.telemetryHz);
         compactScoringLimiter.SetRate(config.compactScoringHz);
         fullScoringLimiter.SetRate(config.fullScoringHz);
-        trackRulesLimiter.SetRate(config.trackRulesHz);
-        pitMenuLimiter.SetRate(config.pitMenuHz);
+        weatherLimiter.SetRate(config.weatherHz);
+        extendedStateLimiter.SetRate(config.extendedStateHz);
+        forceFeedbackLimiter.SetRate(config.forceFeedbackHz);
+        graphicsLimiter.SetRate(config.graphicsHz);
+    }
+
+    void LoadConfigFile() {
+        const char* paths[] = {
+            "UserData/player/CustomPluginVariables.JSON",
+            "UserData/CustomPluginVariables.JSON",
+            "../UserData/player/CustomPluginVariables.JSON",
+            "../UserData/CustomPluginVariables.JSON"
+        };
+
+        FILE* f = nullptr;
+        for (const char* p : paths) {
+            f = std::fopen(p, "rb");
+            if (f) break;
+        }
+        if (!f) return;
+
+        char buf[8192] = {0};
+        size_t n = std::fread(buf, 1, sizeof(buf) - 1, f);
+        std::fclose(f);
+        if (n == 0) return;
+        buf[n] = '\0';
+
+        char strVal[128];
+
+        ExtractJsonString(buf, " Enabled", strVal, sizeof(strVal), "1");
+        config.enabled = (ParseIntString(strVal, 1) != 0);
+
+        ExtractJsonString(buf, "TargetIP", config.targetIp, sizeof(config.targetIp), DEFAULT_UDP_HOST);
+
+        ExtractJsonString(buf, "TargetPort", strVal, sizeof(strVal), "5000");
+        config.targetPort = ParseIntString(strVal, DEFAULT_UDP_PORT);
+
+        ExtractJsonString(buf, "InboundPort", strVal, sizeof(strVal), "5001");
+        config.inboundPort = ParseIntString(strVal, 5001);
+
+        ExtractJsonString(buf, "InboundControl", strVal, sizeof(strVal), "Enabled");
+        config.enableInboundControl = ParseBoolString(strVal, true);
+
+        ExtractJsonString(buf, "TelemetryRate", strVal, sizeof(strVal), "unlimited");
+        config.telemetryHz = ParseRateString(strVal, -1.0);
+
+        ExtractJsonString(buf, "CompactScoringRate", strVal, sizeof(strVal), "unlimited");
+        config.compactScoringHz = ParseRateString(strVal, -1.0);
+
+        ExtractJsonString(buf, "FullScoringRate", strVal, sizeof(strVal), "5Hz");
+        config.fullScoringHz = ParseRateString(strVal, 5.0);
+
+        ExtractJsonString(buf, "WeatherRate", strVal, sizeof(strVal), "1Hz");
+        config.weatherHz = ParseRateString(strVal, 1.0);
+
+        ExtractJsonString(buf, "ExtendedStateRate", strVal, sizeof(strVal), "5Hz");
+        config.extendedStateHz = ParseRateString(strVal, 5.0);
+
+        ExtractJsonString(buf, "ForceFeedbackRate", strVal, sizeof(strVal), "unlimited");
+        config.forceFeedbackHz = ParseRateString(strVal, -1.0);
+
+        ExtractJsonString(buf, "GraphicsRate", strVal, sizeof(strVal), "60Hz");
+        config.graphicsHz = ParseRateString(strVal, 60.0);
+
+        ExtractJsonString(buf, "SystemEvents", strVal, sizeof(strVal), "Enabled");
+        config.enableSystemEvents = ParseBoolString(strVal, true);
+
+        ExtractJsonString(buf, "UnsubscribedBuffersMask", strVal, sizeof(strVal), "0");
+        config.unsubscribedBuffersMask = ParseIntString(strVal, 0);
+
+        // Update rate limiters with parsed values
+        telemetryLimiter.SetRate(config.telemetryHz);
+        compactScoringLimiter.SetRate(config.compactScoringHz);
+        fullScoringLimiter.SetRate(config.fullScoringHz);
         weatherLimiter.SetRate(config.weatherHz);
         extendedStateLimiter.SetRate(config.extendedStateHz);
         forceFeedbackLimiter.SetRate(config.forceFeedbackHz);
@@ -627,188 +727,6 @@ private:
     }
 
 public:
-    // -------------------------------------------------------------------------
-    // InternalsPluginV07 Custom Variables Callbacks (String-Based API)
-    // -------------------------------------------------------------------------
-
-    bool GetCustomVariable(long i, CustomVariableV01 &var) override {
-        int count = 0;
-        const CustomVarDef* defs = GetCustomVarDefs(count);
-        if (i < 0 || i >= count) return false;
-
-        std::strncpy(var.mCaption, defs[i].caption, sizeof(var.mCaption) - 1);
-        var.mCaption[sizeof(var.mCaption) - 1] = '\0';
-        var.mNumSettings = 0; // 0 indicates limitless / string type in isiMotor Custom Variables API
-        var.mCurrentSetting = 0;
-        std::memset(var.mExpansion, 0, sizeof(var.mExpansion));
-        std::strncpy(reinterpret_cast<char*>(var.mExpansion), defs[i].defaultValue, sizeof(var.mExpansion) - 1);
-        return true;
-    }
-
-    void GetCustomVariableSetting(CustomVariableV01 &var, long i, CustomSettingV01 &setting) override {
-        (void)var;
-        (void)i;
-        (void)setting;
-        // Not used when mNumSettings == 0 (string type)
-    }
-
-    void AccessCustomVariable(CustomVariableV01 &var) override {
-        const char* strVal = reinterpret_cast<const char*>(var.mExpansion);
-        char cleanStr[128] = {0};
-        if (strVal && strVal[0] != '\0') {
-            TrimString(strVal, cleanStr, sizeof(cleanStr));
-        }
-
-        if (std::strcmp(var.mCaption, "TargetIP") == 0) {
-            if (cleanStr[0] != '\0') {
-                std::strncpy(config.targetIp, cleanStr, sizeof(config.targetIp) - 1);
-                config.targetIp[sizeof(config.targetIp) - 1] = '\0';
-            }
-            if (initialized && udpSocket != INVALID_SOCKET) {
-                inet_pton(AF_INET, config.targetIp, &serverAddr.sin_addr);
-            }
-        }
-        else if (std::strcmp(var.mCaption, "TargetPort") == 0) {
-            if (cleanStr[0] != '\0') {
-                config.targetPort = ParseIntString(cleanStr, DEFAULT_UDP_PORT);
-            } else if (var.mCurrentSetting > 0) {
-                config.targetPort = static_cast<int>(var.mCurrentSetting);
-            }
-            if (initialized && udpSocket != INVALID_SOCKET) {
-                serverAddr.sin_port = htons(static_cast<u_short>(config.targetPort));
-            }
-        }
-        else if (std::strcmp(var.mCaption, "InboundControl") == 0) {
-            bool oldVal = config.enableInboundControl;
-            if (cleanStr[0] != '\0') {
-                config.enableInboundControl = ParseBoolString(cleanStr, true);
-            } else {
-                config.enableInboundControl = (var.mCurrentSetting != 0);
-            }
-            if (initialized && oldVal != config.enableInboundControl) {
-                if (!config.enableInboundControl && inboundSocket != INVALID_SOCKET) {
-                    closesocket(inboundSocket);
-                    inboundSocket = INVALID_SOCKET;
-                } else if (config.enableInboundControl && inboundSocket == INVALID_SOCKET) {
-                    inboundSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-                    if (inboundSocket != INVALID_SOCKET) {
-                        int reuse = 1;
-                        setsockopt(inboundSocket, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
-#ifdef _WIN32
-                        u_long nonBlocking = 1;
-                        ioctlsocket(inboundSocket, FIONBIO, &nonBlocking);
-#else
-                        int flags = fcntl(inboundSocket, F_GETFL, 0);
-                        fcntl(inboundSocket, F_SETFL, flags | O_NONBLOCK);
-#endif
-                        inboundAddr.sin_family = AF_INET;
-                        inboundAddr.sin_port = htons(static_cast<u_short>(config.inboundPort));
-                        inboundAddr.sin_addr.s_addr = INADDR_ANY;
-                        bind(inboundSocket, reinterpret_cast<const sockaddr*>(&inboundAddr), sizeof(inboundAddr));
-                    }
-                }
-            }
-        }
-        else if (std::strcmp(var.mCaption, "InboundPort") == 0) {
-            int oldPort = config.inboundPort;
-            if (cleanStr[0] != '\0') {
-                config.inboundPort = ParseIntString(cleanStr, 5001);
-            } else if (var.mCurrentSetting > 0) {
-                config.inboundPort = static_cast<int>(var.mCurrentSetting);
-            }
-            if (initialized && config.enableInboundControl && oldPort != config.inboundPort) {
-                if (inboundSocket != INVALID_SOCKET) {
-                    closesocket(inboundSocket);
-                    inboundSocket = INVALID_SOCKET;
-                }
-                inboundSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-                if (inboundSocket != INVALID_SOCKET) {
-                    int reuse = 1;
-                    setsockopt(inboundSocket, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
-#ifdef _WIN32
-                    u_long nonBlocking = 1;
-                    ioctlsocket(inboundSocket, FIONBIO, &nonBlocking);
-#else
-                    int flags = fcntl(inboundSocket, F_GETFL, 0);
-                    fcntl(inboundSocket, F_SETFL, flags | O_NONBLOCK);
-#endif
-                    inboundAddr.sin_family = AF_INET;
-                    inboundAddr.sin_port = htons(static_cast<u_short>(config.inboundPort));
-                    inboundAddr.sin_addr.s_addr = INADDR_ANY;
-                    bind(inboundSocket, reinterpret_cast<const sockaddr*>(&inboundAddr), sizeof(inboundAddr));
-                }
-            }
-        }
-        else if (std::strcmp(var.mCaption, "TelemetryRate") == 0) {
-            if (cleanStr[0] != '\0') {
-                config.telemetryHz = ParseRateString(cleanStr, -1.0);
-            }
-            telemetryLimiter.SetRate(config.telemetryHz);
-        }
-        else if (std::strcmp(var.mCaption, "CompactScoringRate") == 0) {
-            if (cleanStr[0] != '\0') {
-                config.compactScoringHz = ParseRateString(cleanStr, -1.0);
-            }
-            compactScoringLimiter.SetRate(config.compactScoringHz);
-        }
-        else if (std::strcmp(var.mCaption, "FullScoringRate") == 0) {
-            if (cleanStr[0] != '\0') {
-                config.fullScoringHz = ParseRateString(cleanStr, 5.0);
-            }
-            fullScoringLimiter.SetRate(config.fullScoringHz);
-        }
-        else if (std::strcmp(var.mCaption, "TrackRulesRate") == 0) {
-            if (cleanStr[0] != '\0') {
-                config.trackRulesHz = ParseRateString(cleanStr, 3.0);
-            }
-            trackRulesLimiter.SetRate(config.trackRulesHz);
-        }
-        else if (std::strcmp(var.mCaption, "PitMenuRate") == 0) {
-            if (cleanStr[0] != '\0') {
-                config.pitMenuHz = ParseRateString(cleanStr, 100.0);
-            }
-            pitMenuLimiter.SetRate(config.pitMenuHz);
-        }
-        else if (std::strcmp(var.mCaption, "WeatherRate") == 0) {
-            if (cleanStr[0] != '\0') {
-                config.weatherHz = ParseRateString(cleanStr, 1.0);
-            }
-            weatherLimiter.SetRate(config.weatherHz);
-        }
-        else if (std::strcmp(var.mCaption, "ExtendedStateRate") == 0) {
-            if (cleanStr[0] != '\0') {
-                config.extendedStateHz = ParseRateString(cleanStr, 5.0);
-            }
-            extendedStateLimiter.SetRate(config.extendedStateHz);
-        }
-        else if (std::strcmp(var.mCaption, "ForceFeedbackRate") == 0) {
-            if (cleanStr[0] != '\0') {
-                config.forceFeedbackHz = ParseRateString(cleanStr, -1.0);
-            }
-            forceFeedbackLimiter.SetRate(config.forceFeedbackHz);
-        }
-        else if (std::strcmp(var.mCaption, "GraphicsRate") == 0) {
-            if (cleanStr[0] != '\0') {
-                config.graphicsHz = ParseRateString(cleanStr, 60.0);
-            }
-            graphicsLimiter.SetRate(config.graphicsHz);
-        }
-        else if (std::strcmp(var.mCaption, "SystemEvents") == 0) {
-            if (cleanStr[0] != '\0') {
-                config.enableSystemEvents = ParseBoolString(cleanStr, true);
-            } else {
-                config.enableSystemEvents = (var.mCurrentSetting != 0);
-            }
-        }
-        else if (std::strcmp(var.mCaption, "UnsubscribedBuffersMask") == 0) {
-            if (cleanStr[0] != '\0') {
-                config.unsubscribedBuffersMask = ParseIntString(cleanStr, 0);
-            } else {
-                config.unsubscribedBuffersMask = var.mCurrentSetting;
-            }
-        }
-    }
-
     void SendSlicedPayload(unsigned char packetType, unsigned short subTypeOrId, const void* payload, size_t totalPayloadSize, double sessionET) {
         if (!initialized || udpSocket == INVALID_SOCKET || totalPayloadSize == 0) return;
 
@@ -934,6 +852,13 @@ public:
     void Startup(long version) override {
         (void)version;
         if (initialized) return;
+
+        // Load configuration from CustomPluginVariables.JSON
+        LoadConfigFile();
+
+        if (!config.enabled) {
+            return;
+        }
 
         // Initialize Winsock 2.2
         WSADATA wsaData;
@@ -1090,7 +1015,7 @@ public:
     // Subscribe to telemetry updates: 1 = Player vehicle only, 2 = All vehicles, 0 = Disabled
     long WantsTelemetryUpdates() override {
         if (config.unsubscribedBuffersMask & UNSUB_TELEMETRY) return 0;
-        return telemetryLimiter.IsEnabled() ? 1 : 0;
+        return telemetryLimiter.IsEnabled() ? 2 : 0;
     }
 
     // High frequency callback (~60-100Hz): Direct memory dump (zero-copy, zero-allocation)
@@ -1113,8 +1038,8 @@ public:
         if (config.unsubscribedBuffersMask & UNSUB_TELEMETRY) return;
         if (!telemetryLimiter.ShouldSend()) return;
 
-        sendto(udpSocket, reinterpret_cast<const char*>(&info), sizeof(TelemInfoV01), 0,
-               reinterpret_cast<const sockaddr*>(&serverAddr), sizeof(serverAddr));
+        SendSlicedPayload(1, static_cast<unsigned short>(info.mID >= 0 ? info.mID : 0),
+                          &info, sizeof(TelemInfoV01), info.mElapsedTime);
     }
 
     // Subscribe to scoring updates (~1-5Hz)
@@ -1218,104 +1143,6 @@ public:
             size_t totalPayloadSize = sizeof(FullScoringSessionPacket) + (numVehicles * sizeof(VehicleScoringInfoV01));
             SendSlicedPayload(4, static_cast<unsigned short>(numVehicles), s_scoringBuffer, totalPayloadSize, info.mCurrentET);
         }
-    }
-
-    // Subscribe to track rules updates (FR-03, SIMP Type 5)
-    bool WantsTrackRulesAccess() override {
-        if (config.unsubscribedBuffersMask & UNSUB_RULES) return false;
-        return trackRulesLimiter.IsEnabled();
-    }
-
-    bool AccessTrackRules(TrackRulesV01 &info) override {
-        if (!initialized || udpSocket == INVALID_SOCKET) return false;
-        if (config.unsubscribedBuffersMask & UNSUB_RULES) return false;
-        if (!trackRulesLimiter.ShouldSend()) return false;
-
-        TrackRulesSessionPacket* rules = reinterpret_cast<TrackRulesSessionPacket*>(s_trackRulesBuffer);
-        std::memset(rules, 0, sizeof(TrackRulesSessionPacket));
-
-        rules->currentET = info.mCurrentET;
-        rules->stage = info.mStage;
-        rules->poleColumn = info.mPoleColumn;
-        rules->numActions = info.mNumActions;
-
-        long numParticipants = (info.mNumParticipants > 128) ? 128 : info.mNumParticipants;
-        rules->numParticipants = numParticipants;
-
-        rules->yellowFlagDetected = info.mYellowFlagDetected;
-        rules->yellowFlagLapsWasOverridden = info.mYellowFlagLapsWasOverridden;
-        rules->safetyCarExists = info.mSafetyCarExists;
-        rules->safetyCarActive = info.mSafetyCarActive;
-        rules->safetyCarLaps = info.mSafetyCarLaps;
-        rules->safetyCarThreshold = info.mSafetyCarThreshold;
-        rules->safetyCarLapDist = info.mSafetyCarLapDist;
-        rules->safetyCarLapDistAtStart = info.mSafetyCarLapDistAtStart;
-        rules->pitLaneStartDist = info.mPitLaneStartDist;
-        rules->teleportLapDist = info.mTeleportLapDist;
-        rules->yellowFlagState = info.mYellowFlagState;
-        rules->yellowFlagLaps = info.mYellowFlagLaps;
-        rules->safetyCarInstruction = info.mSafetyCarInstruction;
-        rules->safetyCarSpeed = info.mSafetyCarSpeed;
-        rules->safetyCarMinimumSpacing = info.mSafetyCarMinimumSpacing;
-        rules->safetyCarMaximumSpacing = info.mSafetyCarMaximumSpacing;
-        rules->minimumColumnSpacing = info.mMinimumColumnSpacing;
-        rules->maximumColumnSpacing = info.mMaximumColumnSpacing;
-        rules->minimumSpeed = info.mMinimumSpeed;
-        rules->maximumSpeed = info.mMaximumSpeed;
-        std::strncpy(rules->message, info.mMessage, sizeof(rules->message) - 1);
-        rules->message[sizeof(rules->message) - 1] = '\0';
-
-        if (numParticipants > 0 && info.mParticipant != nullptr) {
-            TrackRulesParticipantPacket* partDst = reinterpret_cast<TrackRulesParticipantPacket*>(
-                s_trackRulesBuffer + sizeof(TrackRulesSessionPacket)
-            );
-            for (long i = 0; i < numParticipants; ++i) {
-                const auto &p = info.mParticipant[i];
-                auto &dst = partDst[i];
-                dst.id = p.mID;
-                dst.frozenOrder = p.mFrozenOrder;
-                dst.place = p.mPlace;
-                dst.yellowSeverity = p.mYellowSeverity;
-                dst.currentRelativeDistance = p.mCurrentRelativeDistance;
-                dst.relativeLaps = p.mRelativeLaps;
-                dst.columnAssignment = p.mColumnAssignment;
-                dst.positionAssignment = p.mPositionAssignment;
-                dst.pitsOpen = p.mPitsOpen;
-                dst.upToSpeed = p.mUpToSpeed;
-                dst.pad[0] = 0; dst.pad[1] = 0;
-                dst.goalRelativeDistance = p.mGoalRelativeDistance;
-                std::strncpy(dst.message, p.mMessage, sizeof(dst.message) - 1);
-                dst.message[sizeof(dst.message) - 1] = '\0';
-            }
-        }
-
-        size_t totalPayloadSize = sizeof(TrackRulesSessionPacket) + (numParticipants * sizeof(TrackRulesParticipantPacket));
-        SendSlicedPayload(5, static_cast<unsigned short>(numParticipants), s_trackRulesBuffer, totalPayloadSize, info.mCurrentET);
-        return false;
-    }
-
-    // Subscribe to pit menu updates (FR-04, SIMP Type 6 @ 100Hz)
-    bool WantsPitMenuAccess() override {
-        if (config.unsubscribedBuffersMask & UNSUB_PIT_INFO) return false;
-        return pitMenuLimiter.IsEnabled();
-    }
-
-    bool AccessPitMenu(PitMenuV01 &info) override {
-        if (!initialized || udpSocket == INVALID_SOCKET) return false;
-        if (config.unsubscribedBuffersMask & UNSUB_PIT_INFO) return false;
-        if (!pitMenuLimiter.ShouldSend()) return false;
-
-        PitMenuPacket pkt{};
-        pkt.categoryIndex = info.mCategoryIndex;
-        std::strncpy(pkt.categoryName, info.mCategoryName, sizeof(pkt.categoryName) - 1);
-        pkt.categoryName[sizeof(pkt.categoryName) - 1] = '\0';
-        pkt.choiceIndex = info.mChoiceIndex;
-        std::strncpy(pkt.choiceString, info.mChoiceString, sizeof(pkt.choiceString) - 1);
-        pkt.choiceString[sizeof(pkt.choiceString) - 1] = '\0';
-        pkt.numChoices = info.mNumChoices;
-
-        SendSlicedPayload(6, 0, &pkt, sizeof(pkt), 0.0);
-        return false;
     }
 
     // Inbound Hardware & Pit Menu Controls (FR-07)
@@ -1453,6 +1280,333 @@ public:
     }
 };
 
+// --- MSVC ABI Compatible VTable Shim for isiMotor (LMU / rFactor 2) Plugin Host ---
+
+struct MsvcInternalsVTable {
+    void (*Destructor)(void* self, unsigned int flags);
+    void (*Startup)(void* self, long version);
+    void (*Shutdown)(void* self);
+    void (*Load)(void* self);
+    void (*Unload)(void* self);
+    void (*StartSession)(void* self);
+    void (*EndSession)(void* self);
+    void (*EnterRealtime)(void* self);
+    void (*ExitRealtime)(void* self);
+    bool (*WantsScoringUpdates)(void* self);
+    void (*UpdateScoring)(void* self, const ScoringInfoV01 &info);
+    long (*WantsTelemetryUpdates)(void* self);
+    void (*UpdateTelemetry)(void* self, const TelemInfoV01 &info);
+    bool (*WantsGraphicsUpdates)(void* self);
+    void (*UpdateGraphics_V01)(void* self, const GraphicsInfoV01 &info);
+    bool (*RequestCommentary)(void* self, CommentaryRequestInfoV01 &info);
+    bool (*HasHardwareInputs)(void* self);
+    void (*UpdateHardware)(void* self, const double fDT);
+    void (*EnableHardware)(void* self);
+    void (*DisableHardware)(void* self);
+    bool (*CheckHWControl)(void* self, const char * const controlName, double &fRetVal);
+    bool (*ForceFeedback)(void* self, double &forceValue);
+    void (*Error)(void* self, const char * const msg);
+    // V02
+    void (*SetPhysicsOptions)(void* self, PhysicsOptionsV01 &options);
+    // V03
+    unsigned char (*WantsToViewVehicle)(void* self, CameraControlInfoV01 &camControl);
+    void (*UpdateGraphics_V02)(void* self, const GraphicsInfoV02 &info);
+    bool (*WantsToDisplayMessage)(void* self, MessageInfoV01 &msgInfo);
+    // V04
+    void (*SetEnvironment)(void* self, const EnvironmentInfoV01 &info);
+    // V05
+    void (*InitScreen)(void* self, const ScreenInfoV01 &info);
+    void (*UninitScreen)(void* self, const ScreenInfoV01 &info);
+    void (*DeactivateScreen)(void* self, const ScreenInfoV01 &info);
+    void (*ReactivateScreen)(void* self, const ScreenInfoV01 &info);
+    void (*RenderScreenBeforeOverlays)(void* self, const ScreenInfoV01 &info);
+    void (*RenderScreenAfterOverlays)(void* self, const ScreenInfoV01 &info);
+    void (*PreReset)(void* self, const ScreenInfoV01 &info);
+    void (*PostReset)(void* self, const ScreenInfoV01 &info);
+    bool (*InitCustomControl)(void* self, CustomControlInfoV01 &info);
+    // V06
+    bool (*WantsWeatherAccess)(void* self);
+    bool (*AccessWeather)(void* self, double trackNodeSize, WeatherControlInfoV01 &info);
+    void (*ThreadStarted)(void* self, long type);
+    void (*ThreadStopping)(void* self, long type);
+};
+
+#pragma pack(push, 4)
+struct MsvcPluginInstance {
+    const MsvcInternalsVTable* vtable; // Offset 0: Primary MSVC VTable
+    PluginInfo* mInfo;                 // Offset 8: PluginObject::mInfo
+    IsiMotorRawUdpPlugin impl;         // Offset 16: Concrete Plugin Implementation
+};
+#pragma pack(pop)
+
+extern const MsvcInternalsVTable g_MsvcVTable;
+
+static inline IsiMotorRawUdpPlugin* GetPlugin(void* self) {
+    if (!self) return nullptr;
+    auto* inst = reinterpret_cast<MsvcPluginInstance*>(self);
+    return &inst->impl;
+}
+
+static void Shim_Destructor(void* self, unsigned int flags) {
+    (void)flags;
+    PluginLog("Shim_Destructor(self=%p) called", self);
+    if (!self) return;
+    auto* inst = reinterpret_cast<MsvcPluginInstance*>(self);
+    delete inst;
+}
+
+static void Shim_Startup(void* self, long version) {
+    PluginLog("Shim_Startup(self=%p, version=%ld) called", self, version);
+    auto* p = GetPlugin(self);
+    if (p) p->Startup(version);
+}
+
+static void Shim_Shutdown(void* self) {
+    PluginLog("Shim_Shutdown() called");
+    auto* p = GetPlugin(self);
+    if (p) p->Shutdown();
+}
+
+static void Shim_Load(void* self) {
+    PluginLog("Shim_Load() called");
+    auto* p = GetPlugin(self);
+    if (p) p->Load();
+}
+
+static void Shim_Unload(void* self) {
+    PluginLog("Shim_Unload() called");
+    auto* p = GetPlugin(self);
+    if (p) p->Unload();
+}
+
+static void Shim_StartSession(void* self) {
+    PluginLog("Shim_StartSession() called");
+    auto* p = GetPlugin(self);
+    if (p) p->StartSession();
+}
+
+static void Shim_EndSession(void* self) {
+    PluginLog("Shim_EndSession() called");
+    auto* p = GetPlugin(self);
+    if (p) p->EndSession();
+}
+
+static void Shim_EnterRealtime(void* self) {
+    PluginLog("Shim_EnterRealtime() called");
+    auto* p = GetPlugin(self);
+    if (p) p->EnterRealtime();
+}
+
+static void Shim_ExitRealtime(void* self) {
+    PluginLog("Shim_ExitRealtime() called");
+    auto* p = GetPlugin(self);
+    if (p) p->ExitRealtime();
+}
+
+static bool Shim_WantsScoringUpdates(void* self) {
+    auto* p = GetPlugin(self);
+    bool ret = p ? p->WantsScoringUpdates() : false;
+    PluginLog("Shim_WantsScoringUpdates() -> %s", ret ? "true" : "false");
+    return ret;
+}
+
+static void Shim_UpdateScoring(void* self, const ScoringInfoV01 &info) {
+    static int s_scoring_count = 0;
+    if (++s_scoring_count <= 3 || s_scoring_count % 50 == 0) {
+        PluginLog("Shim_UpdateScoring #%d (track='%s', session=%ld, vehicles=%ld, et=%.2f)",
+                  s_scoring_count, info.mTrackName, info.mSession, info.mNumVehicles, info.mCurrentET);
+    }
+    auto* p = GetPlugin(self);
+    if (p) p->UpdateScoring(info);
+}
+
+static long Shim_WantsTelemetryUpdates(void* self) {
+    auto* p = GetPlugin(self);
+    long ret = p ? p->WantsTelemetryUpdates() : 0;
+    PluginLog("Shim_WantsTelemetryUpdates() -> %ld", ret);
+    return ret;
+}
+
+static void Shim_UpdateTelemetry(void* self, const TelemInfoV01 &info) {
+    static int s_telem_count = 0;
+    if (++s_telem_count <= 5 || s_telem_count % 100 == 0) {
+        PluginLog("Shim_UpdateTelemetry #%d (et=%.2f, rpm=%.0f, gear=%d)",
+                  s_telem_count, info.mElapsedTime, info.mEngineRPM, info.mGear);
+    }
+    auto* p = GetPlugin(self);
+    if (p) p->UpdateTelemetry(info);
+}
+
+static bool Shim_WantsGraphicsUpdates(void* self) {
+    auto* p = GetPlugin(self);
+    return p ? p->WantsGraphicsUpdates() : false;
+}
+
+static void Shim_UpdateGraphics_V01(void* self, const GraphicsInfoV01 &info) {
+    (void)self; (void)info;
+}
+
+static bool Shim_RequestCommentary(void* self, CommentaryRequestInfoV01 &info) {
+    (void)self; (void)info; return false;
+}
+
+static bool Shim_HasHardwareInputs(void* self) {
+    auto* p = GetPlugin(self);
+    return p ? p->HasHardwareInputs() : false;
+}
+
+static void Shim_UpdateHardware(void* self, const double fDT) {
+    auto* p = GetPlugin(self);
+    if (p) p->UpdateHardware(fDT);
+}
+
+static void Shim_EnableHardware(void* self) {
+    auto* p = GetPlugin(self);
+    if (p) p->EnableHardware();
+}
+
+static void Shim_DisableHardware(void* self) {
+    auto* p = GetPlugin(self);
+    if (p) p->DisableHardware();
+}
+
+static bool Shim_CheckHWControl(void* self, const char * const controlName, double &fRetVal) {
+    auto* p = GetPlugin(self);
+    return p ? p->CheckHWControl(controlName, fRetVal) : false;
+}
+
+static bool Shim_ForceFeedback(void* self, double &forceValue) {
+    auto* p = GetPlugin(self);
+    return p ? p->ForceFeedback(forceValue) : false;
+}
+
+static void Shim_Error(void* self, const char * const msg) {
+    auto* p = GetPlugin(self);
+    if (p) p->Error(msg);
+}
+
+static void Shim_SetPhysicsOptions(void* self, PhysicsOptionsV01 &options) {
+    auto* p = GetPlugin(self);
+    if (p) p->SetPhysicsOptions(options);
+}
+
+static unsigned char Shim_WantsToViewVehicle(void* self, CameraControlInfoV01 &camControl) {
+    (void)self; (void)camControl; return 0;
+}
+
+static void Shim_UpdateGraphics_V02(void* self, const GraphicsInfoV02 &info) {
+    auto* p = GetPlugin(self);
+    if (p) p->UpdateGraphics(info);
+}
+
+static bool Shim_WantsToDisplayMessage(void* self, MessageInfoV01 &msgInfo) {
+    (void)self; (void)msgInfo; return false;
+}
+
+static void Shim_SetEnvironment(void* self, const EnvironmentInfoV01 &info) {
+    (void)self; (void)info;
+}
+
+static void Shim_InitScreen(void* self, const ScreenInfoV01 &info) {
+    (void)self; (void)info;
+}
+
+static void Shim_UninitScreen(void* self, const ScreenInfoV01 &info) {
+    (void)self; (void)info;
+}
+
+static void Shim_DeactivateScreen(void* self, const ScreenInfoV01 &info) {
+    (void)self; (void)info;
+}
+
+static void Shim_ReactivateScreen(void* self, const ScreenInfoV01 &info) {
+    (void)self; (void)info;
+}
+
+static void Shim_RenderScreenBeforeOverlays(void* self, const ScreenInfoV01 &info) {
+    (void)self; (void)info;
+}
+
+static void Shim_RenderScreenAfterOverlays(void* self, const ScreenInfoV01 &info) {
+    (void)self; (void)info;
+}
+
+static void Shim_PreReset(void* self, const ScreenInfoV01 &info) {
+    (void)self; (void)info;
+}
+
+static void Shim_PostReset(void* self, const ScreenInfoV01 &info) {
+    (void)self; (void)info;
+}
+
+static bool Shim_InitCustomControl(void* self, CustomControlInfoV01 &info) {
+    (void)self; (void)info; return false;
+}
+
+static bool Shim_WantsWeatherAccess(void* self) {
+    auto* p = GetPlugin(self);
+    return p ? p->WantsWeatherAccess() : false;
+}
+
+static bool Shim_AccessWeather(void* self, double trackNodeSize, WeatherControlInfoV01 &info) {
+    auto* p = GetPlugin(self);
+    return p ? p->AccessWeather(trackNodeSize, info) : false;
+}
+
+static void Shim_ThreadStarted(void* self, long type) {
+    auto* p = GetPlugin(self);
+    if (p) p->ThreadStarted(type);
+}
+
+static void Shim_ThreadStopping(void* self, long type) {
+    auto* p = GetPlugin(self);
+    if (p) p->ThreadStopping(type);
+}
+
+const MsvcInternalsVTable g_MsvcVTable = {
+    Shim_Destructor,
+    Shim_Startup,
+    Shim_Shutdown,
+    Shim_Load,
+    Shim_Unload,
+    Shim_StartSession,
+    Shim_EndSession,
+    Shim_EnterRealtime,
+    Shim_ExitRealtime,
+    Shim_WantsScoringUpdates,
+    Shim_UpdateScoring,
+    Shim_WantsTelemetryUpdates,
+    Shim_UpdateTelemetry,
+    Shim_WantsGraphicsUpdates,
+    Shim_UpdateGraphics_V01,
+    Shim_RequestCommentary,
+    Shim_HasHardwareInputs,
+    Shim_UpdateHardware,
+    Shim_EnableHardware,
+    Shim_DisableHardware,
+    Shim_CheckHWControl,
+    Shim_ForceFeedback,
+    Shim_Error,
+    Shim_SetPhysicsOptions,
+    Shim_WantsToViewVehicle,
+    Shim_UpdateGraphics_V02,
+    Shim_WantsToDisplayMessage,
+    Shim_SetEnvironment,
+    Shim_InitScreen,
+    Shim_UninitScreen,
+    Shim_DeactivateScreen,
+    Shim_ReactivateScreen,
+    Shim_RenderScreenBeforeOverlays,
+    Shim_RenderScreenAfterOverlays,
+    Shim_PreReset,
+    Shim_PostReset,
+    Shim_InitCustomControl,
+    Shim_WantsWeatherAccess,
+    Shim_AccessWeather,
+    Shim_ThreadStarted,
+    Shim_ThreadStopping
+};
+
 // --- C Interface Exported for isiMotor (LMU / rFactor 2) Plugin Host ---
 
 extern "C" __declspec(dllexport) const char* __cdecl GetPluginName() {
@@ -1464,13 +1618,22 @@ extern "C" __declspec(dllexport) PluginObjectType __cdecl GetPluginType() {
 }
 
 extern "C" __declspec(dllexport) int __cdecl GetPluginVersion() {
-    return 7; // Corresponds to InternalsPluginV07
+    return 6; // Corresponds to InternalsPluginV06
 }
 
 extern "C" __declspec(dllexport) PluginObject* __cdecl CreatePluginObject() {
-    return new IsiMotorRawUdpPlugin();
+    auto* inst = new MsvcPluginInstance();
+    inst->vtable = &g_MsvcVTable;
+    inst->mInfo = nullptr;
+    PluginLog("CreatePluginObject() -> inst=%p, pObj=%p", inst, &inst->mInfo);
+    // Return pointer to PluginObject at offset 8 (PluginsAdapter.exe writes to [pObj] and accesses vtable at pObj - 8)
+    return reinterpret_cast<PluginObject*>(&inst->mInfo);
 }
 
 extern "C" __declspec(dllexport) void __cdecl DestroyPluginObject(PluginObject* obj) {
-    delete obj;
+    if (!obj) return;
+    auto* inst = reinterpret_cast<MsvcPluginInstance*>(reinterpret_cast<char*>(obj) - sizeof(void*));
+    PluginLog("DestroyPluginObject(obj=%p) -> inst=%p", obj, inst);
+    delete inst;
 }
+

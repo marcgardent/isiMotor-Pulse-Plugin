@@ -11,16 +11,16 @@ from isimotor_rawudp_client import (
     CompactScoring,
     ExtendedState,
     ForceFeedback,
+    FullScoringSession,
     IsiMotorClient,
     PhysicsOptions,
     SystemEvent,
     TelemInfo,
     TelemVect3,
     TelemWheel,
-    TrackRulesSession,
 )
 from isimotor_rawudp_client.constants import (
-    PKT_TYPE_TRACK_RULES,
+    PKT_TYPE_FULL_SCORING,
 )
 from isimotor_rawudp_client.decoder import (
     PacketDecoderRegistry,
@@ -162,14 +162,14 @@ class TestModularArchitecture(unittest.TestCase):
         """Tests ChunkReassembler with sequential chunks and timeout eviction."""
         reassembler = ChunkReassembler(timeout_seconds=0.1, cleanup_interval_seconds=0.0)
 
-        # Create dummy 2-chunk packet (Track Rules payload)
-        # 192 bytes session header
-        dummy_session = b"\x00" * 192
-        chunk0 = dummy_session[:100]
-        chunk1 = dummy_session[100:]
+        # Create dummy 2-chunk packet (Full Scoring payload)
+        # 284 bytes session header
+        dummy_session = b"\x00" * 284
+        chunk0 = dummy_session[:150]
+        chunk1 = dummy_session[150:]
 
-        hdr0 = encode_header(PKT_TYPE_TRACK_RULES, len(chunk0), sequence_number=1, chunk_index=0, total_chunks=2)
-        hdr1 = encode_header(PKT_TYPE_TRACK_RULES, len(chunk1), sequence_number=1, chunk_index=1, total_chunks=2)
+        hdr0 = encode_header(PKT_TYPE_FULL_SCORING, len(chunk0), sequence_number=1, chunk_index=0, total_chunks=2)
+        hdr1 = encode_header(PKT_TYPE_FULL_SCORING, len(chunk1), sequence_number=1, chunk_index=1, total_chunks=2)
 
         # Incomplete chunk
         res0 = reassembler.process(hdr0 + chunk0, now=10.0)
@@ -177,7 +177,7 @@ class TestModularArchitecture(unittest.TestCase):
 
         # Complete chunk
         res1 = reassembler.process(hdr1 + chunk1, now=10.05)
-        self.assertIsInstance(res1, TrackRulesSession)
+        self.assertIsInstance(res1, FullScoringSession)
 
         # Stale chunk timeout
         reassembler.process(hdr0 + chunk0, now=20.0)

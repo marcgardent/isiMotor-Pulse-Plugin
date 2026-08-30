@@ -6,7 +6,6 @@ import socket
 import threading
 
 from ..decoder.commands import encode_hw_control, encode_weather_control
-from ..models import PitAction
 
 
 class UdpSender:
@@ -34,9 +33,9 @@ class UdpSender:
         port: int | None = None,
     ) -> bool:
         """
-        Transmits a hardware / pit menu control command (SIMP Type 100) to the game plugin.
+        Transmits a hardware control command (SIMP Type 100) to the game plugin.
 
-        :param control_name: Control name (e.g. "PitMenuUp", "PitMenuSelect", "TCIncrease", "ABSDecrease").
+        :param control_name: Control name (e.g. "TCIncrease", "ABSDecrease").
         :param control_value: 1.0 = press/activate, 0.0 = release, or analog value.
         :param duration_ms: Pulse duration in milliseconds (default: 50ms).
         :param host: Destination IP (defaults to self.default_host).
@@ -55,25 +54,6 @@ class UdpSender:
         )
 
         return self._transmit(packet, dest_host, dest_port)
-
-    def send_pit_action(
-        self,
-        action: PitAction | str,
-        duration_ms: int = 50,
-        host: str | None = None,
-        port: int | None = None,
-    ) -> bool:
-        """
-        Convenience helper to send pit menu navigation actions (Up, Down, Prev, Next, Select).
-        """
-        name = action.value if isinstance(action, PitAction) else str(action)
-        return self.send_hw_control(
-            control_name=name,
-            control_value=1.0,
-            duration_ms=duration_ms,
-            host=host,
-            port=port,
-        )
 
     def send_weather_override(
         self,

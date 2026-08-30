@@ -14,10 +14,8 @@ from ..constants import (
     PKT_TYPE_FULL_SCORING,
     PKT_TYPE_GRAPHICS,
     PKT_TYPE_HW_CONTROL,
-    PKT_TYPE_PIT_MENU,
     PKT_TYPE_SYSTEM_EVENT,
     PKT_TYPE_TELEMETRY,
-    PKT_TYPE_TRACK_RULES,
     PKT_TYPE_WEATHER,
     PKT_TYPE_WEATHER_CONTROL,
 )
@@ -28,10 +26,8 @@ from ..models import (
     FullScoringSession,
     Graphics,
     HWControlCommand,
-    PitMenu,
     SystemEvent,
     TelemInfo,
-    TrackRulesSession,
     WeatherControl,
     WeatherControlCommand,
 )
@@ -41,8 +37,6 @@ from .feedback import decode_force_feedback
 from .graphics import decode_graphics
 from .header import decode_header
 from .physics import decode_extended_state
-from .pit import decode_pit_menu
-from .rules import decode_track_rules
 from .scoring import decode_compact_scoring, decode_full_scoring
 from .telemetry import decode_telemetry
 from .weather import decode_weather
@@ -51,8 +45,6 @@ AnyPacket = Union[
     TelemInfo,
     CompactScoring,
     FullScoringSession,
-    TrackRulesSession,
-    PitMenu,
     WeatherControl,
     ExtendedState,
     ForceFeedback,
@@ -80,8 +72,6 @@ class PacketDecoderRegistry:
         self.register(PKT_TYPE_COMPACT_SCORING, decode_compact_scoring)
         self.register(PKT_TYPE_SYSTEM_EVENT, decode_system_event)
         self.register(PKT_TYPE_FULL_SCORING, decode_full_scoring)
-        self.register(PKT_TYPE_TRACK_RULES, decode_track_rules)
-        self.register(PKT_TYPE_PIT_MENU, decode_pit_menu)
         self.register(PKT_TYPE_WEATHER, decode_weather)
         self.register(PKT_TYPE_EXTENDED_STATE, decode_extended_state)
         self.register(PKT_TYPE_FORCE_FEEDBACK, decode_force_feedback)

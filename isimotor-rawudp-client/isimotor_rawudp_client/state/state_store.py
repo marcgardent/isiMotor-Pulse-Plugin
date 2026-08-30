@@ -12,10 +12,8 @@ from ..models import (
     FullScoringSession,
     Graphics,
     HWControlCommand,
-    PitMenu,
     SystemEvent,
     TelemInfo,
-    TrackRulesSession,
     WeatherControl,
     WeatherControlCommand,
 )
@@ -31,8 +29,6 @@ class StateStore:
         self._latest_telemetry: TelemInfo | None = None
         self._latest_scoring: CompactScoring | None = None
         self._latest_full_scoring: FullScoringSession | None = None
-        self._latest_track_rules: TrackRulesSession | None = None
-        self._latest_pit_menu: PitMenu | None = None
         self._latest_weather: WeatherControl | None = None
         self._latest_extended_state: ExtendedState | None = None
         self._latest_force_feedback: ForceFeedback | None = None
@@ -55,10 +51,6 @@ class StateStore:
                 self._latest_scoring = packet
             elif isinstance(packet, FullScoringSession):
                 self._latest_full_scoring = packet
-            elif isinstance(packet, TrackRulesSession):
-                self._latest_track_rules = packet
-            elif isinstance(packet, PitMenu):
-                self._latest_pit_menu = packet
             elif isinstance(packet, WeatherControl):
                 self._latest_weather = packet
             elif isinstance(packet, ExtendedState):
@@ -88,16 +80,6 @@ class StateStore:
         """Returns the most recently received FullScoringSession frame thread-safely."""
         with self._lock:
             return self._latest_full_scoring
-
-    def get_track_rules(self) -> TrackRulesSession | None:
-        """Returns the most recently received TrackRulesSession frame thread-safely."""
-        with self._lock:
-            return self._latest_track_rules
-
-    def get_pit_menu(self) -> PitMenu | None:
-        """Returns the most recently received PitMenu frame thread-safely."""
-        with self._lock:
-            return self._latest_pit_menu
 
     def get_weather(self) -> WeatherControl | None:
         """Returns the most recently received WeatherControl frame thread-safely."""

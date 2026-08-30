@@ -1,8 +1,8 @@
 # 🏎️ isiMotor-RawUDP-Plugin — User Notice & Configuration Guide
 
-> **Version**: 1.0.0-RC  
+> **Version**: 1.4.0  
 > **Compatibility**: Le Mans Ultimate (LMU), rFactor 2 (rF2), isiMotor 2.5 / 3.0  
-> **Architecture**: Windows x64 (MSVC / MinGW native DLL), Linux Proton / Steam Deck  
+> **Architecture**: Windows x64 (Universal MinGW native DLL), Linux Proton / Steam Deck  
 
 ---
 

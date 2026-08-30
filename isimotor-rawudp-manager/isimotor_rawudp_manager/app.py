@@ -2,7 +2,7 @@
 isiMotor-RawUDP-Manager main application entry point.
 """
 
-from .sniffer import IsiMotorBenchmarkApp, main
+from .ui.app import IsiMotorBenchmarkApp, main
 
 __all__ = ["IsiMotorBenchmarkApp", "main"]
 

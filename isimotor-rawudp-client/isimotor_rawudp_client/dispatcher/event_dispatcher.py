@@ -12,10 +12,8 @@ from ..models import (
     FullScoringSession,
     Graphics,
     HWControlCommand,
-    PitMenu,
     SystemEvent,
     TelemInfo,
-    TrackRulesSession,
     WeatherControl,
     WeatherControlCommand,
 )
@@ -33,8 +31,6 @@ class EventDispatcher:
         self.on_telemetry: Callable[[TelemInfo], None] | None = None
         self.on_scoring: Callable[[CompactScoring], None] | None = None
         self.on_full_scoring: Callable[[FullScoringSession], None] | None = None
-        self.on_track_rules: Callable[[TrackRulesSession], None] | None = None
-        self.on_pit_menu: Callable[[PitMenu], None] | None = None
         self.on_weather: Callable[[WeatherControl], None] | None = None
         self.on_extended_state: Callable[[ExtendedState], None] | None = None
         self.on_force_feedback: Callable[[ForceFeedback], None] | None = None
@@ -84,16 +80,6 @@ class EventDispatcher:
         elif isinstance(packet, FullScoringSession) and self.on_full_scoring:
             try:
                 self.on_full_scoring(packet)
-            except Exception:
-                pass
-        elif isinstance(packet, TrackRulesSession) and self.on_track_rules:
-            try:
-                self.on_track_rules(packet)
-            except Exception:
-                pass
-        elif isinstance(packet, PitMenu) and self.on_pit_menu:
-            try:
-                self.on_pit_menu(packet)
             except Exception:
                 pass
         elif isinstance(packet, WeatherControl) and self.on_weather:

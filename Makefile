@@ -1,4 +1,4 @@
-.PHONY: help all build cross test benchmark install uninstall status info clean lint format typecheck check
+.PHONY: help all build cross test benchmark install uninstall status info clean lint format typecheck check version bump french-drift drift
 
 BUILD_DIR = build
 BIN_DIR   = bin
@@ -20,8 +20,8 @@ help:
 	@echo "  make typecheck      - Run Mypy strict static type checker"
 	@echo "  make check          - Run all static checks (lint + typecheck + test)"
 	@echo "  make test           - Run full C++ mock & golden dataset integration tests"
-	@echo "  make cross          - Cross-compile DLL using MinGW-w64 (on Linux)"
-	@echo "  make build          - Native compile DLL (on Windows MSVC / MinGW)"
+	@echo "  make cross          - Compile standard universal DLL using MinGW-w64"
+	@echo "  make build          - Alias for 'make cross' (standard universal build)"
 	@echo "  make manager        - Run live Textual telemetry diagnostics & manager"
 	@echo "  make benchmark      - Alias for 'make manager'"
 	@echo "  make package        - Package Manager into standalone executable with Briefcase"
@@ -31,6 +31,10 @@ help:
 	@echo "  make uninstall      - Remove plugin DLL from detected game installations"
 	@echo "  make status         - Display detected game installations & plugin status"
 	@echo "  make info           - Display UDP packet structures & memory layout"
+	@echo "  make version VERSION=x.y.z - Bump version across all packages & create Git tag"
+	@echo "  make bump VERSION=x.y.z    - Alias for 'make version'"
+	@echo "  make french-drift   - Scan codebase for French language drift keywords"
+	@echo "  make drift          - Alias for 'make french-drift'"
 	@echo "  make clean          - Remove build and bin directories"
 	@echo "=================================================================="
 
@@ -60,26 +64,21 @@ test:
 cross:
 	@which x86_64-w64-mingw32-g++ >/dev/null 2>&1 || ( \
 		echo "" && \
-		echo "❌ Erreur : Le compilateur MinGW-w64 (x86_64-w64-mingw32-g++) est introuvable." && \
-		echo "   Pour cross-compiler la DLL Windows sous Linux, installez MinGW-w64 :" && \
+		echo "❌ Error: MinGW-w64 compiler (x86_64-w64-mingw32-g++) not found." && \
+		echo "   To compile the standard universal DLL on Linux, please install MinGW-w64:" && \
 		echo "     • Ubuntu / Debian : sudo apt update && sudo apt install -y mingw-w64 g++-mingw-w64-x86-64" && \
 		echo "     • Fedora          : sudo dnf install mingw64-gcc-c++" && \
 		echo "     • Arch Linux      : sudo pacman -S mingw-w64-gcc" && \
 		echo "" && \
 		exit 1 \
 	)
-	@echo "==> Cross-compiling isiMotor_RawUDP.dll with MinGW..."
+	@echo "==> Cross-compiling standard isiMotor_RawUDP.dll with MinGW..."
 	@mkdir -p $(BUILD_DIR)
 	cmake -S isimotor-rawudp-plugin -B $(BUILD_DIR) -DCMAKE_TOOLCHAIN_FILE=isimotor-rawudp-plugin/toolchain.cmake -DCMAKE_BUILD_TYPE=Release
 	cmake --build $(BUILD_DIR) --config Release
 	@echo "==> Build complete: $(BUILD_DIR)/isiMotor_RawUDP.dll"
 
-build:
-	@echo "==> Compiling isiMotor_RawUDP.dll natively..."
-	@mkdir -p $(BUILD_DIR)
-	cmake -S isimotor-rawudp-plugin -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
-	cmake --build $(BUILD_DIR) --config Release
-	@echo "==> Build complete: $(BUILD_DIR)/isiMotor_RawUDP.dll"
+build: cross
 
 manager:
 	@echo "==> Launching isiMotor-RawUDP-Manager on UDP port 5000..."
@@ -143,6 +142,22 @@ info:
 	@echo "     • Size: 6 bytes"
 	@echo "     • Format: Magic 'SIMP' + Type 3 + Event ID"
 	@echo "=================================================================="
+
+version:
+	@if [ -z "$(VERSION)" ]; then \
+		echo ""; \
+		echo "❌ Error: Please specify the version number (e.g. make version VERSION=1.5.0)"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/bump_version.py $(VERSION)
+
+bump: version
+
+french-drift:
+	@$(PYTHON) scripts/french_drift.py
+
+drift: french-drift
 
 clean:
 	@echo "==> Cleaning build artifacts..."

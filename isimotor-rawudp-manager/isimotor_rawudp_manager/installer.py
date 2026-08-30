@@ -258,8 +258,6 @@ DEFAULT_PLUGIN_VARIABLES: dict[str, int | str] = {
     "TelemetryRate": "unlimited",
     "CompactScoringRate": "unlimited",
     "FullScoringRate": "5Hz",
-    "TrackRulesRate": "3Hz",
-    "PitMenuRate": "100Hz",
     "WeatherRate": "1Hz",
     "ExtendedStateRate": "5Hz",
     "ForceFeedbackRate": "unlimited",
@@ -275,7 +273,8 @@ def configure_game_json(game_dir: Path, plugin_dll_name: str = "isiMotor_RawUDP.
     Enables external plugins and registers the DLL with full standard default values.
     """
     success = True
-    base_name = plugin_dll_name.replace(".dll", "")
+    dll_key = plugin_dll_name if plugin_dll_name.lower().endswith(".dll") else f"{plugin_dll_name}.dll"
+    base_name = dll_key.replace(".dll", "")
     alt_name = base_name.replace("_", "-")
 
     # 1. Configure CustomPluginVariables.JSON
@@ -297,19 +296,23 @@ def configure_game_json(game_dir: Path, plugin_dll_name: str = "isiMotor_RawUDP.
                 except Exception:
                     data = {}
 
-            for key in [plugin_dll_name, base_name, alt_name]:
-                existing_entry = data.get(key, {})
-                merged = dict(DEFAULT_PLUGIN_VARIABLES)
-                if isinstance(existing_entry, dict):
-                    merged.update(existing_entry)
-                data[key] = merged
+            # Read existing configuration from dll_key or legacy names
+            merged = dict(DEFAULT_PLUGIN_VARIABLES)
+            for k in [dll_key, base_name, alt_name]:
+                if k in data and isinstance(data[k], dict):
+                    merged.update(data[k])
+
+            # Clean up redundant legacy keys without .dll
+            data.pop(base_name, None)
+            data.pop(alt_name, None)
+
+            # Store ONLY under the exact .dll key (standard ISI / rFactor 2 convention)
+            data[dll_key] = merged
 
             jpath.write_text(json.dumps(data, indent=2), encoding="utf-8")
             logger.info(f"  ✓ Configured plugin variables: {jpath}")
         except Exception as e:
             logger.error(f"  ✗ Error writing JSON {jpath}: {e}")
-            success = False
-
     # 2. Configure Settings.JSON (Plugin Mask = 255, Enable external plugins = True)
     settings_targets = [
         game_dir / "UserData" / "player" / "Settings.JSON",
@@ -321,6 +324,10 @@ def configure_game_json(game_dir: Path, plugin_dll_name: str = "isiMotor_RawUDP.
                 content = spath.read_text(encoding="utf-8", errors="ignore").strip()
                 sdata = json.loads(content) if content else {}
                 if isinstance(sdata, dict):
+                    game_opts = sdata.setdefault("Game Options", {})
+                    if isinstance(game_opts, dict):
+                        game_opts["Enable external plugins"] = True
+                        game_opts["Plugin Mask"] = 255
                     sdata["Enable external plugins"] = True
                     sdata["Plugin Mask"] = 255
                     spath.write_text(json.dumps(sdata, indent=2), encoding="utf-8")
@@ -347,7 +354,7 @@ def install_plugin(
 
     if not src_dll:
         logger.error("❌ Error: Compiled 'isiMotor_RawUDP.dll' not found.")
-        logger.error("   Run 'make cross' (on Linux) or 'make build' (on Windows) before installing.")
+        logger.error("   Run 'make cross' (or 'make build') to compile the DLL before installing.")
         return False
 
     logger.info("==================================================================")
@@ -577,7 +584,7 @@ def copy_and_install_dll(
     if not src_dll:
         return (
             False,
-            "Compiled 'isiMotor_RawUDP.dll' not found. Run 'make cross' (MinGW) or 'make build' (MSVC).",
+            "Compiled 'isiMotor_RawUDP.dll' not found. Run 'make cross' to compile the DLL.",
             [],
         )
 
@@ -616,6 +623,110 @@ def copy_and_install_dll(
 
     msg = f"Successfully installed {src_dll.name} into {len(installed_paths)} game path(s)."
     return (True, msg, installed_paths)
+
+
+def write_plugin_json_variables(
+    game_dir: Path,
+    variables: dict[str, Any],
+    plugin_dll_name: str = "isiMotor_RawUDP.dll",
+) -> tuple[bool, str]:
+    """Writes or updates isiMotor_RawUDP configuration variables inside CustomPluginVariables.JSON."""
+    dll_key = plugin_dll_name if plugin_dll_name.lower().endswith(".dll") else f"{plugin_dll_name}.dll"
+    base_name = dll_key.replace(".dll", "")
+    alt_name = base_name.replace("_", "-")
+
+    json_targets = [
+        game_dir / "UserData" / "player" / "CustomPluginVariables.JSON",
+        game_dir / "UserData" / "CustomPluginVariables.JSON",
+    ]
+
+    updated_files: list[str] = []
+    for jpath in json_targets:
+        try:
+            jpath.parent.mkdir(parents=True, exist_ok=True)
+            data: dict[str, dict] = {}
+            if jpath.exists():
+                try:
+                    content = jpath.read_text(encoding="utf-8", errors="ignore").strip()
+                    parsed = json.loads(content) if content else {}
+                    if isinstance(parsed, dict):
+                        data = parsed
+                except Exception:
+                    data = {}
+
+            # Prepare merged dict preserving type for ' Enabled'
+            merged = dict(DEFAULT_PLUGIN_VARIABLES)
+            for k in [dll_key, base_name, alt_name]:
+                if k in data and isinstance(data[k], dict):
+                    merged.update(data[k])
+            merged.update(variables)
+
+            if " Enabled" in merged:
+                try:
+                    merged[" Enabled"] = int(merged[" Enabled"])
+                except Exception:
+                    merged[" Enabled"] = 1
+
+            # Clean up redundant legacy keys without .dll
+            data.pop(base_name, None)
+            data.pop(alt_name, None)
+
+            # Store ONLY under the exact .dll key (standard ISI / rFactor 2 convention)
+            data[dll_key] = merged
+
+            jpath.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            updated_files.append(str(jpath))
+        except Exception as e:
+            return False, f"Failed writing {jpath}: {e}"
+
+    # Also make sure Settings.JSON has external plugins enabled
+    settings_targets = [
+        game_dir / "UserData" / "player" / "Settings.JSON",
+        game_dir / "UserData" / "Settings.JSON",
+    ]
+    for spath in settings_targets:
+        if spath.exists():
+            try:
+                content = spath.read_text(encoding="utf-8", errors="ignore").strip()
+                sdata = json.loads(content) if content else {}
+                if isinstance(sdata, dict):
+                    sdata["Enable external plugins"] = True
+                    sdata["Plugin Mask"] = 255
+                    spath.write_text(json.dumps(sdata, indent=2), encoding="utf-8")
+            except Exception:
+                pass
+
+    return True, f"Updated {len(updated_files)} JSON file(s)"
+
+
+def save_configuration_to_all_games(
+    variables: dict[str, Any],
+    custom_target: Path | None = None,
+    project_root: Path | None = None,
+) -> tuple[bool, str, list[str]]:
+    """Saves the provided variables dictionary into all detected game installations (or custom target)."""
+    targets: list[Path] = []
+    if custom_target:
+        targets.append(Path(custom_target))
+    else:
+        detected = detect_game_installations()
+        for dirs in detected.values():
+            for d in dirs:
+                if d not in targets:
+                    targets.append(d)
+
+    if not targets:
+        return False, "No game installations found to save configuration to.", []
+
+    saved_paths: list[str] = []
+    for gdir in targets:
+        ok, msg = write_plugin_json_variables(gdir, variables)
+        if ok:
+            saved_paths.append(str(gdir))
+        else:
+            return False, msg, saved_paths
+
+    return True, f"Configuration successfully saved to {len(saved_paths)} game installation(s)!", saved_paths
 
 
 def show_status() -> None:

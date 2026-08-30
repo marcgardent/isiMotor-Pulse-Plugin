@@ -33,8 +33,6 @@ class TestInstallerAndConfig(unittest.TestCase):
             "TelemetryRate",
             "CompactScoringRate",
             "FullScoringRate",
-            "TrackRulesRate",
-            "PitMenuRate",
             "WeatherRate",
             "ExtendedStateRate",
             "ForceFeedbackRate",
@@ -57,19 +55,17 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertTrue(json_path.exists(), "CustomPluginVariables.JSON was not created")
 
         data = json.loads(json_path.read_text(encoding="utf-8"))
-        self.assertIn("isiMotor_RawUDP", data)
-        self.assertIn("isiMotor-RawUDP", data)
         self.assertIn("isiMotor_RawUDP.dll", data)
+        self.assertNotIn("isiMotor_RawUDP", data)
+        self.assertNotIn("isiMotor-RawUDP", data)
 
-        entry = data["isiMotor_RawUDP"]
+        entry = data["isiMotor_RawUDP.dll"]
         self.assertEqual(entry[" Enabled"], 1)
         self.assertEqual(entry["TargetIP"], "127.0.0.1")
         self.assertEqual(entry["TargetPort"], "5000")
         self.assertEqual(entry["InboundControl"], "Enabled")
         self.assertEqual(entry["TelemetryRate"], "unlimited")
         self.assertEqual(entry["FullScoringRate"], "5Hz")
-        self.assertEqual(entry["TrackRulesRate"], "3Hz")
-        self.assertEqual(entry["PitMenuRate"], "100Hz")
         self.assertEqual(entry["WeatherRate"], "1Hz")
         self.assertEqual(entry["ForceFeedbackRate"], "unlimited")
 
@@ -94,7 +90,9 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertTrue(success)
 
         data = json.loads(json_path.read_text(encoding="utf-8"))
-        entry = data["isiMotor_RawUDP"]
+        self.assertIn("isiMotor_RawUDP.dll", data)
+        self.assertNotIn("isiMotor_RawUDP", data)
+        entry = data["isiMotor_RawUDP.dll"]
         # Custom values preserved
         self.assertEqual(entry["TargetIP"], "239.255.0.1")
         self.assertEqual(entry["TargetPort"], "9000")
@@ -102,7 +100,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         # Missing defaults populated
         self.assertEqual(entry["InboundControl"], "Enabled")
         self.assertEqual(entry["FullScoringRate"], "5Hz")
-        self.assertEqual(entry["PitMenuRate"], "100Hz")
+        self.assertEqual(entry["WeatherRate"], "1Hz")
 
     def test_get_configuration_overview_and_extract_rows(self):
         from isimotor_rawudp_manager.installer import (
@@ -160,17 +158,10 @@ class TestInstallerAndConfig(unittest.TestCase):
     def test_home_summary_renderers_and_app_navigation(self):
         from isimotor_rawudp_manager.installer import get_configuration_overview
         from isimotor_rawudp_manager.sniffer import (
-            IsiMotorBenchmarkApp,
-            NAV_COMMANDS,
-            NAV_EXPLORER,
             NAV_HOME,
-            NAV_INSTALL,
             TAB_TELEM,
+            IsiMotorBenchmarkApp,
             TelemetryEngine,
-            VIEW_COMMANDS,
-            VIEW_EXPLORER,
-            VIEW_HOME,
-            VIEW_INSTALL,
             render_home_config_summary,
             render_home_install_summary,
             render_home_network_summary,
@@ -178,6 +169,12 @@ class TestInstallerAndConfig(unittest.TestCase):
 
         overview = get_configuration_overview()
         engine = TelemetryEngine()
+        # Verify raw telemetry packet processing does not raise NameError (TELEMINFO_SIZE)
+        import time
+
+        from isimotor_rawudp_client.constants import TELEMINFO_SIZE
+        engine._process_packet(b"\x00" * TELEMINFO_SIZE, time.time())
+        self.assertIsNotNone(engine.latest_telemetry)
 
         install_text = render_home_install_summary(overview)
         config_text = render_home_config_summary(overview)
@@ -196,13 +193,14 @@ class TestInstallerAndConfig(unittest.TestCase):
 
     def test_app_async_pilot_navigation(self):
         import asyncio
+
         from isimotor_rawudp_manager.sniffer import (
-            IsiMotorBenchmarkApp,
             NAV_COMMANDS,
             NAV_EXPLORER,
             NAV_HOME,
             NAV_INSTALL,
             TAB_WEATHER,
+            IsiMotorBenchmarkApp,
         )
 
         async def _run():
@@ -230,10 +228,90 @@ class TestInstallerAndConfig(unittest.TestCase):
                 await pilot.pause()
                 self.assertEqual(app.active_nav, NAV_HOME)
 
+                # Test Config Form interactions
+                app.action_select_nav_install()
+                await pilot.pause()
+                self.assertEqual(app.active_nav, NAV_INSTALL)
+
+                # Edit form inputs & dropdowns
+                app.cfg_target_ip.value = "192.168.1.50"
+                app.cfg_target_port.value = "5055"
+                app.sel_rate_telem.value = "limited"
+                app.input_rate_telem.value = "100"
+                app.sel_rate_weather.value = "off"
+                app.sel_plugin_enabled.value = "1"
+                app.sel_inbound_ctrl.value = "Enabled"
+                await pilot.pause()
+
+                self.assertTrue(app.input_rate_telem.display)
+                self.assertFalse(app.input_rate_weather.display)
+
+                form_vars = app._read_config_from_form()
+                self.assertEqual(form_vars["TargetIP"], "192.168.1.50")
+                self.assertEqual(form_vars["TargetPort"], "5055")
+                self.assertEqual(form_vars["TelemetryRate"], "100Hz")
+                self.assertEqual(form_vars["WeatherRate"], "off")
+                self.assertEqual(form_vars[" Enabled"], 1)
+                self.assertEqual(form_vars["InboundControl"], "Enabled")
+
+                # Test Reset defaults
+                app.action_reset_config_defaults()
+                await pilot.pause()
+                self.assertEqual(app.cfg_target_ip.value, "127.0.0.1")
+                self.assertEqual(app.cfg_target_port.value, "5000")
+                self.assertEqual(app.sel_rate_telem.value, "unlimited")
+                self.assertFalse(app.input_rate_telem.display)
+                self.assertTrue(app.input_rate_full_scoring.display)  # Full scoring default is 5Hz (limited)
+
+                # Test Button clicks
+                await pilot.click("#btn-cfg-reset")
+                await pilot.pause()
+                await pilot.click("#btn-cfg-save")
+                await pilot.pause()
+                await pilot.click("#btn-install-refresh")
+                await pilot.pause()
+
         asyncio.run(_run())
+
+    def test_write_and_save_plugin_variables(self):
+        from isimotor_rawudp_manager.installer import (
+            DEFAULT_PLUGIN_VARIABLES,
+            read_plugin_json_variables,
+            save_configuration_to_all_games,
+            write_plugin_json_variables,
+        )
+
+        test_dir = Path(tempfile.mkdtemp(prefix="isimotor_form_test_"))
+        try:
+            custom_vars = dict(DEFAULT_PLUGIN_VARIABLES)
+            custom_vars["TargetIP"] = "10.0.0.99"
+            custom_vars["TargetPort"] = "5555"
+            custom_vars["TelemetryRate"] = "60Hz"
+
+            ok, _msg = write_plugin_json_variables(test_dir, custom_vars)
+            self.assertTrue(ok)
+
+            saved_json = test_dir / "UserData" / "player" / "CustomPluginVariables.JSON"
+            self.assertTrue(saved_json.exists())
+            read_back = read_plugin_json_variables(saved_json)
+            self.assertEqual(read_back["TargetIP"], "10.0.0.99")
+            self.assertEqual(read_back["TargetPort"], "5555")
+            self.assertEqual(read_back["TelemetryRate"], "60Hz")
+
+            # Test save_configuration_to_all_games with custom_target
+            custom_vars["WeatherRate"] = "2Hz"
+            ok2, _msg2, saved_paths = save_configuration_to_all_games(custom_vars, custom_target=test_dir)
+            self.assertTrue(ok2)
+            self.assertEqual(len(saved_paths), 1)
+
+            read_back2 = read_plugin_json_variables(saved_json)
+            self.assertEqual(read_back2["WeatherRate"], "2Hz")
+        finally:
+            shutil.rmtree(test_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

@@ -117,18 +117,14 @@ client.start()
 
 ## 🛠️ Building the Plugin DLL
 
-### Option 1: Linux Cross-Compilation (MinGW-w64)
-```bash
-make cross
-# Generates build/isiMotor_RawUDP.dll
-```
+The project standardizes on **MinGW-w64 cross-compilation**, producing a single universal standalone binary (`isiMotor_RawUDP.dll`) compatible with both native Windows and Linux Proton / Steam Deck:
 
-### Option 2: Native Windows Build (MSVC / MinGW)
-```powershell
+```bash
+# Standard build (MinGW-w64 cross-compilation):
+make cross
+# Or alias:
 make build
-# Or:
-# cmake -B build -DCMAKE_BUILD_TYPE=Release
-# cmake --build build --config Release
+# Generates build/isiMotor_RawUDP.dll
 ```
 
 ---

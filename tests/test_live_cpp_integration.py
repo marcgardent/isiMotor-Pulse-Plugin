@@ -12,7 +12,6 @@ import unittest
 
 from isimotor_rawudp_client.client import IsiMotorClient
 from isimotor_rawudp_client.decoder.header import decode_header
-from isimotor_rawudp_client.models import PitAction
 
 MOCK_BIN = os.path.join(os.path.dirname(__file__), "cpp_mock", "isi_mock_host")
 TEST_PORT = 5066
@@ -38,8 +37,6 @@ class TestLiveCppIntegration(unittest.TestCase):
         telem_list = []
         compact_scoring_list = []
         full_scoring_list = []
-        track_rules_list = []
-        pit_menu_list = []
         weather_list = []
         ext_state_list = []
         ffb_list = []
@@ -49,8 +46,6 @@ class TestLiveCppIntegration(unittest.TestCase):
         client.on_telemetry = lambda t: telem_list.append(t)
         client.on_scoring = lambda s: compact_scoring_list.append(s)
         client.on_full_scoring = lambda fs: full_scoring_list.append(fs)
-        client.on_track_rules = lambda tr: track_rules_list.append(tr)
-        client.on_pit_menu = lambda pm: pit_menu_list.append(pm)
         client.on_weather = lambda w: weather_list.append(w)
         client.on_extended_state = lambda ext: ext_state_list.append(ext)
         client.on_force_feedback = lambda ffb: ffb_list.append(ffb)
@@ -86,10 +81,6 @@ class TestLiveCppIntegration(unittest.TestCase):
         self.assertGreaterEqual(
             len(full_scoring_list), 1, f"Expected full scoring packets, received {len(full_scoring_list)}"
         )
-        self.assertGreaterEqual(
-            len(track_rules_list), 1, f"Expected track rules packets, received {len(track_rules_list)}"
-        )
-        self.assertGreaterEqual(len(pit_menu_list), 10, f"Expected pit menu packets, received {len(pit_menu_list)}")
         self.assertGreaterEqual(len(weather_list), 1, f"Expected weather packets, received {len(weather_list)}")
         self.assertGreaterEqual(
             len(ext_state_list), 1, f"Expected extended state packets, received {len(ext_state_list)}"
@@ -110,20 +101,6 @@ class TestLiveCppIntegration(unittest.TestCase):
         self.assertEqual(leaderboard[1].driver_name, "Kamui Kobayashi")
         self.assertEqual(leaderboard[2].place, 3)
         self.assertEqual(leaderboard[2].driver_name, "Kevin Estre")
-
-        # Validate Track Rules
-        latest_tr = track_rules_list[-1]
-        self.assertTrue(latest_tr.is_safety_car_active)
-        self.assertTrue(latest_tr.is_caution_active)
-        self.assertEqual(latest_tr.stage_str, "Caution Update")
-        self.assertEqual(len(latest_tr.participants), 3)
-        self.assertEqual(latest_tr.participants[0].message, "Follow Safety Car")
-
-        # Validate Pit Menu
-        latest_pm = pit_menu_list[-1]
-        self.assertEqual(latest_pm.category_name, "Tires")
-        self.assertEqual(latest_pm.choice_string, "Soft Slick")
-        self.assertEqual(latest_pm.num_choices, 4)
 
         # Validate Weather
         latest_w = weather_list[-1]
@@ -210,10 +187,8 @@ class TestLiveCppIntegration(unittest.TestCase):
 
         client = IsiMotorClient(host="127.0.0.1", port=port, inbound_host="127.0.0.1", inbound_port=inbound_port)
         weather_updates = []
-        pit_menu_updates = []
 
         client.on_weather = lambda w: weather_updates.append(w)
-        client.on_pit_menu = lambda p: pit_menu_updates.append(p)
         client.start()
 
         proc = subprocess.Popen(
@@ -226,15 +201,11 @@ class TestLiveCppIntegration(unittest.TestCase):
             # Wait for mock server to be listening
             time.sleep(0.3)
 
-            # 1. Send PitMenuDown action
-            res_pit = client.send_pit_action(PitAction.MENU_DOWN)
-            self.assertTrue(res_pit, "send_pit_action returned False")
-
-            # 2. Send HW control
+            # 1. Send HW control
             res_hw = client.send_hw_control("TCIncrease", control_value=1.0, duration_ms=50)
             self.assertTrue(res_hw, "send_hw_control returned False")
 
-            # 3. Send dynamic weather override
+            # 2. Send dynamic weather override
             res_weather = client.send_weather_override(ambient_temp=36.5, raining=0.80)
             self.assertTrue(res_weather, "send_weather_override returned False")
 

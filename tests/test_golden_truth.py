@@ -187,86 +187,7 @@ class TestGoldenTruth(unittest.TestCase):
         self.assertEqual([c.place for c in leaderboard], [1, 2, 3])
         self.assertEqual(fs.player_vehicle.id, 51)
 
-    def test_track_rules_golden_decoding(self):
-        bin_path = os.path.join(GOLDEN_DIR, "track_rules_golden.bin")
-        json_path = os.path.join(GOLDEN_DIR, "track_rules_golden.json")
 
-        self.assertTrue(os.path.exists(bin_path), f"Golden bin missing at {bin_path}")
-        self.assertTrue(os.path.exists(json_path), f"Golden json missing at {json_path}")
-
-        with open(bin_path, "rb") as f:
-            data = f.read()
-        with open(json_path, encoding="utf-8") as f:
-            truth = json.load(f)
-
-        expected_size = 192 + 3 * 140
-        self.assertEqual(len(data), expected_size, f"Expected {expected_size} bytes, got {len(data)}")
-
-        rules = decode_packet(struct.pack("<4sBBHIdBBH", b"SIMP", 1, 5, len(data), 1, 1250.456, 0, 1, 3) + data)
-        self.assertIsNotNone(rules, "Track rules decode returned None")
-
-        self.assertEqual(rules.stage, truth["stage"])
-        self.assertEqual(rules.stage_str, "Caution Update")
-        self.assertEqual(rules.pole_column_str, "Left")
-        self.assertEqual(rules.num_participants, 3)
-        self.assertTrue(rules.safety_car_active)
-        self.assertTrue(rules.is_safety_car_active)
-        self.assertTrue(rules.yellow_flag_detected)
-        self.assertTrue(rules.is_caution_active)
-        self.assertEqual(rules.yellow_flag_state, 4)
-        self.assertAlmostEqual(rules.safety_car_speed, truth["safety_car_speed"], places=2)
-        self.assertEqual(rules.message, truth["message"])
-
-        # Validate Participants
-        self.assertEqual(len(rules.participants), 3)
-
-        p0 = rules.participants[0]
-        self.assertEqual(p0.id, 51)
-        self.assertEqual(p0.place, 1)
-        self.assertEqual(p0.frozen_order, 0)
-        self.assertEqual(p0.column_assignment, 0)
-        self.assertEqual(p0.column_str, "Left Lane")
-        self.assertTrue(p0.pits_open_bool)
-        self.assertTrue(p0.up_to_speed)
-        self.assertEqual(p0.message, "Follow Safety Car")
-
-        p1 = rules.participants[1]
-        self.assertEqual(p1.id, 7)
-        self.assertEqual(p1.place, 2)
-        self.assertEqual(p1.frozen_order, 1)
-        self.assertEqual(p1.column_assignment, 0)
-        self.assertEqual(p1.message, "Follow Car #51")
-
-        p2 = rules.participants[2]
-        self.assertEqual(p2.id, 6)
-        self.assertEqual(p2.place, 3)
-        self.assertEqual(p2.frozen_order, 2)
-        self.assertEqual(p2.column_assignment, 5)
-        self.assertEqual(p2.column_str, "Invalid/Pits")
-        self.assertFalse(p2.up_to_speed)
-        self.assertEqual(p2.message, "In Pits")
-
-    def test_pit_menu_golden_decoding(self):
-        bin_path = os.path.join(GOLDEN_DIR, "pit_menu_golden.bin")
-        json_path = os.path.join(GOLDEN_DIR, "pit_menu_golden.json")
-
-        self.assertTrue(os.path.exists(bin_path))
-        self.assertTrue(os.path.exists(json_path))
-
-        with open(bin_path, "rb") as f:
-            data = f.read()
-        with open(json_path, encoding="utf-8") as f:
-            truth = json.load(f)
-
-        self.assertEqual(len(data), 76)
-        pit = decode_packet(struct.pack("<4sBBHIdBBH", b"SIMP", 1, 6, 76, 10, 0.0, 0, 1, 0) + data)
-        self.assertIsNotNone(pit)
-        self.assertEqual(pit.category_index, truth["category_index"])
-        self.assertEqual(pit.category_name, truth["category_name"])
-        self.assertEqual(pit.choice_index, truth["choice_index"])
-        self.assertEqual(pit.choice_string, truth["choice_string"])
-        self.assertEqual(pit.num_choices, truth["num_choices"])
-        self.assertTrue(pit.is_available)
 
     def test_weather_golden_decoding(self):
         bin_path = os.path.join(GOLDEN_DIR, "weather_golden.bin")
@@ -409,29 +330,7 @@ class TestGoldenTruth(unittest.TestCase):
         self.assertEqual(res1.track_name, "Circuit de la Sarthe - Le Mans")
         self.assertEqual(len(res1.vehicles), 3)
 
-    def test_track_rules_chunk_reassembly(self):
-        bin_path = os.path.join(GOLDEN_DIR, "track_rules_golden.bin")
-        with open(bin_path, "rb") as f:
-            full_data = f.read()
 
-        client = IsiMotorClient()
-        chunk_size = 300  # Split 612 bytes into 3 chunks of 300, 300, 12 bytes
-        total_chunks = (len(full_data) + chunk_size - 1) // chunk_size
-
-        chunks = []
-        for i in range(total_chunks):
-            payload = full_data[i * chunk_size : (i + 1) * chunk_size]
-            hdr = struct.pack("<4sBBHIdBBH", b"SIMP", 1, 5, len(payload), 99, 1250.0, i, total_chunks, 3)
-            chunks.append(hdr + payload)
-
-        for i in range(total_chunks - 1):
-            self.assertIsNone(client.reassembler.process(chunks[i], 1000.0))
-
-        final_rules = client.reassembler.process(chunks[-1], 1000.0)
-        self.assertIsNotNone(final_rules)
-        self.assertEqual(final_rules.num_participants, 3)
-        self.assertEqual(len(final_rules.participants), 3)
-        self.assertTrue(final_rules.is_safety_car_active)
 
     def test_event_golden_decoding(self):
         bin_path = os.path.join(GOLDEN_DIR, "event_golden.bin")

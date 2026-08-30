@@ -19,11 +19,8 @@ from .models import (
     FullScoringSession,
     Graphics,
     HWControlCommand,
-    PitAction,
-    PitMenu,
     SystemEvent,
     TelemInfo,
-    TrackRulesSession,
     WeatherControl,
     WeatherControlCommand,
 )
@@ -145,14 +142,6 @@ class IsiMotorClient:
         """Returns the most recently received FullScoringSession frame thread-safely."""
         return self._state.get_full_scoring()
 
-    def get_latest_track_rules(self) -> TrackRulesSession | None:
-        """Returns the most recently received TrackRulesSession frame thread-safely."""
-        return self._state.get_track_rules()
-
-    def get_latest_pit_menu(self) -> PitMenu | None:
-        """Returns the most recently received PitMenu frame thread-safely."""
-        return self._state.get_pit_menu()
-
     def get_latest_weather(self) -> WeatherControl | None:
         """Returns the most recently received WeatherControl frame thread-safely."""
         return self._state.get_weather()
@@ -213,23 +202,6 @@ class IsiMotorClient:
         return self._sender.send_hw_control(
             control_name=control_name,
             control_value=control_value,
-            duration_ms=duration_ms,
-            host=host,
-            port=port,
-        )
-
-    def send_pit_action(
-        self,
-        action: PitAction | str,
-        duration_ms: int = 50,
-        host: str | None = None,
-        port: int | None = None,
-    ) -> bool:
-        """
-        Convenience helper to send pit menu navigation actions (Up, Down, Prev, Next, Select).
-        """
-        return self._sender.send_pit_action(
-            action=action,
             duration_ms=duration_ms,
             host=host,
             port=port,
@@ -314,22 +286,6 @@ class IsiMotorClient:
     @on_full_scoring.setter
     def on_full_scoring(self, value: Callable[[FullScoringSession], None] | None) -> None:
         self._dispatcher.on_full_scoring = value
-
-    @property
-    def on_track_rules(self) -> Callable[[TrackRulesSession], None] | None:
-        return self._dispatcher.on_track_rules
-
-    @on_track_rules.setter
-    def on_track_rules(self, value: Callable[[TrackRulesSession], None] | None) -> None:
-        self._dispatcher.on_track_rules = value
-
-    @property
-    def on_pit_menu(self) -> Callable[[PitMenu], None] | None:
-        return self._dispatcher.on_pit_menu
-
-    @on_pit_menu.setter
-    def on_pit_menu(self, value: Callable[[PitMenu], None] | None) -> None:
-        self._dispatcher.on_pit_menu = value
 
     @property
     def on_weather(self) -> Callable[[WeatherControl], None] | None:

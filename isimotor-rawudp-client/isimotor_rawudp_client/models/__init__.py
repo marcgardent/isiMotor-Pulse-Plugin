@@ -41,14 +41,6 @@ from .physics import (
     ExtendedState,
     PhysicsOptions,
 )
-from .pit import (
-    PitAction,
-    PitMenu,
-)
-from .rules import (
-    TrackRulesParticipant,
-    TrackRulesSession,
-)
 from .scoring import (
     CompactScoring,
     FullScoringSession,
@@ -71,15 +63,11 @@ __all__ = [
     "Graphics",
     "HWControlCommand",
     "PhysicsOptions",
-    "PitAction",
-    "PitMenu",
     "RawUdpHeader",
     "SystemEvent",
     "TelemInfo",
     "TelemVect3",
     "TelemWheel",
-    "TrackRulesParticipant",
-    "TrackRulesSession",
     "VehicleScoring",
     "WeatherControl",
     "WeatherControlCommand",

@@ -23,56 +23,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
         with:
-          python-version: "3.11"
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
 
       - name: Build C++ Mock Host & Run Tests
         run: |
           make test
 
-  # --- 2. Build MSVC DLL ---
-  build-msvc:
-    name: Build DLL (MSVC x64 Static)
-    runs-on: windows-latest
-    needs: [run-tests]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Configure CMake (MSVC)
-        run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build isiMotor_RawUDP.dll
-        run: |
-          cmake --build build --config Release
-
-      - name: Locate and verify DLL
-        shell: bash
-        run: |
-          if [ -f "bin/isiMotor_RawUDP.dll" ]; then
-            cp bin/isiMotor_RawUDP.dll isiMotor_RawUDP.dll
-          elif [ -f "bin/Release/isiMotor_RawUDP.dll" ]; then
-            cp bin/Release/isiMotor_RawUDP.dll isiMotor_RawUDP.dll
-          elif [ -f "build/bin/Release/isiMotor_RawUDP.dll" ]; then
-            cp build/bin/Release/isiMotor_RawUDP.dll isiMotor_RawUDP.dll
-          elif [ -f "build/Release/isiMotor_RawUDP.dll" ]; then
-            cp build/Release/isiMotor_RawUDP.dll isiMotor_RawUDP.dll
-          else
-            cp $(find . -name "isiMotor_RawUDP.dll" | head -n 1) isiMotor_RawUDP.dll
-          fi
-
-      - name: Upload MSVC DLL
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-msvc-dll
-          path: isiMotor_RawUDP.dll
-
-  # --- 3. Build MinGW DLL ---
-  build-mingw:
-    name: Cross-Compile DLL (MinGW-w64 Linux)
+  # --- 2. Build Universal Plugin DLL (MinGW-w64 Cross-Compilation) ---
+  build-dll:
+    name: Build Universal DLL (MinGW-w64 Cross)
     runs-on: ubuntu-latest
     needs: [run-tests]
     steps:
@@ -84,66 +49,72 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mingw-w64 cmake ninja-build
 
-      - name: Configure CMake (MinGW Cross-Toolchain)
+      - name: Build Universal isiMotor_RawUDP.dll
         run: |
-          cmake -B build -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake -DCMAKE_BUILD_TYPE=Release
+          make cross
 
-      - name: Build isiMotor_RawUDP.dll
+      - name: Verify Built DLL
         run: |
-          cmake --build build --config Release
+          test -f build/isiMotor_RawUDP.dll
+          ls -lh build/isiMotor_RawUDP.dll
 
-      - name: Locate MinGW DLL
-        run: |
-          if [ -f "bin/isiMotor_RawUDP.dll" ]; then
-            cp bin/isiMotor_RawUDP.dll isiMotor_RawUDP_mingw.dll
-          elif [ -f "build/isiMotor_RawUDP.dll" ]; then
-            cp build/isiMotor_RawUDP.dll isiMotor_RawUDP_mingw.dll
-          else
-            cp $(find build bin -name "isiMotor_RawUDP.dll" | head -n 1) isiMotor_RawUDP_mingw.dll
-          fi
-
-      - name: Upload MinGW DLL
+      - name: Upload Universal DLL Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-mingw-dll
-          path: isiMotor_RawUDP_mingw.dll
+          name: release-universal-dll
+          path: build/isiMotor_RawUDP.dll
 
-  # --- 4. Package Python Client ---
+  # --- 3. Package Python Client & Manager ---
   package-python:
-    name: Build Python Wheel & sdist
+    name: Build Python Packages
     runs-on: ubuntu-latest
-    needs: [run-tests]
+    needs: [run-tests, build-dll]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Download Built DLL
+        uses: actions/download-artifact@v4
         with:
-          python-version: "3.11"
+          name: release-universal-dll
+          path: build/
 
-      - name: Install build tools
+      - name: Sync DLL into Manager Package Resources
         run: |
-          python -m pip install --upgrade pip build twine
+          mkdir -p isimotor-rawudp-manager/isimotor_rawudp_manager/resources isimotor-rawudp-manager/resources
+          cp build/isiMotor_RawUDP.dll isimotor-rawudp-manager/isimotor_rawudp_manager/resources/
+          cp build/isiMotor_RawUDP.dll isimotor-rawudp-manager/resources/
 
-      - name: Build Python packages
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Build Python Packages
         run: |
-          python -m build isimotor-rawudp-client
+          uv run --with build python -m build isimotor-rawudp-client
+          uv run --with build python -m build isimotor-rawudp-manager
 
-      - name: Validate distribution
+      - name: Validate Distributions
         run: |
-          twine check isimotor-rawudp-client/dist/*
+          uv run --with twine twine check isimotor-rawudp-client/dist/* isimotor-rawudp-manager/dist/*
 
-      - name: Upload Python Dist
+      - name: Upload Python Dists
         uses: actions/upload-artifact@v4
         with:
           name: release-python-dist
-          path: isimotor-rawudp-client/dist/*
+          path: |
+            isimotor-rawudp-client/dist/*
+            isimotor-rawudp-manager/dist/*
 
+  # --- 4. Publish Release Assets ---
   publish-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [build-msvc, build-mingw, package-python]
+    needs: [build-dll, package-python]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -157,25 +128,19 @@ jobs:
             echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Download MSVC DLL
+      - name: Download Universal DLL
         uses: actions/download-artifact@v4
         with:
-          name: release-msvc-dll
+          name: release-universal-dll
           path: staging/
 
-      - name: Download MinGW DLL
-        uses: actions/download-artifact@v4
-        with:
-          name: release-mingw-dll
-          path: staging/alt_builds/
-
-      - name: Download Python Dist
+      - name: Download Python Dists
         uses: actions/download-artifact@v4
         with:
           name: release-python-dist
-          path: staging/python_client/
+          path: dist/
 
-      - name: Prepare Release ZIP and Assets
+      - name: Prepare Release Package & Assets
         run: |
           TAG="${{ steps.vars.outputs.TAG }}"
           mkdir -p staging/scripts
@@ -183,16 +148,18 @@ jobs:
           cp USER_NOTICE.md staging/
           cp README.md staging/
           cp LICENSE staging/
-          
-          # Create zip package
+
+          # Package universal release zip
           cd staging
-          zip -r "../isiMotor-RawUDP-Plugin-${TAG}-Windows-x64.zip" .
+          zip -r "../isiMotor-RawUDP-Plugin-${TAG}-Universal.zip" .
+          cp "../isiMotor-RawUDP-Plugin-${TAG}-Universal.zip" "../isiMotor-RawUDP-Plugin-${TAG}-Windows-x64.zip"
           cd ..
-          
+
           mkdir -p release_assets
           cp staging/isiMotor_RawUDP.dll release_assets/
+          cp "isiMotor-RawUDP-Plugin-${TAG}-Universal.zip" release_assets/
           cp "isiMotor-RawUDP-Plugin-${TAG}-Windows-x64.zip" release_assets/
-          cp staging/python_client/* release_assets/
+          cp dist/* release_assets/
           ls -lh release_assets/
 
       - name: Create GitHub Release & Upload Assets
@@ -206,3 +173,4 @@ jobs:
           files: release_assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

@@ -64,6 +64,8 @@ files = [
     "isimotor-rawudp-manager/sniffer.py",
     "isimotor-rawudp-manager/install_plugin.py",
     "scripts/install_plugin.py",
+    "scripts/bump_version.py",
+    "scripts/french_drift.py",
 ]
 warn_return_any = true
 warn_unused_configs = true
