@@ -61,9 +61,6 @@ mypy_path = "isimotor-rawudp-client"
 files = [
     "isimotor-rawudp-client/isimotor_rawudp_client",
     "isimotor-rawudp-manager/isimotor_rawudp_manager",
-    "isimotor-rawudp-manager/sniffer.py",
-    "isimotor-rawudp-manager/install_plugin.py",
-    "scripts/install_plugin.py",
     "scripts/bump_version.py",
     "scripts/french_drift.py",
 ]

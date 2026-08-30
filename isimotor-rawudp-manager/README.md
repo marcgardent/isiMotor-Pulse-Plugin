@@ -27,7 +27,7 @@ Packaged and distributed as a standalone application using **[Briefcase](https:/
 * **Search & Filter Bar:**
   * Real-time instant filtering by field key, value, or description (press `/` to focus).
 * **One-Click Actions & Clipboard Export:**
-  * `📦 Copier DLL` (`k` key) : Automatically copies `isiMotor_RawUDP.dll` to detected game folders and configures default JSON profiles.
+  * `📦 Copy DLL` (`k` key) : Automatically copies `isiMotor_RawUDP.dll` to detected game folders and configures default JSON profiles.
   * `📋 Copy JSON` (`c` key) : Exports full active packet dictionary to clipboard in pretty-printed JSON.
   * `📑 Copy Table` (`t` key) : Exports visible/filtered key-value-desc rows in TSV table format.
 * **Keyboard Shortcuts:**
@@ -44,15 +44,15 @@ Packaged and distributed as a standalone application using **[Briefcase](https:/
 ## 🛠️ Usage
 
 ```bash
-# Launch interactive TUI explorer:
-python sniffer.py
-# or after installing benchmark package:
-isi-benchmark
+# Launch interactive TUI manager & diagnostics:
+isi-manager
+# or:
+python -m isimotor_rawudp_manager
 
 # Run game detector & plugin installer:
-python install_plugin.py
-# or via entrypoint:
 isi-install --status
+# or:
+python -m isimotor_rawudp_manager.installer
 ```
 
 

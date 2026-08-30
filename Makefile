@@ -116,13 +116,13 @@ briefcase-build: sync-resources
 	@cd isimotor-rawudp-manager && $(UV) run --with briefcase briefcase build --no-input
 
 install:
-	@$(PYTHON) isimotor-rawudp-manager/install_plugin.py
+	@PYTHONPATH=isimotor-rawudp-manager $(PYTHON) -m isimotor_rawudp_manager.installer
 
 uninstall:
-	@$(PYTHON) isimotor-rawudp-manager/install_plugin.py --uninstall
+	@PYTHONPATH=isimotor-rawudp-manager $(PYTHON) -m isimotor_rawudp_manager.installer --uninstall
 
 status:
-	@$(PYTHON) isimotor-rawudp-manager/install_plugin.py --status
+	@PYTHONPATH=isimotor-rawudp-manager $(PYTHON) -m isimotor_rawudp_manager.installer --status
 
 info:
 	@echo "=================================================================="

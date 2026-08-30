@@ -374,8 +374,8 @@ def install_plugin(
 
     if not targets:
         logger.warning("\n⚠️  No Le Mans Ultimate or rFactor 2 installations were detected.")
-        logger.warning("   You can specify your game directory manually using:")
-        logger.warning('   python scripts/install_plugin.py --target-dir "/path/to/game"')
+        logger.warning("   You can specify your game directory manually in the Manager UI or via CLI:")
+        logger.warning('   python -m isimotor_rawudp_manager.installer --target-dir "/path/to/game"')
         return False
 
     installed_count = 0

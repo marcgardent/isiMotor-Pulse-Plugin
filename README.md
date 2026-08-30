@@ -31,12 +31,11 @@ isiMotor-RawUDP-Plugin/
 └── isimotor-rawudp-manager/    # 📊 Manager, Telemetry Diagnostics & Installer (Textual TUI / Briefcase)
     ├── pyproject.toml          # Package and Briefcase configuration
     ├── README.md
-    ├── sniffer.py              # CLI launcher
-    ├── install_plugin.py       # Installer launcher
     └── isimotor_rawudp_manager/
-        ├── app.py
-        ├── sniffer.py
-        └── installer.py
+        ├── ui/                 # Textual modern UI views & widgets
+        ├── engine/             # Realtime statistics & telemetry engine
+        ├── extractors/         # SOLID data extractors & table renderers
+        └── installer.py        # Automated Steam discovery & DLL installer
 ```
 
 ---
@@ -131,7 +130,13 @@ make build
 
 ## ⚡ Automated Game Installation & Configuration
 
-The repository includes an auto-installer ([`isimotor-rawudp-manager/install_plugin.py`](isimotor-rawudp-manager/install_plugin.py)) that detects **Le Mans Ultimate** and **rFactor 2** across Steam libraries (Windows registry, multi-drive paths, Linux Native, Flatpak, and SteamDeck Proton paths), copies `isiMotor_RawUDP.dll` to `Plugins/`, and auto-configures `CustomPluginVariables.JSON` / `Settings.JSON`:
+### Option A — Standalone Manager AppImage / Exe (Recommended)
+Download the standalone executable from [GitHub Releases](https://github.com/marcgardent/isiMotor-RawUDP-Plugin/releases) (no Python environment required):
+- **Windows**: Double-click `isiMotor_RawUDP_Manager.exe` -> Open the **`[ 📦 Install ]`** tab and click **`[ 📦 Copy DLL ]`**.
+- **Linux / Steam Deck**: Double-click `isiMotor-RawUDP-Manager-x86_64.AppImage` -> Open the **`[ 📦 Install ]`** tab and click **`[ 📦 Copy DLL ]`**.
+
+### Option B — Developer Makefile
+If working within the cloned repository:
 
 ```bash
 # Check detected games and installation status:
