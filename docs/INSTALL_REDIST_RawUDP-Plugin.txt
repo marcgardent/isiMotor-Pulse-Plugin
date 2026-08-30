@@ -2,9 +2,34 @@
   🏎️  isiMotor-RawUDP-Plugin — Native Telemetry DLL Redistributable
 ================================================================================
 
-Compatibility : Le Mans Ultimate (LMU), rFactor 2 (rF2), isiMotor 2.5 / 3.0
-Binary        : isiMotor_RawUDP.dll (Universal 64-bit MinGW Native DLL)
-Platforms     : Windows 10/11 (x64), Linux Proton / Wine, Steam Deck (SteamOS)
+Compatibility   : Le Mans Ultimate (LMU), rFactor 2 (rF2), isiMotor 2.5 / 3.0
+Binary          : isiMotor_RawUDP.dll (Universal 64-bit MinGW Native DLL)
+Platforms       : Windows 10/11 (x64), Linux Proton / Wine, Steam Deck (SteamOS)
+GitHub Repo     : https://github.com/marcgardent/isiMotor-RawUDP-Plugin
+Releases & Tools: https://github.com/marcgardent/isiMotor-RawUDP-Plugin/releases
+
+--------------------------------------------------------------------------------
+⚖️ LICENSE & REDISTRIBUTION CONDITIONS
+--------------------------------------------------------------------------------
+
+Copyright 2026 Marc GARDENT.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Redistribution Terms:
+• You are free to redistribute, bundle, and package this binary ('isiMotor_RawUDP.dll')
+  and documentation with your third-party telemetry tools, dashboards, overlays,
+  or hardware software, provided that:
+  1. This notice and copyright statement are retained.
+  2. The Apache License 2.0 terms are respected.
+• Unless required by applicable law or agreed to in writing, software distributed
+  under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+  CONDITIONS OF ANY KIND, either express or implied.
+
 
 --------------------------------------------------------------------------------
 📖 MANUAL INSTALLATION PROCEDURE
@@ -98,5 +123,6 @@ folder upon starting the game from Steam.
 
 ================================================================================
   For graphical 1-click install and live telemetry diagnostics, download the
-  standalone 'isiMotor RawUDP Manager' application from GitHub Releases.
+  standalone 'isiMotor RawUDP Manager' application from GitHub Releases:
+  https://github.com/marcgardent/isiMotor-RawUDP-Plugin/releases
 ================================================================================

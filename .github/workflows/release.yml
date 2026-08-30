@@ -145,7 +145,7 @@ jobs:
           TAG="${{ steps.vars.outputs.TAG }}"
           mkdir -p staging_redist
           cp staging/isiMotor_RawUDP.dll staging_redist/
-          cp INSTALL_REDIST_RawUDP-Plugin.txt staging_redist/
+          cp docs/INSTALL_REDIST_RawUDP-Plugin.txt staging_redist/
           cp LICENSE staging_redist/
           cp README.md staging_redist/
 
@@ -158,7 +158,7 @@ jobs:
 
           mkdir -p release_assets
           cp staging/isiMotor_RawUDP.dll release_assets/
-          cp INSTALL_REDIST_RawUDP-Plugin.txt release_assets/
+          cp docs/INSTALL_REDIST_RawUDP-Plugin.txt release_assets/
           cp "isiMotor-RawUDP-Plugin-${TAG}-Redist.zip" release_assets/
           cp "isiMotor-RawUDP-Plugin-${TAG}-Universal.zip" release_assets/
           cp "isiMotor-RawUDP-Plugin-${TAG}-Windows-x64.zip" release_assets/
