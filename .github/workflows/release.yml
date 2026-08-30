@@ -165,6 +165,62 @@ jobs:
           cp dist/* release_assets/
           ls -lh release_assets/
 
+      - name: Generate Release Notes Body
+        id: release_body
+        run: |
+          TAG="${{ steps.vars.outputs.TAG }}"
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+
+          cat > release_body.md << 'RELEASE_BODY_EOF'
+          ## 🏎️ isiMotor-RawUDP Plugin ${TAG}
+
+          Native telemetry streaming plugin for **Le Mans Ultimate** and **rFactor 2** (isiMotor 2.5 / 3.0 engine).
+
+          ---
+
+          ### 📦 Artifacts
+
+          #### 🖥️ Standalone Manager (1-Click Install & Live Telemetry TUI)
+          | Platform | File |
+          |----------|------|
+          | **Windows (x64)** | `isiMotor_RawUDP_Manager.exe` |
+          | **Linux / Steam Deck** | `isiMotor-RawUDP-Manager-x86_64.AppImage` |
+
+          👉 **User Guide**: [USER_NOTICE.md](${REPO_URL}/blob/${TAG}/USER_NOTICE.md)
+
+          ---
+
+          #### 🔧 Redistributable DLL (Manual Install)
+          | File | Description |
+          |------|-------------|
+          | `isiMotor-RawUDP-Plugin-${TAG}-Redist.zip` | DLL + install guide + LICENSE |
+          | `isiMotor_RawUDP.dll` | Standalone native 64-bit plugin DLL |
+
+          👉 **Install Guide**: [docs/INSTALL_REDIST_RawUDP-Plugin.txt](${REPO_URL}/blob/${TAG}/docs/INSTALL_REDIST_RawUDP-Plugin.txt)
+
+          ---
+
+          #### 🐍 Python Packages
+          | Package | Description |
+          |---------|-------------|
+          | `isimotor-rawudp-client` | Low-level UDP client & packet decoder library |
+          | `isimotor-rawudp-manager` | TUI Manager application with installer |
+
+          👉 **Client README**: [isimotor-rawudp-client/README.md](${REPO_URL}/blob/${TAG}/isimotor-rawudp-client/README.md)
+          👉 **Manager README**: [isimotor-rawudp-manager/README.md](${REPO_URL}/blob/${TAG}/isimotor-rawudp-manager/README.md)
+
+          ---
+
+          ### ⚖️ License
+          [Apache License 2.0](${REPO_URL}/blob/${TAG}/LICENSE)
+          RELEASE_BODY_EOF
+
+          # Expand variables in the template
+          sed -i "s|\${TAG}|${TAG}|g" release_body.md
+          sed -i "s|\${REPO_URL}|${REPO_URL}|g" release_body.md
+          # Remove leading whitespace from heredoc indentation
+          sed -i 's/^          //' release_body.md
+
       - name: Create GitHub Release & Upload Assets
         uses: softprops/action-gh-release@v2
         with:
@@ -172,8 +228,7 @@ jobs:
           name: isiMotor-RawUDP Plugin ${{ steps.vars.outputs.TAG }}
           draft: false
           prerelease: false
-          generate_release_notes: true
+          body_path: release_body.md
           files: release_assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
