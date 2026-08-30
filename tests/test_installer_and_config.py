@@ -173,6 +173,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         import time
 
         from isimotor_rawudp_client.constants import TELEMINFO_SIZE
+
         engine._process_packet(b"\x00" * TELEMINFO_SIZE, time.time())
         self.assertIsNotNone(engine.latest_telemetry)
 
@@ -312,6 +313,3 @@ class TestInstallerAndConfig(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-

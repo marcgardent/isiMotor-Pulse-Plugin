@@ -49,8 +49,7 @@ FRENCH_PATTERNS: list[tuple[str, str]] = [
 
 # Compiled regular expressions for fast multi-pattern scanning
 COMPILED_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    (category, re.compile(pattern, re.IGNORECASE))
-    for category, pattern in FRENCH_PATTERNS
+    (category, re.compile(pattern, re.IGNORECASE)) for category, pattern in FRENCH_PATTERNS
 ]
 
 DEFAULT_IGNORED_DIRS = {
@@ -224,7 +223,9 @@ def print_detailed_report(reports: list[FileDriftReport]) -> None:
             print(f"   \033[2m... et {len(report.matches) - 10} autre(s) occurrence(s)\033[0m")
 
     print("\n==================================================================")
-    print(f"📊 Résumé : \033[1;31m{total_files} fichier(s)\033[0m touché(s) — \033[1;33m{total_occurrences} mots français détectés\033[0m")
+    print(
+        f"📊 Résumé : \033[1;31m{total_files} fichier(s)\033[0m touché(s) — \033[1;33m{total_occurrences} mots français détectés\033[0m"
+    )
     print("==================================================================")
 
 

@@ -187,8 +187,6 @@ class TestGoldenTruth(unittest.TestCase):
         self.assertEqual([c.place for c in leaderboard], [1, 2, 3])
         self.assertEqual(fs.player_vehicle.id, 51)
 
-
-
     def test_weather_golden_decoding(self):
         bin_path = os.path.join(GOLDEN_DIR, "weather_golden.bin")
         json_path = os.path.join(GOLDEN_DIR, "weather_golden.json")
@@ -329,8 +327,6 @@ class TestGoldenTruth(unittest.TestCase):
         self.assertEqual(res1.num_vehicles, 3)
         self.assertEqual(res1.track_name, "Circuit de la Sarthe - Le Mans")
         self.assertEqual(len(res1.vehicles), 3)
-
-
 
     def test_event_golden_decoding(self):
         bin_path = os.path.join(GOLDEN_DIR, "event_golden.bin")

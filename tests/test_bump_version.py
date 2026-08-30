@@ -65,12 +65,12 @@ class TestBumpVersion(unittest.TestCase):
             plugin_dir = tmp_root / "isimotor-rawudp-plugin"
             plugin_dir.mkdir(parents=True)
             (plugin_dir / "CMakeLists.txt").write_text(
-                'project(isiMotor_RawUDP VERSION 1.4.0 LANGUAGES CXX)\n', encoding="utf-8"
+                "project(isiMotor_RawUDP VERSION 1.4.0 LANGUAGES CXX)\n", encoding="utf-8"
             )
 
             # 5. USER_NOTICE.md
             user_notice = tmp_root / "USER_NOTICE.md"
-            user_notice.write_text('# Notice\n> **Version**: 1.4.0  \n', encoding="utf-8")
+            user_notice.write_text("# Notice\n> **Version**: 1.4.0  \n", encoding="utf-8")
 
             # Run bump
             updated = bump_all_files(tmp_root, "2.0.0")
@@ -86,11 +86,17 @@ class TestBumpVersion(unittest.TestCase):
 
             # Check contents
             self.assertIn('version = "2.0.0"', root_pyproject.read_text(encoding="utf-8"))
-            self.assertIn('version = "2.0.0"', (tmp_root / "isimotor-rawudp-client" / "pyproject.toml").read_text(encoding="utf-8"))
+            self.assertIn(
+                'version = "2.0.0"',
+                (tmp_root / "isimotor-rawudp-client" / "pyproject.toml").read_text(encoding="utf-8"),
+            )
             self.assertIn('__version__ = "2.0.0"', (client_dir / "__init__.py").read_text(encoding="utf-8"))
             self.assertIn('__version__ = "2.0.0"', (manager_dir / "__init__.py").read_text(encoding="utf-8"))
-            self.assertIn('project(isiMotor_RawUDP VERSION 2.0.0 LANGUAGES CXX)', (plugin_dir / "CMakeLists.txt").read_text(encoding="utf-8"))
-            self.assertIn('> **Version**: 2.0.0', user_notice.read_text(encoding="utf-8"))
+            self.assertIn(
+                "project(isiMotor_RawUDP VERSION 2.0.0 LANGUAGES CXX)",
+                (plugin_dir / "CMakeLists.txt").read_text(encoding="utf-8"),
+            )
+            self.assertIn("> **Version**: 2.0.0", user_notice.read_text(encoding="utf-8"))
 
     def test_update_file_helper(self) -> None:
         """Tests update_file regex helper behavior on existing and missing files."""

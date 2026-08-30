@@ -187,14 +187,24 @@ class IsiMotorBenchmarkApp(App):
         self.input_rate_ffb = Input(placeholder="400", id="input-rate-ffb", classes="cfg-rate-hz-input")
 
         self.sel_rate_full_scoring = Select(
-            RATE_SELECT_OPTIONS, value="limited", allow_blank=False, id="sel-rate-full-scoring", classes="cfg-rate-select"
+            RATE_SELECT_OPTIONS,
+            value="limited",
+            allow_blank=False,
+            id="sel-rate-full-scoring",
+            classes="cfg-rate-select",
         )
         self.input_rate_full_scoring = Input(placeholder="5", id="input-rate-full-scoring", classes="cfg-rate-hz-input")
 
         self.sel_rate_compact_scoring = Select(
-            RATE_SELECT_OPTIONS, value="unlimited", allow_blank=False, id="sel-rate-compact-scoring", classes="cfg-rate-select"
+            RATE_SELECT_OPTIONS,
+            value="unlimited",
+            allow_blank=False,
+            id="sel-rate-compact-scoring",
+            classes="cfg-rate-select",
         )
-        self.input_rate_compact_scoring = Input(placeholder="20", id="input-rate-compact-scoring", classes="cfg-rate-hz-input")
+        self.input_rate_compact_scoring = Input(
+            placeholder="20", id="input-rate-compact-scoring", classes="cfg-rate-hz-input"
+        )
 
         self.sel_rate_weather = Select(
             RATE_SELECT_OPTIONS, value="limited", allow_blank=False, id="sel-rate-weather", classes="cfg-rate-select"
@@ -343,7 +353,7 @@ class IsiMotorBenchmarkApp(App):
         if sel_id and sel_id.startswith("sel-rate-"):
             inp_id = sel_id.replace("sel-rate-", "input-rate-")
             box_id = sel_id.replace("sel-rate-", "box-rate-")
-            is_limited = (event.value == "limited")
+            is_limited = event.value == "limited"
             try:
                 box_widget = self.query_one(f"#{box_id}")
                 box_widget.display = is_limited
@@ -834,7 +844,13 @@ class IsiMotorBenchmarkApp(App):
             (self.sel_rate_telem, self.input_rate_telem, "box-rate-telem", "TelemetryRate", "100"),
             (self.sel_rate_ffb, self.input_rate_ffb, "box-rate-ffb", "ForceFeedbackRate", "400"),
             (self.sel_rate_full_scoring, self.input_rate_full_scoring, "box-rate-full-scoring", "FullScoringRate", "5"),
-            (self.sel_rate_compact_scoring, self.input_rate_compact_scoring, "box-rate-compact-scoring", "CompactScoringRate", "20"),
+            (
+                self.sel_rate_compact_scoring,
+                self.input_rate_compact_scoring,
+                "box-rate-compact-scoring",
+                "CompactScoringRate",
+                "20",
+            ),
             (self.sel_rate_weather, self.input_rate_weather, "box-rate-weather", "WeatherRate", "1"),
             (self.sel_rate_extended, self.input_rate_extended, "box-rate-extended", "ExtendedStateRate", "5"),
             (self.sel_rate_graphics, self.input_rate_graphics, "box-rate-graphics", "GraphicsRate", "60"),
@@ -845,10 +861,10 @@ class IsiMotorBenchmarkApp(App):
             mode, hz_num = parse_rate_to_mode_and_hz(raw_val, def_hz)
             sel.value = mode
             inp.value = hz_num
-            inp.display = (mode == "limited")
+            inp.display = mode == "limited"
             try:
                 box_widget = self.query_one(f"#{box_id}")
-                box_widget.display = (mode == "limited")
+                box_widget.display = mode == "limited"
             except Exception:
                 pass
 
@@ -883,13 +899,27 @@ class IsiMotorBenchmarkApp(App):
             "TargetPort": self.cfg_target_port.value.strip() or "5000",
             "InboundControl": inbound_str,
             "InboundPort": self.cfg_inbound_port.value.strip() or "5001",
-            "TelemetryRate": format_mode_and_hz_to_rate(str(self.sel_rate_telem.value), self.input_rate_telem.value, "100"),
-            "ForceFeedbackRate": format_mode_and_hz_to_rate(str(self.sel_rate_ffb.value), self.input_rate_ffb.value, "400"),
-            "FullScoringRate": format_mode_and_hz_to_rate(str(self.sel_rate_full_scoring.value), self.input_rate_full_scoring.value, "5"),
-            "CompactScoringRate": format_mode_and_hz_to_rate(str(self.sel_rate_compact_scoring.value), self.input_rate_compact_scoring.value, "20"),
-            "WeatherRate": format_mode_and_hz_to_rate(str(self.sel_rate_weather.value), self.input_rate_weather.value, "1"),
-            "ExtendedStateRate": format_mode_and_hz_to_rate(str(self.sel_rate_extended.value), self.input_rate_extended.value, "5"),
-            "GraphicsRate": format_mode_and_hz_to_rate(str(self.sel_rate_graphics.value), self.input_rate_graphics.value, "60"),
+            "TelemetryRate": format_mode_and_hz_to_rate(
+                str(self.sel_rate_telem.value), self.input_rate_telem.value, "100"
+            ),
+            "ForceFeedbackRate": format_mode_and_hz_to_rate(
+                str(self.sel_rate_ffb.value), self.input_rate_ffb.value, "400"
+            ),
+            "FullScoringRate": format_mode_and_hz_to_rate(
+                str(self.sel_rate_full_scoring.value), self.input_rate_full_scoring.value, "5"
+            ),
+            "CompactScoringRate": format_mode_and_hz_to_rate(
+                str(self.sel_rate_compact_scoring.value), self.input_rate_compact_scoring.value, "20"
+            ),
+            "WeatherRate": format_mode_and_hz_to_rate(
+                str(self.sel_rate_weather.value), self.input_rate_weather.value, "1"
+            ),
+            "ExtendedStateRate": format_mode_and_hz_to_rate(
+                str(self.sel_rate_extended.value), self.input_rate_extended.value, "5"
+            ),
+            "GraphicsRate": format_mode_and_hz_to_rate(
+                str(self.sel_rate_graphics.value), self.input_rate_graphics.value, "60"
+            ),
             "SystemEvents": sys_events_str,
             "UnsubscribedBuffersMask": self.cfg_unsub_mask.value.strip() or "0",
         }
@@ -1016,7 +1046,9 @@ class IsiMotorBenchmarkApp(App):
                 st = self.engine.stats[PKT_SYSTEM_EVENT]
                 self.lbl_channel_freq.update(f"📶 [bold cyan]Events:[/] [bold yellow]{st.count}[/] [dim]pkts[/dim]")
             elif self.active_tab == TAB_STATS:
-                self.lbl_channel_freq.update(f"📶 [bold cyan]All Streams:[/] [bold yellow]{current_total_freq:5.1f} Hz[/]")
+                self.lbl_channel_freq.update(
+                    f"📶 [bold cyan]All Streams:[/] [bold yellow]{current_total_freq:5.1f} Hz[/]"
+                )
 
             # In-place table cell updates for smooth 30 FPS rendering
             rows = self._get_active_explorer_rows()

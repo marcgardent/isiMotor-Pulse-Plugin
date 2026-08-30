@@ -110,14 +110,14 @@ def bump_all_files(root: Path, new_version: str) -> list[Path]:
     cmake_file = root / "isimotor-rawudp-plugin" / "CMakeLists.txt"
     if update_file(
         cmake_file,
-        r'project\(isiMotor_RawUDP\s+(?:VERSION\s+[\d.]+\s+)?LANGUAGES\s+CXX\)',
-        f'project(isiMotor_RawUDP VERSION {cmake_version} LANGUAGES CXX)',
+        r"project\(isiMotor_RawUDP\s+(?:VERSION\s+[\d.]+\s+)?LANGUAGES\s+CXX\)",
+        f"project(isiMotor_RawUDP VERSION {cmake_version} LANGUAGES CXX)",
     ):
         updated_files.append(cmake_file)
 
     # 7. USER_NOTICE.md
     user_notice = root / "USER_NOTICE.md"
-    if update_file(user_notice, r'(?m)^>\s*\*\*Version\*\*:\s*.*$', f'> **Version**: {new_version}  '):
+    if update_file(user_notice, r"(?m)^>\s*\*\*Version\*\*:\s*.*$", f"> **Version**: {new_version}  "):
         updated_files.append(user_notice)
 
     # 8. Update uv.lock if uv is available

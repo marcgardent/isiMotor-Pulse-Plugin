@@ -31,8 +31,8 @@ class TestFrenchDrift(unittest.TestCase):
             f = Path(tmp_dir) / "clean.py"
             f.write_text(
                 '"""High performance telemetry client."""\n'
-                'def compute_speed(local_vel: tuple[float, float, float]) -> float:\n'
-                '    return (local_vel[0]**2 + local_vel[1]**2 + local_vel[2]**2)**0.5\n',
+                "def compute_speed(local_vel: tuple[float, float, float]) -> float:\n"
+                "    return (local_vel[0]**2 + local_vel[1]**2 + local_vel[2]**2)**0.5\n",
                 encoding="utf-8",
             )
             report = scan_file(f, Path(tmp_dir))
@@ -43,10 +43,10 @@ class TestFrenchDrift(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             f = Path(tmp_dir) / "drift_example.py"
             f.write_text(
-                '# ❌ Erreur : Le fichier de télémesure est introuvable.\n'
-                '# Veuillez spécifier le répertoire avec les données.\n'
-                '# Cliquez sur sauvegarder pour mettre à jour le paquet.\n'
-                '# Ce n\'est pas un problème de configuration.\n',
+                "# ❌ Erreur : Le fichier de télémesure est introuvable.\n"
+                "# Veuillez spécifier le répertoire avec les données.\n"
+                "# Cliquez sur sauvegarder pour mettre à jour le paquet.\n"
+                "# Ce n'est pas un problème de configuration.\n",
                 encoding="utf-8",
             )
             report = scan_file(f, Path(tmp_dir))
@@ -79,16 +79,16 @@ class TestFrenchDrift(unittest.TestCase):
             # File with drift
             (root / "src").mkdir()
             drift_f = root / "src" / "module.py"
-            drift_f.write_text('# Erreur critique lors de la sauvegarde\n', encoding="utf-8")
+            drift_f.write_text("# Erreur critique lors de la sauvegarde\n", encoding="utf-8")
 
             # Clean file
             clean_f = root / "src" / "clean.py"
-            clean_f.write_text('# Standard English comment\n', encoding="utf-8")
+            clean_f.write_text("# Standard English comment\n", encoding="utf-8")
 
             # Ignored folder
             (root / ".venv").mkdir()
             venv_f = root / ".venv" / "drift.py"
-            venv_f.write_text('# Erreur dans venv\n', encoding="utf-8")
+            venv_f.write_text("# Erreur dans venv\n", encoding="utf-8")
 
             reports = scan_repository(root)
             self.assertEqual(len(reports), 1)

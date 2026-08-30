@@ -3,7 +3,6 @@
 High-performance, zero-overhead telemetry and scoring plugin for **Le Mans Ultimate** and **rFactor 2** (isiMotor technology), accompanied by its dedicated Python subproject **`isimotor-rawudp-client`** and interactive TUI benchmark tool.
 
 * **100% Native Binary Protocol**: Zero dynamic memory allocations and zero third-party dependencies.
-* **Standard isiMotor Configuration**: Managed via `CustomPluginVariables.JSON` (InternalsPluginV07) with hot-reload and in-game menu support.
 * **Fully Configurable Network Routing**: Unicast (`127.0.0.1`), LAN Broadcast (`255.255.255.255`), Multicast (`239.255.0.1`), and remote devices.
 
 ---
@@ -88,29 +87,6 @@ def handle_scoring(s: CompactScoring):
 
 client.start()
 ```
-
----
-
-## 🧭 Coordinate System Notes (from isiMotor SDK)
-
-> [!NOTE]
-> **isiMotor World Coordinates:** Left-handed, with `+y` pointing up.
->
-> **Local Vehicle Coordinates:**
-> * `+x` points out the **left** side of the car (from driver's perspective)
-> * `+y` points out the **roof** (upwards)
-> * `+z` points out the **back** of the car (rearwards)
->
-> **Rotations:**
-> * `+x` pitches up
-> * `+y` yaws to the right
-> * `+z` rolls to the right
->
-> **ISO Conversion:**
-> ISO vehicle coordinates (`+x` forward, `+y` right, `+z` upward) are right-handed.
-> In other words:
-> * A `-z` velocity in isiMotor/rFactor is a `+x` velocity in ISO (`telem.forward_speed_mps = -telem.local_vel.z`).
-> * A `-z` rotation in isiMotor/rFactor is a `-x` rotation in ISO.
 
 ---
 

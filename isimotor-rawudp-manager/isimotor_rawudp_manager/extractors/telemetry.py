@@ -148,7 +148,12 @@ def extract_telemetry_rows(t: TelemInfo | None, st: PacketStats | None = None) -
             ),
             ("engine_rpm", t.engine_rpm, f"{t.engine_rpm:.1f} RPM", "Engine crankshaft rotational speed (RPM)"),
             ("engine_max_rpm", t.engine_max_rpm, f"{t.engine_max_rpm:.1f} RPM", "Engine redline maximum limit (RPM)"),
-            ("engine_water_temp", t.engine_water_temp, f"{t.engine_water_temp:.1f} °C", "Engine coolant / water temperature"),
+            (
+                "engine_water_temp",
+                t.engine_water_temp,
+                f"{t.engine_water_temp:.1f} °C",
+                "Engine coolant / water temperature",
+            ),
             ("engine_oil_temp", t.engine_oil_temp, f"{t.engine_oil_temp:.1f} °C", "Engine lubricant oil temperature"),
             ("clutch_rpm", t.clutch_rpm, f"{t.clutch_rpm:.1f} RPM", "Clutch input shaft speed (RPM)"),
             # Driver Controls & Inputs
@@ -207,7 +212,12 @@ def extract_telemetry_rows(t: TelemInfo | None, st: PacketStats | None = None) -
                 "Direct force-feedback steering shaft torque (N·m)",
             ),
             # Aerodynamics & Aero Surfaces
-            ("front_wing_height", t.front_wing_height, f"{t.front_wing_height * 1000:.1f} mm", "Front wing ground ride height"),
+            (
+                "front_wing_height",
+                t.front_wing_height,
+                f"{t.front_wing_height * 1000:.1f} mm",
+                "Front wing ground ride height",
+            ),
             (
                 "front_ride_height",
                 t.front_ride_height,

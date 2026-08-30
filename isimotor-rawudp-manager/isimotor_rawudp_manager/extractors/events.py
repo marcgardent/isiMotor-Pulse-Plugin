@@ -73,14 +73,10 @@ def extract_event_rows(
 class EventExtractor(BaseExtractor):
     """System events presentation extractor."""
 
-    def extract(
-        self, ev: SystemEvent | None, st: PacketStats | None = None, event_time: float = 0.0
-    ) -> list[TableRow]:
+    def extract(self, ev: SystemEvent | None, st: PacketStats | None = None, event_time: float = 0.0) -> list[TableRow]:
         return extract_event_rows(ev, st, event_time)
 
-    def to_dict(
-        self, ev: SystemEvent | None, st: PacketStats | None = None, event_time: float = 0.0
-    ) -> dict[str, Any]:
+    def to_dict(self, ev: SystemEvent | None, st: PacketStats | None = None, event_time: float = 0.0) -> dict[str, Any]:
         if ev is None:
             return {"status": "No SystemEvent packet received yet"}
         d = model_to_clean_dict(ev)

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """CLI wrapper for running the sniffer directly."""
+
 import sys
 from pathlib import Path
 

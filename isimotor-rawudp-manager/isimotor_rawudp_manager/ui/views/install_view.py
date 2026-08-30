@@ -57,12 +57,17 @@ def compose_install_view(app: IsiMotorBenchmarkApp) -> ComposeResult:
                         yield app.sel_sys_events
 
                 with Container(classes="form-section-card"):
-                    yield Static("📂 [bold #e3b341]3. Detected Simulators & JSON Files[/]", classes="form-section-title")
+                    yield Static(
+                        "📂 [bold #e3b341]3. Detected Simulators & JSON Files[/]", classes="form-section-title"
+                    )
                     yield app.lbl_cfg_target_info
 
             # Right Column: SIMP Stream Rates
             with Vertical(classes="cfg-column"), Container(classes="form-section-card"):
-                yield Static("🏎️ [bold #58a6ff]4. SIMP Stream Rates (Unlimited / Limited Hz / Off)[/]", classes="form-section-title")
+                yield Static(
+                    "🏎️ [bold #58a6ff]4. SIMP Stream Rates (Unlimited / Limited Hz / Off)[/]",
+                    classes="form-section-title",
+                )
                 with Horizontal(classes="cfg-rate-row"):
                     yield Label("Telemetry (1888B) [default: unlimited]:", classes="cfg-rate-label")
                     yield app.sel_rate_telem

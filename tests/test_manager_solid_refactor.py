@@ -183,14 +183,14 @@ class TestManagerSolidArchitecture(unittest.TestCase):
         """Ensures that importing from isimotor_rawudp_manager.sniffer gives identical API."""
         from isimotor_rawudp_manager import sniffer
 
-        self.assertTrue(hasattr(sniffer, 'IsiMotorBenchmarkApp'))
-        self.assertTrue(hasattr(sniffer, 'TelemetryEngine'))
-        self.assertTrue(hasattr(sniffer, 'PacketStats'))
-        self.assertTrue(hasattr(sniffer, 'extract_telemetry_rows'))
-        self.assertTrue(hasattr(sniffer, 'extract_config_rows'))
-        self.assertTrue(hasattr(sniffer, 'main'))
+        self.assertTrue(hasattr(sniffer, "IsiMotorBenchmarkApp"))
+        self.assertTrue(hasattr(sniffer, "TelemetryEngine"))
+        self.assertTrue(hasattr(sniffer, "PacketStats"))
+        self.assertTrue(hasattr(sniffer, "extract_telemetry_rows"))
+        self.assertTrue(hasattr(sniffer, "extract_config_rows"))
+        self.assertTrue(hasattr(sniffer, "main"))
         self.assertEqual(sniffer.PKT_RAW_TELEMETRY, PKT_RAW_TELEMETRY)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
