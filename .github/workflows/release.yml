@@ -143,20 +143,23 @@ jobs:
       - name: Prepare Release Package & Assets
         run: |
           TAG="${{ steps.vars.outputs.TAG }}"
-          mkdir -p staging/scripts
-          cp scripts/install_plugin.py staging/scripts/
-          cp USER_NOTICE.md staging/
-          cp README.md staging/
-          cp LICENSE staging/
+          mkdir -p staging_redist
+          cp staging/isiMotor_RawUDP.dll staging_redist/
+          cp INSTALL_REDIST_RawUDP-Plugin.txt staging_redist/
+          cp LICENSE staging_redist/
+          cp README.md staging_redist/
 
-          # Package universal release zip
-          cd staging
-          zip -r "../isiMotor-RawUDP-Plugin-${TAG}-Universal.zip" .
-          cp "../isiMotor-RawUDP-Plugin-${TAG}-Universal.zip" "../isiMotor-RawUDP-Plugin-${TAG}-Windows-x64.zip"
+          # Package redistributable release zip
+          cd staging_redist
+          zip -r "../isiMotor-RawUDP-Plugin-${TAG}-Redist.zip" .
+          cp "../isiMotor-RawUDP-Plugin-${TAG}-Redist.zip" "../isiMotor-RawUDP-Plugin-${TAG}-Universal.zip"
+          cp "../isiMotor-RawUDP-Plugin-${TAG}-Redist.zip" "../isiMotor-RawUDP-Plugin-${TAG}-Windows-x64.zip"
           cd ..
 
           mkdir -p release_assets
           cp staging/isiMotor_RawUDP.dll release_assets/
+          cp INSTALL_REDIST_RawUDP-Plugin.txt release_assets/
+          cp "isiMotor-RawUDP-Plugin-${TAG}-Redist.zip" release_assets/
           cp "isiMotor-RawUDP-Plugin-${TAG}-Universal.zip" release_assets/
           cp "isiMotor-RawUDP-Plugin-${TAG}-Windows-x64.zip" release_assets/
           cp dist/* release_assets/
