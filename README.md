@@ -148,18 +148,7 @@ make install
 # Uninstall / remove plugin:
 make uninstall
 ```
-
 ---
-
-## 📊 Benchmark Comparison
-
-| Metric | Traditional JSON Plugin | **isiMotor-RawUDP-Plugin** |
-|---|---|---|
-| **External Dependencies** | `nlohmann/json`, `std::string`, `Boost` | **0 dependencies** (native Winsock2 only) |
-| **Allocations / Tick** | Multiple heap allocations (`malloc`/`new`) | **0 allocations** (stack / static buffers) |
-| **CPU Time per Tick** | ~0.2 ms - 0.8 ms | **< 0.001 ms (sub-microsecond)** |
-| **Payload Size** | ~4 - 8 KB / packet (verbose text) | **1888 bytes fixed** (native binary struct) |
-| **Streaming Rate** | ~60 Hz | **120 Hz to 400 Hz+ (zero jitter)** |
 
 ## ⚙️ Configuration (`CustomPluginVariables.JSON`)
 
