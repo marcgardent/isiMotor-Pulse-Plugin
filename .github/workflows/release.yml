@@ -246,7 +246,7 @@ jobs:
           REPO_URL="${{ github.server_url }}/${{ github.repository }}"
 
           cat > release_body.md << 'RELEASE_BODY_EOF'
-          ## 🏎️ isiMotor-RawUDP Plugin ${TAG}
+          ## 🏎️ ${TAG}
 
           Native high-performance telemetry streaming plugin for **Le Mans Ultimate** and **rFactor 2** (isiMotor engine).
           Includes standalone executable managers and a **Python SDK**.
@@ -310,7 +310,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.vars.outputs.TAG }}
-          name: isiMotor-RawUDP Plugin ${{ steps.vars.outputs.TAG }}
+          name: ${{ steps.vars.outputs.TAG }}
           draft: false
           prerelease: false
           body_path: release_body.md
