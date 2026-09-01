@@ -6,6 +6,7 @@ BIN_DIR   = bin
 # Autonomous Python & UV resolution
 VENV_PYTHON = $(shell if [ -x isimotor-rawudp-manager/.venv/bin/python ]; then echo "isimotor-rawudp-manager/.venv/bin/python"; \
                elif [ -x .venv/bin/python ]; then echo ".venv/bin/python"; \
+               elif command -v python >/dev/null 2>&1; then echo "python"; \
                else echo "python3"; fi)
 PYTHON ?= $(VENV_PYTHON)
 UV ?= $(shell which uv 2>/dev/null || if [ -x $$HOME/.local/bin/uv ]; then echo "$$HOME/.local/bin/uv"; else echo "uv"; fi)
@@ -59,7 +60,11 @@ test:
 	@echo "==> Building C++ mock host and running integration tests..."
 	@make -C tests/cpp_mock --silent
 	@./tests/cpp_mock/isi_mock_host --dump-truth tests/golden
-	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v
+	@if command -v $(UV) >/dev/null 2>&1; then \
+		PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(UV) run --with textual --with rich python -m unittest discover -s tests -p "test_*.py" -v; \
+	else \
+		PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v; \
+	fi
 
 cross:
 	@which x86_64-w64-mingw32-g++ >/dev/null 2>&1 || ( \
