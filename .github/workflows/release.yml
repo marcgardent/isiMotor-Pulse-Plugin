@@ -64,7 +64,87 @@ jobs:
           name: release-universal-dll
           path: build/isiMotor_RawUDP.dll
 
-  # --- 3. Package Python Client & Manager ---
+  # --- 3. Build Standalone Manager for Windows (.exe) ---
+  build-manager-windows:
+    name: Build Standalone Manager (Windows x64)
+    runs-on: windows-latest
+    needs: [run-tests, build-dll]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Built DLL
+        uses: actions/download-artifact@v4
+        with:
+          name: release-universal-dll
+          path: staging/
+
+      - name: Sync DLL into Manager Package Resources
+        shell: bash
+        run: |
+          mkdir -p isimotor-rawudp-manager/isimotor_rawudp_manager/resources isimotor-rawudp-manager/resources
+          cp staging/isiMotor_RawUDP.dll isimotor-rawudp-manager/isimotor_rawudp_manager/resources/
+          cp staging/isiMotor_RawUDP.dll isimotor-rawudp-manager/resources/
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Build Standalone Windows EXE with PyInstaller
+        shell: bash
+        run: |
+          PYTHONPATH="isimotor-rawudp-client:isimotor-rawudp-manager" uv run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_RawUDP_Manager" --add-data "isimotor-rawudp-manager/isimotor_rawudp_manager/resources;isimotor_rawudp_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client scripts/entrypoint_manager.py
+
+      - name: Upload Windows Manager Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manager-windows
+          path: dist/isiMotor_RawUDP_Manager.exe
+
+  # --- 4. Build Standalone Manager for Linux (x86_64) ---
+  build-manager-linux:
+    name: Build Standalone Manager (Linux x86_64)
+    runs-on: ubuntu-latest
+    needs: [run-tests, build-dll]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Built DLL
+        uses: actions/download-artifact@v4
+        with:
+          name: release-universal-dll
+          path: staging/
+
+      - name: Sync DLL into Manager Package Resources
+        run: |
+          mkdir -p isimotor-rawudp-manager/isimotor_rawudp_manager/resources isimotor-rawudp-manager/resources
+          cp staging/isiMotor_RawUDP.dll isimotor-rawudp-manager/isimotor_rawudp_manager/resources/
+          cp staging/isiMotor_RawUDP.dll isimotor-rawudp-manager/resources/
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Build Standalone Linux Binary with PyInstaller
+        run: |
+          PYTHONPATH="isimotor-rawudp-client:isimotor-rawudp-manager" uv run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-RawUDP-Manager-x86_64" --add-data "isimotor-rawudp-manager/isimotor_rawudp_manager/resources:isimotor_rawudp_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client scripts/entrypoint_manager.py
+
+      - name: Upload Linux Manager Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manager-linux
+          path: dist/isiMotor-RawUDP-Manager-x86_64
+
+  # --- 5. Package Python Client & Manager ---
   package-python:
     name: Build Python Packages
     runs-on: ubuntu-latest
@@ -110,11 +190,11 @@ jobs:
             isimotor-rawudp-client/dist/*
             isimotor-rawudp-manager/dist/*
 
-  # --- 4. Publish Release Assets ---
+  # --- 6. Publish Release Assets ---
   publish-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [build-dll, package-python]
+    needs: [build-dll, build-manager-windows, build-manager-linux, package-python]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -134,6 +214,18 @@ jobs:
           name: release-universal-dll
           path: staging/
 
+      - name: Download Windows Manager Executable
+        uses: actions/download-artifact@v4
+        with:
+          name: release-manager-windows
+          path: staging_manager_win/
+
+      - name: Download Linux Manager Executable
+        uses: actions/download-artifact@v4
+        with:
+          name: release-manager-linux
+          path: staging_manager_linux/
+
       - name: Download Python Dists
         uses: actions/download-artifact@v4
         with:
@@ -149,19 +241,15 @@ jobs:
           cp LICENSE staging_redist/
           cp README.md staging_redist/
 
-          # Package redistributable release zip
+          # Package redistributable release zip for Windows x64 (MinGW-w64)
           cd staging_redist
-          zip -r "../isiMotor-RawUDP-Plugin-${TAG}-Redist.zip" .
-          cp "../isiMotor-RawUDP-Plugin-${TAG}-Redist.zip" "../isiMotor-RawUDP-Plugin-${TAG}-Universal.zip"
-          cp "../isiMotor-RawUDP-Plugin-${TAG}-Redist.zip" "../isiMotor-RawUDP-Plugin-${TAG}-Windows-x64.zip"
+          zip -r "../isiMotor-RawUDP-Plugin-${TAG}-Windows-x64-MinGW-w64.zip" .
           cd ..
 
           mkdir -p release_assets
-          cp staging/isiMotor_RawUDP.dll release_assets/
-          cp docs/INSTALL_REDIST_RawUDP-Plugin.txt release_assets/
-          cp "isiMotor-RawUDP-Plugin-${TAG}-Redist.zip" release_assets/
-          cp "isiMotor-RawUDP-Plugin-${TAG}-Universal.zip" release_assets/
-          cp "isiMotor-RawUDP-Plugin-${TAG}-Windows-x64.zip" release_assets/
+          cp "isiMotor-RawUDP-Plugin-${TAG}-Windows-x64-MinGW-w64.zip" release_assets/
+          cp staging_manager_win/isiMotor_RawUDP_Manager.exe release_assets/
+          cp staging_manager_linux/isiMotor-RawUDP-Manager-x86_64 release_assets/
           find dist -type f -exec cp {} release_assets/ \;
           ls -lh release_assets/
 
@@ -174,29 +262,27 @@ jobs:
           cat > release_body.md << 'RELEASE_BODY_EOF'
           ## 🏎️ isiMotor-RawUDP Plugin ${TAG}
 
-          Native telemetry streaming plugin for **Le Mans Ultimate** and **rFactor 2** (isiMotor 2.5 / 3.0 engine).
-          Includes a **Python client library** (`isimotor-rawudp-client`) ready to use out-of-the-box for custom dashboards, data loggers, and hardware integrations.
-          **Linux / Steam Deck / Proton**: zero-config — the DLL loads natively, no Wine overrides or launch options required.
+          Native high-performance telemetry streaming plugin for **Le Mans Ultimate** and **rFactor 2** (isiMotor engine).
+          Includes standalone executable managers and a **Python SDK**.
 
           ---
 
-          ### 📦 Artifacts
+          ### 📦 Release Assets
 
           #### 🖥️ Standalone Manager (1-Click Install & Live Telemetry TUI)
-          | Platform | File |
-          |----------|------|
-          | **Windows (x64)** | `isiMotor_RawUDP_Manager.exe` |
-          | **Linux / Steam Deck** | `isiMotor-RawUDP-Manager-x86_64.AppImage` |
+          | Platform | File | Description |
+          |----------|------|-------------|
+          | **Windows (x64)** | `isiMotor_RawUDP_Manager.exe` | Standalone portable executable (No Python required) |
+          | **Linux / Steam Deck** | `isiMotor-RawUDP-Manager-x86_64` | Standalone 64-bit binary (No Python required) |
 
           👉 **User Guide**: [USER_NOTICE.md](${REPO_URL}/blob/${TAG}/USER_NOTICE.md)
 
           ---
 
-          #### 🔧 Redistributable DLL (Manual Install)
+          #### 🔧 Native Plugin (Windows x64 / MinGW-w64)
           | File | Description |
           |------|-------------|
-          | `isiMotor-RawUDP-Plugin-${TAG}-Redist.zip` | DLL + install guide + LICENSE |
-          | `isiMotor_RawUDP.dll` | Standalone native 64-bit plugin DLL |
+          | `isiMotor-RawUDP-Plugin-${TAG}-Windows-x64-MinGW-w64.zip` | Standalone native 64-bit DLL (MinGW-w64) + installation instructions + license |
 
           👉 **Install Guide**: [docs/INSTALL_REDIST_RawUDP-Plugin.txt](${REPO_URL}/blob/${TAG}/docs/INSTALL_REDIST_RawUDP-Plugin.txt)
 
@@ -205,10 +291,14 @@ jobs:
           #### 🐍 Python Packages
           | Package | Description |
           |---------|-------------|
-          | `isimotor-rawudp-client` | Low-level UDP client & packet decoder library |
-          | `isimotor-rawudp-manager` | TUI Manager application with installer |
+          | `isimotor_rawudp_client` | Low-level UDP client & binary packet decoders |
+          | `isimotor_rawudp_manager` | TUI Manager application, live sniffer & automated installer |
 
-          👉 **Client README**: [isimotor-rawudp-client/README.md](${REPO_URL}/blob/${TAG}/isimotor-rawudp-client/README.md)
+          ```bash
+          pip install isimotor_rawudp_manager
+          ```
+
+          👉 **Client README**: [isimotor-rawudp-client/README.md](${REPO_URL}/blob/${TAG}/isimotor-rawudp-client/README.md)  
           👉 **Manager README**: [isimotor-rawudp-manager/README.md](${REPO_URL}/blob/${TAG}/isimotor-rawudp-manager/README.md)
 
           ---

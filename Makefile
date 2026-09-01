@@ -120,6 +120,14 @@ briefcase-build: sync-resources
 	@echo "==> Building isiMotor-RawUDP-Manager with Briefcase..."
 	@cd isimotor-rawudp-manager && $(UV) run --with briefcase briefcase build --no-input
 
+standalone-linux: sync-resources
+	@echo "==> Building standalone Linux manager binary with PyInstaller..."
+	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-RawUDP-Manager-x86_64" --add-data "isimotor-rawudp-manager/isimotor_rawudp_manager/resources:isimotor_rawudp_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client scripts/entrypoint_manager.py
+
+standalone-windows: sync-resources
+	@echo "==> Building standalone Windows manager binary with PyInstaller..."
+	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_RawUDP_Manager" --add-data "isimotor-rawudp-manager/isimotor_rawudp_manager/resources;isimotor_rawudp_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client scripts/entrypoint_manager.py
+
 install:
 	@PYTHONPATH=isimotor-rawudp-manager $(PYTHON) -m isimotor_rawudp_manager.installer
 
