@@ -1,6 +1,6 @@
 [project]
 name = "isimotor-rawudp-workspace"
-version = "0.1.1"
+version = "0.1.3"
 description = "High-performance zero-overhead UDP telemetry & scoring plugin for isiMotor (Le Mans Ultimate & rFactor 2) with Python SDK and Textual Manager"
 readme = "README.md"
 authors = [{ name = "Marc GARDENT" }]
@@ -63,6 +63,7 @@ files = [
     "isimotor-rawudp-manager/isimotor_rawudp_manager",
     "scripts/bump_version.py",
     "scripts/french_drift.py",
+    "scripts/verify_version.py",
 ]
 warn_return_any = true
 warn_unused_configs = true

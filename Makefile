@@ -1,4 +1,4 @@
-.PHONY: help all build cross test benchmark install uninstall status info clean lint format typecheck check version bump french-drift drift
+.PHONY: help all build cross test benchmark install uninstall status info clean lint format typecheck check version bump verify-version check-version french-drift drift
 
 BUILD_DIR = build
 BIN_DIR   = bin
@@ -34,6 +34,8 @@ help:
 	@echo "  make info           - Display UDP packet structures & memory layout"
 	@echo "  make version VERSION=x.y.z - Bump version across all packages & create Git tag"
 	@echo "  make bump VERSION=x.y.z    - Alias for 'make version'"
+	@echo "  make verify-version [VERSION=x.y.z] - Verify workspace version consistency"
+	@echo "  make check-version  [VERSION=x.y.z] - Alias for 'make verify-version'"
 	@echo "  make french-drift   - Scan codebase for French language drift keywords"
 	@echo "  make drift          - Alias for 'make french-drift'"
 	@echo "  make clean          - Remove build and bin directories"
@@ -166,6 +168,11 @@ version:
 	@$(PYTHON) scripts/bump_version.py $(VERSION)
 
 bump: version
+
+verify-version:
+	@$(PYTHON) scripts/verify_version.py $(VERSION)
+
+check-version: verify-version
 
 french-drift:
 	@$(PYTHON) scripts/french_drift.py

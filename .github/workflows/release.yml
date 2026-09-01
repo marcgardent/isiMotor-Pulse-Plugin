@@ -15,13 +15,26 @@ permissions:
   contents: write
 
 jobs:
-  # --- 1. Gatekeeper Tests ---
+  # --- 1. Gatekeeper Tests & Version Validation ---
   run-tests:
-    name: Run Test Suite
+    name: Run Test Suite & Validate Version
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Determine Release Tag
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify Workspace Version Consistency
+        run: |
+          make verify-version VERSION="${{ steps.vars.outputs.TAG }}"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
