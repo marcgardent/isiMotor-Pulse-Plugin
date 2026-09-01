@@ -310,6 +310,89 @@ class TestInstallerAndConfig(unittest.TestCase):
         finally:
             shutil.rmtree(test_dir, ignore_errors=True)
 
+    def test_parse_vdf_library_paths(self):
+        """Tests parsing modern and legacy Steam libraryfolders.vdf structures."""
+        from isimotor_rawudp_manager.installer import parse_vdf_library_paths
+
+        steam_root = self.test_dir / "SteamRoot"
+        secondary_lib = self.test_dir / "SecondaryLib"
+        legacy_lib = self.test_dir / "LegacyLib"
+        steam_root.mkdir(parents=True)
+        secondary_lib.mkdir(parents=True)
+        legacy_lib.mkdir(parents=True)
+
+        vdf_file = steam_root / "steamapps" / "libraryfolders.vdf"
+        vdf_file.parent.mkdir(parents=True)
+
+        vdf_content = f'''"libraryfolders"
+{{
+    "0"
+    {{
+        "path"    "{steam_root}"
+        "label"   ""
+        "apps"
+        {{
+            "2399420"    "10000"
+        }}
+    }}
+    "1"
+    {{
+        "path"    "{secondary_lib}"
+        "apps"
+        {{
+            "365960"    "20000"
+        }}
+    }}
+    "2"    "{legacy_lib}"
+}}'''
+        vdf_file.write_text(vdf_content, encoding="utf-8")
+
+        parsed = parse_vdf_library_paths(vdf_file)
+        parsed_resolved = [p.resolve() for p in parsed]
+        self.assertIn(steam_root.resolve(), parsed_resolved)
+        self.assertIn(secondary_lib.resolve(), parsed_resolved)
+        self.assertIn(legacy_lib.resolve(), parsed_resolved)
+
+    def test_detect_game_installations_uses_vdf_as_single_source_of_truth(self):
+        """Tests that game detection strictly queries libraries registered in libraryfolders.vdf."""
+        from unittest.mock import patch
+
+        from isimotor_rawudp_manager.installer import detect_game_installations
+
+        steam_root = self.test_dir / "Steam"
+        steam_root.mkdir(parents=True)
+        vdf_file = steam_root / "steamapps" / "libraryfolders.vdf"
+        vdf_file.parent.mkdir(parents=True)
+
+        # 1. Registered Steam library containing LMU
+        lmu_dir = steam_root / "steamapps" / "common" / "Le Mans Ultimate"
+        lmu_dir.mkdir(parents=True)
+        (lmu_dir / "Le Mans Ultimate.exe").write_bytes(b"MZ_MOCK_EXE")
+
+        # 2. Unregistered random folder containing rFactor 2
+        fake_random_dir = self.test_dir / "RandomFolder" / "steamapps" / "common" / "rFactor 2"
+        fake_random_dir.mkdir(parents=True)
+        (fake_random_dir / "rFactor2.exe").write_bytes(b"MZ_MOCK_EXE")
+
+        vdf_content = f'''"libraryfolders"
+{{
+    "0"
+    {{
+        "path"    "{steam_root}"
+    }}
+}}'''
+        vdf_file.write_text(vdf_content, encoding="utf-8")
+
+        with patch("isimotor_rawudp_manager.installer.get_steam_vdf_candidate_paths", return_value=[vdf_file]):
+            detected = detect_game_installations()
+
+            # LMU was in registered Steam library -> detected
+            self.assertEqual(len(detected["LMU"]), 1)
+            self.assertEqual(detected["LMU"][0].resolve(), lmu_dir.resolve())
+
+            # rFactor 2 was in unregistered random directory -> NOT detected (no guesswork!)
+            self.assertEqual(len(detected["rF2"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
