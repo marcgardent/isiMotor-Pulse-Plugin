@@ -162,7 +162,7 @@ jobs:
           cp "isiMotor-RawUDP-Plugin-${TAG}-Redist.zip" release_assets/
           cp "isiMotor-RawUDP-Plugin-${TAG}-Universal.zip" release_assets/
           cp "isiMotor-RawUDP-Plugin-${TAG}-Windows-x64.zip" release_assets/
-          cp dist/* release_assets/
+          find dist -type f -exec cp {} release_assets/ \;
           ls -lh release_assets/
 
       - name: Generate Release Notes Body
