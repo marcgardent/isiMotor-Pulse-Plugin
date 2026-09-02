@@ -61,14 +61,7 @@ class TestLMUExtensions(unittest.TestCase):
         raw_ext = bytearray(111)
 
         # ECU
-        ecu_bytes = struct.pack(
-            "<20B",
-            2, 8, 1, 5, 2, 5,
-            3, 10, 1, 0,
-            1, 4, 2, 5,
-            1, 5, 2, 5,
-            1, 200
-        )
+        ecu_bytes = struct.pack("<20B", 2, 8, 1, 5, 2, 5, 3, 10, 1, 0, 1, 4, 2, 5, 1, 5, 2, 5, 1, 200)
         raw_ext[0:20] = ecu_bytes
 
         # Rest of LMU telemetry

@@ -36,14 +36,7 @@ class TestEcuDecoder(unittest.TestCase):
         # mMotorMap=2, mMotorMapMax=4, mMigration=3, mMigrationMax=5,
         # mFrontAntiSway=2, mFrontAntiSwayMax=5, mRearAntiSway=1, mRearAntiSwayMax=5,
         # mWiperState=2, mLiftAndCoastProgress=128
-        raw_ecu = struct.pack(
-            "<20B",
-            3, 8, 2, 5, 4, 6,
-            5, 10, 1, 1,
-            2, 4, 3, 5,
-            2, 5, 1, 5,
-            2, 128
-        )
+        raw_ecu = struct.pack("<20B", 3, 8, 2, 5, 4, 6, 5, 10, 1, 1, 2, 4, 3, 5, 2, 5, 1, 5, 2, 128)
 
         ecu = decode_ecu_state(raw_ecu, offset=0)
 
@@ -94,14 +87,7 @@ class TestEcuDecoder(unittest.TestCase):
 
         # Populate ECU fields at offset 737:
         # TC=4, TCMax=10, ABS=2, ABSMax=8, TCActive=1, ABSActive=0
-        ecu_bytes = struct.pack(
-            "<20B",
-            4, 10, 0, 0, 0, 0,
-            2, 8, 1, 0,
-            1, 3, 0, 0,
-            0, 0, 0, 0,
-            1, 255
-        )
+        ecu_bytes = struct.pack("<20B", 4, 10, 0, 0, 0, 0, 2, 8, 1, 0, 1, 3, 0, 0, 0, 0, 0, 0, 1, 255)
         buffer[737 : 737 + len(ecu_bytes)] = ecu_bytes
 
         telem = decode_telemetry(bytes(buffer))

@@ -196,6 +196,7 @@ class TelemInfo:
     def ecu(self) -> EcuState:
         """Convenience property accessing the LMU/onboard ECU and driver aids state."""
         return self.lmu.ecu
+
     @property
     def speed_mps(self) -> float:
         """Vehicle 3D absolute speed in meters per second."""

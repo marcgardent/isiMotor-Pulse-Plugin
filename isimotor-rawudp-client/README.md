@@ -110,24 +110,32 @@ def on_lmu_telemetry(t: TelemInfo):
 
     # Onboard ECU & Electronic Aids (LMU native)
     if t.ecu.has_tc:
-        print(f"TC: {t.ecu.tc_level}/{t.ecu.tc_max} | Cut: {t.ecu.tc_cut} | Slip: {t.ecu.tc_slip} | Active: {t.ecu.tc_active}")
+        print(
+            f"TC: {t.ecu.tc_level}/{t.ecu.tc_max} | Cut: {t.ecu.tc_cut} | Slip: {t.ecu.tc_slip} | Active: {t.ecu.tc_active}"
+        )
     if t.ecu.has_abs:
         print(f"ABS: {t.ecu.abs_level}/{t.ecu.abs_max} | Active: {t.ecu.abs_active}")
     if t.ecu.has_motor_map:
         print(f"Engine Map: {t.ecu.motor_map}/{t.ecu.motor_map_max} | Migration: {t.ecu.brake_migration}")
 
     # Tire Compound Enums & Brake Disc Wear
-    print(f"Front-Left Compound: {t.fl_wheel.lmu.compound_type} | Brake Thickness: {t.fl_wheel.lmu.brake_wear_meters * 1000:.1f} mm")
+    print(
+        f"Front-Left Compound: {t.fl_wheel.lmu.compound_type} | Brake Thickness: {t.fl_wheel.lmu.brake_wear_meters * 1000:.1f} mm"
+    )
 
 
 @client.on_full_scoring
 def on_lmu_scoring(s: FullScoringSession):
     # Dynamic Track Rubbering & Solar Time of Day
-    print(f"Track Time: {s.lmu.time_of_day_str} | Grip Level: {s.lmu.grip_fraction * 100:.0f}% ({s.lmu.track_grip_level})")
+    print(
+        f"Track Time: {s.lmu.time_of_day_str} | Grip Level: {s.lmu.grip_fraction * 100:.0f}% ({s.lmu.track_grip_level})"
+    )
 
     # Live Opponent Fuel Fraction & Track Limits Penalties
     for car in s.leaderboard:
-        print(f"P{car.place} {car.driver_name} — Fuel: {car.lmu.fuel_fraction * 100:.1f}% | Cuts: {car.lmu.track_limits_steps}")
+        print(
+            f"P{car.place} {car.driver_name} — Fuel: {car.lmu.fuel_fraction * 100:.1f}% | Cuts: {car.lmu.track_limits_steps}"
+        )
 ```
 
 ### 3. Bi-Directional Hardware & Weather Control (Inbound)

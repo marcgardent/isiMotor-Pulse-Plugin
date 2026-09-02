@@ -82,12 +82,16 @@ client = IsiMotorClient(host="0.0.0.0", port=5000)
 @client.on_telemetry
 def handle_telemetry(t: TelemInfo):
     # Base isiMotor physics
-    print(f"Speed: {t.forward_speed_kmh:5.1f} km/h | Gear: {t.gear_str:>2} | RPM: {t.engine_rpm:5.0f} | Fuel: {t.fuel:4.1f}L")
+    print(
+        f"Speed: {t.forward_speed_kmh:5.1f} km/h | Gear: {t.gear_str:>2} | RPM: {t.engine_rpm:5.0f} | Fuel: {t.fuel:4.1f}L"
+    )
 
     # LMU & WEC Hypercar extensions
     if t.lmu.has_hypercar_energy:
-        print(f"Hypercar {t.lmu.vehicle_model} — Virtual Energy: {t.lmu.virtual_energy * 100:.1f}% | Regen: {t.lmu.regen_kw:.1f} kW")
-    
+        print(
+            f"Hypercar {t.lmu.vehicle_model} — Virtual Energy: {t.lmu.virtual_energy * 100:.1f}% | Regen: {t.lmu.regen_kw:.1f} kW"
+        )
+
     # LMU Onboard ECU & Active Driver Aids
     if t.ecu.has_tc:
         print(f"TC Level: {t.ecu.tc_level}/{t.ecu.tc_max} (Active: {t.ecu.tc_active})")
