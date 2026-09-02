@@ -12,8 +12,8 @@ Packaged and distributed as a standalone application using **[Briefcase](https:/
   * Live inspection of all 100+ native struct fields with high-contrast formatting and units.
   * Real-time cell updates at 30 FPS without table flickering or selection jumping.
 * **Packet Type Selector Menu (Tabs):**
-  * `🏎️ TelemInfo (1888 B)` : Full physical vehicle telemetry (kinematics, engine, driver inputs, 4 wheels matrix, hybrid battery/MGU, aero).
-  * `🏁 Grid Scoring` : Up to 128 vehicles on grid (`FullScoringSession`), driver names, classes, lap times, gaps, pit states.
+  * `🏎️ TelemInfo (1888 B)` : Full physical vehicle telemetry (kinematics, engine, driver inputs, 4 wheels matrix, hybrid battery/MGU, aero) + **LMU Extensions** (WEC Hypercar Virtual Energy, Live Regen kW, Onboard TC/ABS levels & active flags, Engine Maps, ARBs, Tire Compound enums, Brake Disc wear).
+  * `🏁 Grid Scoring` : Up to 128 vehicles on grid (`FullScoringSession`), driver names, classes, lap times, gaps, pit states + **LMU Extensions** (Dynamic Track Grip %, Solar Time of Day, Opponent Fuel %, Cut counters).
   * `🚩 Track Rules & SC` : Full course yellow, yellow flag sectors, Safety Car speed and position.
   * `⛽ Pit Menu` : Interactive pit menu categories, selections, and total choices.
   * `🌦️ Weather` : Ambient temperatures, rain matrix 3x3, wind speed, path wetness.

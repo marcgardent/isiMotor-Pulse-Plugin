@@ -5,6 +5,8 @@ High-frequency vehicle and wheel telemetry data models.
 from dataclasses import dataclass, field
 
 from .common import TelemVect3
+from .ecu import EcuState
+from .lmu import LMUTelemetryExtension, LMUWheelExtension
 
 
 @dataclass
@@ -46,6 +48,9 @@ class TelemWheel:
 
     tire_carcass_temperature: float = 0.0  # rough average temperature of carcass (Kelvin)
     tire_inner_layer_temperature: tuple[float, float, float] = (0.0, 0.0, 0.0)  # Kelvin: rubber before carcass
+
+    # Le Mans Ultimate wheel telemetry extensions (compound enum, brake wear)
+    lmu: LMUWheelExtension = field(default_factory=LMUWheelExtension)
 
     # Convenience properties
     @property
@@ -175,6 +180,9 @@ class TelemInfo:
     electric_boost_water_temperature: float = 0.0
     electric_boost_motor_state: int = 0  # 0=unavailable, 1=inactive, 2=propulsion, 3=regeneration
 
+    # Le Mans Ultimate telemetry extensions (ECU, Hypercar virtual energy, regen, track cuts)
+    lmu: LMUTelemetryExtension = field(default_factory=LMUTelemetryExtension)
+
     # Wheels (FL, FR, RL, RR)
     wheels: tuple[TelemWheel, TelemWheel, TelemWheel, TelemWheel] = (
         TelemWheel(),
@@ -184,6 +192,10 @@ class TelemInfo:
     )
 
     # Convenience properties
+    @property
+    def ecu(self) -> EcuState:
+        """Convenience property accessing the LMU/onboard ECU and driver aids state."""
+        return self.lmu.ecu
     @property
     def speed_mps(self) -> float:
         """Vehicle 3D absolute speed in meters per second."""

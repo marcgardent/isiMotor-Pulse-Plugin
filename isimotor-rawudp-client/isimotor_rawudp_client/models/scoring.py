@@ -5,6 +5,7 @@ Scoring, leaderboard, timing and session data models.
 from dataclasses import dataclass, field
 
 from .common import TelemVect3
+from .lmu import LMUScoringExtension, LMUVehicleScoringExtension
 
 
 @dataclass
@@ -134,6 +135,9 @@ class VehicleScoring:
     best_lap_sector1: float = 0.0  # S1 from best overall lap
     best_lap_sector2: float = 0.0  # S2 from best overall lap
 
+    # Le Mans Ultimate vehicle scoring extensions (fuel fraction, track limits)
+    lmu: LMUVehicleScoringExtension = field(default_factory=LMUVehicleScoringExtension)
+
     # Convenience properties
     @property
     def speed_mps(self) -> float:
@@ -228,6 +232,10 @@ class FullScoringSession:
     min_path_wetness: float = 0.0
     max_path_wetness: float = 0.0
     avg_path_wetness: float = 0.0
+
+    # Le Mans Ultimate session scoring extensions (track grip, time of day, penalty rules)
+    lmu: LMUScoringExtension = field(default_factory=LMUScoringExtension)
+
     vehicles: list[VehicleScoring] = field(default_factory=list)
 
     @property

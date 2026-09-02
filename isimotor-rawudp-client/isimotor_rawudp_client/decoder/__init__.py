@@ -41,10 +41,17 @@ from .commands import (
     encode_hw_control,
     encode_weather_control,
 )
+from .ecu import decode_ecu_state
 from .events import decode_system_event
 from .feedback import decode_force_feedback
 from .graphics import decode_graphics
 from .header import decode_header, encode_header
+from .lmu import (
+    decode_lmu_scoring_extension,
+    decode_lmu_telemetry_extension,
+    decode_lmu_vehicle_scoring_extension,
+    decode_lmu_wheel_extension,
+)
 from .packet_decoder import (
     AnyPacket,
     PacketDecoderRegistry,
@@ -94,12 +101,17 @@ __all__ = [
     "PacketDecoderRegistry",
     "_decode_string",
     "decode_compact_scoring",
+    "decode_ecu_state",
     "decode_extended_state",
     "decode_force_feedback",
     "decode_full_scoring",
     "decode_graphics",
     "decode_header",
     "decode_hw_control",
+    "decode_lmu_scoring_extension",
+    "decode_lmu_telemetry_extension",
+    "decode_lmu_vehicle_scoring_extension",
+    "decode_lmu_wheel_extension",
     "decode_packet",
     "decode_system_event",
     "decode_telemetry",

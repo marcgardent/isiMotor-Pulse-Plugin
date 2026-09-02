@@ -31,11 +31,21 @@ from .common import (
     SystemEvent,
     TelemVect3,
 )
+from .ecu import (
+    EcuState,
+)
 from .feedback import (
     ForceFeedback,
 )
 from .graphics import (
     Graphics,
+)
+from .lmu import (
+    LMUCompoundType,
+    LMUScoringExtension,
+    LMUTelemetryExtension,
+    LMUVehicleScoringExtension,
+    LMUWheelExtension,
 )
 from .physics import (
     ExtendedState,
@@ -57,11 +67,17 @@ from .weather import (
 
 __all__ = [
     "CompactScoring",
+    "EcuState",
     "ExtendedState",
     "ForceFeedback",
     "FullScoringSession",
     "Graphics",
     "HWControlCommand",
+    "LMUCompoundType",
+    "LMUScoringExtension",
+    "LMUTelemetryExtension",
+    "LMUVehicleScoringExtension",
+    "LMUWheelExtension",
     "PhysicsOptions",
     "RawUdpHeader",
     "SystemEvent",

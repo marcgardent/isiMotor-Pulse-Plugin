@@ -3,6 +3,7 @@
 High-performance, zero-overhead telemetry and scoring plugin for **Le Mans Ultimate** and **rFactor 2** (isiMotor technology), accompanied by its dedicated Python subproject **`isimotor-rawudp-client`** and interactive TUI benchmark tool.
 
 * **100% Native Binary Protocol**: Zero dynamic memory allocations and zero third-party dependencies.
+* **Le Mans Ultimate (LMU) & WEC Native Extensions**: Full support for WEC Hypercar Virtual Energy, Live Regeneration (kW), Onboard ECU driver aids (TC, TC Cut/Slip, ABS, Engine Maps, ARBs, active TC/ABS interventions), Tire Compound Enums, Dynamic Track Grip, and Opponent Fuel Fraction.
 * **Fully Configurable Network Routing**: Unicast (`127.0.0.1`), LAN Broadcast (`255.255.255.255`), Multicast (`239.255.0.1`), and remote devices.
 * **Python Client Library**: `isimotor-rawudp-client` — ready to use out-of-the-box for custom dashboards, data loggers, and hardware integrations.
 * **Linux / Steam Deck / Proton**: Zero-config — the DLL loads natively, no Wine overrides or launch options required.
@@ -22,13 +23,16 @@ isiMotor-RawUDP-Plugin/
 │   ├── toolchain.cmake         # MinGW-w64 toolchain definition for Linux
 │   ├── src/                    # C++ Plugin source (main.cpp)
 │   │   └── main.cpp
-│   └── include/                # isiMotor Internals SDK headers (V07)
+│   └── include/                # isiMotor Internals SDK headers (V07) + LMU Extensions
 │       ├── InternalsPlugin.hpp
 │       └── PluginObjects.hpp
 ├── isimotor-rawudp-client/     # 🐍 Dedicated Python client subproject
 │   ├── pyproject.toml          # PEP 517/621 Python package configuration
 │   ├── README.md               # Python client documentation
 │   └── isimotor_rawudp_client/ # Package source (models, decoders, client)
+│       ├── models/             # Domain dataclasses (base isiMotor + .lmu models)
+│       ├── decoder/            # Binary decoders (telemetry, scoring, LMU extensions)
+│       └── client.py           # High-level client facade
 └── isimotor-rawudp-manager/    # 📊 Manager, Telemetry Diagnostics & Installer (Textual TUI / Briefcase)
     ├── pyproject.toml          # Package and Briefcase configuration
     ├── README.md
@@ -70,21 +74,32 @@ pip install -e .
 ### Python Quick Start
 
 ```python
-from isimotor_rawudp_client import IsiMotorClient, TelemInfo, CompactScoring
+from isimotor_rawudp_client import IsiMotorClient, TelemInfo, FullScoringSession
 
 client = IsiMotorClient(host="0.0.0.0", port=5000)
 
 
 @client.on_telemetry
 def handle_telemetry(t: TelemInfo):
-    print(
-        f"Speed: {t.forward_speed_kmh:5.1f} km/h | Gear: {t.gear_str:>2} | RPM: {t.engine_rpm:5.0f} | Fuel: {t.fuel:4.1f}L"
-    )
+    # Base isiMotor physics
+    print(f"Speed: {t.forward_speed_kmh:5.1f} km/h | Gear: {t.gear_str:>2} | RPM: {t.engine_rpm:5.0f} | Fuel: {t.fuel:4.1f}L")
+
+    # LMU & WEC Hypercar extensions
+    if t.lmu.has_hypercar_energy:
+        print(f"Hypercar {t.lmu.vehicle_model} — Virtual Energy: {t.lmu.virtual_energy * 100:.1f}% | Regen: {t.lmu.regen_kw:.1f} kW")
+    
+    # LMU Onboard ECU & Active Driver Aids
+    if t.ecu.has_tc:
+        print(f"TC Level: {t.ecu.tc_level}/{t.ecu.tc_max} (Active: {t.ecu.tc_active})")
+    if t.ecu.has_abs:
+        print(f"ABS Level: {t.ecu.abs_level}/{t.ecu.abs_max} (Active: {t.ecu.abs_active})")
 
 
-@client.on_scoring
-def handle_scoring(s: CompactScoring):
-    print(f"Track: {s.track_name} | Lap: {s.total_laps} | S1: {s.cur_sector1:.3f}s")
+@client.on_full_scoring
+def handle_scoring(s: FullScoringSession):
+    print(f"Track: {s.track_name} | Time: {s.lmu.time_of_day_str} | Grip: {s.lmu.grip_fraction * 100:.0f}%")
+    for car in s.leaderboard[:3]:
+        print(f"  P{car.place} {car.driver_name} — Opponent Fuel: {car.lmu.fuel_fraction * 100:.1f}%")
 
 
 client.start()

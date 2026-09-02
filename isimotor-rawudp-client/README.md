@@ -96,7 +96,41 @@ client.on_force_feedback = lambda f: print(f"FFB Torque: {f.percentage:.1f}% ({f
 client.start()
 ```
 
-### 2. Bi-Directional Hardware & Weather Control (Inbound)
+### 2. Le Mans Ultimate (LMU) & WEC Hypercar Native Extensions
+```python
+@client.on_telemetry
+def on_lmu_telemetry(t: TelemInfo):
+    # Base isiMotor Dynamics
+    print(f"Speed: {t.speed_kmh:.1f} km/h | Throttle: {t.unfiltered_throttle * 100:.0f}%")
+
+    # WEC Hypercar Virtual Energy & Live Regen
+    if t.lmu.has_hypercar_energy:
+        print(f"Hypercar: {t.lmu.vehicle_model}")
+        print(f"Virtual Energy: {t.lmu.virtual_energy * 100:.1f}% | Regen: {t.lmu.regen_kw:.1f} kW")
+
+    # Onboard ECU & Electronic Aids (LMU native)
+    if t.ecu.has_tc:
+        print(f"TC: {t.ecu.tc_level}/{t.ecu.tc_max} | Cut: {t.ecu.tc_cut} | Slip: {t.ecu.tc_slip} | Active: {t.ecu.tc_active}")
+    if t.ecu.has_abs:
+        print(f"ABS: {t.ecu.abs_level}/{t.ecu.abs_max} | Active: {t.ecu.abs_active}")
+    if t.ecu.has_motor_map:
+        print(f"Engine Map: {t.ecu.motor_map}/{t.ecu.motor_map_max} | Migration: {t.ecu.brake_migration}")
+
+    # Tire Compound Enums & Brake Disc Wear
+    print(f"Front-Left Compound: {t.fl_wheel.lmu.compound_type} | Brake Thickness: {t.fl_wheel.lmu.brake_wear_meters * 1000:.1f} mm")
+
+
+@client.on_full_scoring
+def on_lmu_scoring(s: FullScoringSession):
+    # Dynamic Track Rubbering & Solar Time of Day
+    print(f"Track Time: {s.lmu.time_of_day_str} | Grip Level: {s.lmu.grip_fraction * 100:.0f}% ({s.lmu.track_grip_level})")
+
+    # Live Opponent Fuel Fraction & Track Limits Penalties
+    for car in s.leaderboard:
+        print(f"P{car.place} {car.driver_name} — Fuel: {car.lmu.fuel_fraction * 100:.1f}% | Cuts: {car.lmu.track_limits_steps}")
+```
+
+### 3. Bi-Directional Hardware & Weather Control (Inbound)
 ```python
 # Navigate In-Game Pit Menu
 client.send_pit_action(PitAction.MENU_DOWN)
@@ -112,7 +146,7 @@ client.send_hw_control("HeadlightsToggle", control_value=1.0, duration_ms=50)
 client.send_weather_override(ambient_temp=30.0, raining=0.75, min_path_wetness=0.6)
 ```
 
-### 3. Synchronous Polling / Context Manager
+### 4. Synchronous Polling / Context Manager
 ```python
 with IsiMotorClient(port=5000) as client:
     while True:
@@ -120,5 +154,7 @@ with IsiMotorClient(port=5000) as client:
         rules = client.get_latest_track_rules()
         if telem:
             print(f"RPM: {telem.engine_rpm} | Speed: {telem.speed_kmh:.1f} km/h")
+            if telem.lmu.has_hypercar_energy:
+                print(f"Virtual Energy: {telem.lmu.virtual_energy * 100:.1f}%")
         time.sleep(0.01)
 ```

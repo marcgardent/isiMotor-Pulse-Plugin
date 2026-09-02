@@ -11,6 +11,10 @@ from ..constants import (
 )
 from ..models import CompactScoring, FullScoringSession, TelemVect3, VehicleScoring
 from .base import _decode_string
+from .lmu import (
+    decode_lmu_scoring_extension,
+    decode_lmu_vehicle_scoring_extension,
+)
 
 
 def decode_compact_scoring(data: bytes, offset: int = 0) -> CompactScoring | None:
@@ -199,6 +203,7 @@ def decode_vehicle_scoring(data: bytes, offset: int = 0) -> VehicleScoring:
         pit_lap_dist=pit_lap_dist,
         best_lap_sector1=best_lap_s1,
         best_lap_sector2=best_lap_s2,
+        lmu=decode_lmu_vehicle_scoring_extension(data, offset + 536),
     )
 
 
@@ -231,6 +236,7 @@ def decode_full_scoring(data: bytes, offset: int = 0) -> FullScoringSession | No
     min_path_wetness = struct.unpack_from("<d", data, offset + 260)[0]
     max_path_wetness = struct.unpack_from("<d", data, offset + 268)[0]
     avg_path_wetness = struct.unpack_from("<d", data, offset + 276)[0]
+    lmu_session = decode_lmu_scoring_extension(data, offset + 284)
 
     vehicles: list[VehicleScoring] = []
     v_base = offset + FULL_SCORING_SESSION_SIZE
@@ -264,5 +270,6 @@ def decode_full_scoring(data: bytes, offset: int = 0) -> FullScoringSession | No
         min_path_wetness=min_path_wetness,
         max_path_wetness=max_path_wetness,
         avg_path_wetness=avg_path_wetness,
+        lmu=lmu_session,
         vehicles=vehicles,
     )

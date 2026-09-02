@@ -7,6 +7,7 @@ import struct
 from ..constants import TELEMINFO_SIZE
 from ..models import TelemInfo, TelemVect3, TelemWheel
 from .base import _decode_string
+from .lmu import decode_lmu_telemetry_extension, decode_lmu_wheel_extension
 
 
 def decode_wheel(data: bytes, offset: int) -> TelemWheel:
@@ -73,6 +74,7 @@ def decode_wheel(data: bytes, offset: int) -> TelemWheel:
         toe=toe,
         tire_carcass_temperature=carcass_temp,
         tire_inner_layer_temperature=(it0, it1, it2),
+        lmu=decode_lmu_wheel_extension(data, offset + 236),
     )
 
 
@@ -178,6 +180,7 @@ def decode_telemetry(data: bytes, offset: int = 0) -> TelemInfo | None:
     eb_temp = struct.unpack_from("<d", data, offset + 720)[0]
     eb_water_temp = struct.unpack_from("<d", data, offset + 728)[0]
     eb_state = data[offset + 736]
+    lmu = decode_lmu_telemetry_extension(data, offset + 737)
 
     # Wheels (FL: 848, FR: 1108, RL: 1368, RR: 1628)
     w_fl = decode_wheel(data, offset + 848)
@@ -257,5 +260,6 @@ def decode_telemetry(data: bytes, offset: int = 0) -> TelemInfo | None:
         electric_boost_motor_temperature=eb_temp,
         electric_boost_water_temperature=eb_water_temp,
         electric_boost_motor_state=eb_state,
+        lmu=lmu,
         wheels=(w_fl, w_fr, w_rl, w_rr),
     )

@@ -117,6 +117,16 @@ struct TelemQuat
 };
 
 
+// Le Mans Ultimate (LMU) wheel telemetry extensions (mapped within mExpansion[24])
+struct LMUExtendedWheel
+{
+  unsigned char mCompoundType;          // Compound enum (0=Unknown, 1=Soft, 2=Medium, 3=Hard, 4=Wet, 5=Intermediate)
+  unsigned char mWheelReserved1[3];     // Alignment padding
+  double mBrakeWear;                    // Brake remaining thickness in meters
+  unsigned char mWheelReserved2[12];    // Remaining expansion bytes
+};
+static_assert(sizeof(LMUExtendedWheel) == 24, "LMUExtendedWheel size mismatch (must be 24 bytes)");
+
 struct TelemWheelV01
 {
   double mSuspensionDeflection;  // meters
@@ -152,8 +162,12 @@ struct TelemWheelV01
   double mTireCarcassTemperature;       // rough average of temperature samples from carcass (Kelvin)
   double mTireInnerLayerTemperature[3]; // rough average of temperature samples from innermost layer of rubber (before carcass) (Kelvin)
 
-  unsigned char mExpansion[ 24 ];// for future use
+  union {
+    unsigned char mExpansion[ 24 ];// for future use
+    LMUExtendedWheel mLMUExtension; // Le Mans Ultimate wheel extensions
+  };
 };
+static_assert(sizeof(TelemWheelV01) == 260, "TelemWheelV01 size mismatch (must be 260 bytes)");
 
 
 // Our world coordinate system is left-handed, with +y pointing up.
@@ -170,6 +184,42 @@ struct TelemWheelV01
 // or torque data because things rotate in the opposite direction.  In other
 // words, a -z velocity in rFactor is a +x velocity in ISO, but a -z rotation
 // in rFactor is a -x rotation in ISO!!!
+
+// Le Mans Ultimate (LMU) electronic aids & extended telemetry (mapped within mExpansion[111])
+#pragma pack(push, 1)
+struct LMUExtendedTelemetry
+{
+  // ECU & Driver aids (20 bytes)
+  unsigned char mTC;                     // TC level
+  unsigned char mTCMax;                  // TC max level
+  unsigned char mTCCut;                  // TC cut level
+  unsigned char mTCCutMax;               // TC cut max level
+  unsigned char mTCSlip;                 // TC slip level
+  unsigned char mTCSlipMax;              // TC slip max level
+  unsigned char mABS;                    // ABS level
+  unsigned char mABSMax;                 // ABS max level
+  unsigned char mTCActive;               // 1 if Traction Control is actively intervening
+  unsigned char mABSActive;              // 1 if Anti-lock Braking System is actively intervening
+  unsigned char mMotorMap;               // Motor / Engine map level
+  unsigned char mMotorMapMax;            // Motor / Engine map max level
+  unsigned char mMigration;              // Brake migration level
+  unsigned char mMigrationMax;           // Brake migration max level
+  unsigned char mFrontAntiSway;          // Front anti-roll bar level
+  unsigned char mFrontAntiSwayMax;       // Front anti-roll bar max level
+  unsigned char mRearAntiSway;           // Rear anti-roll bar level
+  unsigned char mRearAntiSwayMax;        // Rear anti-roll bar max level
+  unsigned char mWiperState;             // Wiper state (0=off, 1=auto, 2=slow, 3=fast)
+  unsigned char mLiftAndCoastProgress;   // Lift and coast progress (0-255)
+
+  // Hypercar energy, track limits & vehicle model (91 bytes)
+  unsigned char mTrackLimitsSteps;       // Track limits cut steps
+  unsigned char mReserved1[3];           // Alignment padding
+  double mVirtualEnergy;                 // Remaining virtual energy fraction (0.0 to 1.0)
+  double mRegen;                         // Regeneration power in kW
+  char mVehicleModel[32];                // Vehicle model designation
+  unsigned char mExpansionReserved[39];  // Remaining bytes to keep exactly 111 bytes
+};
+#pragma pack(pop)
 
 struct TelemInfoV01
 {
@@ -272,12 +322,17 @@ struct TelemInfoV01
   double mElectricBoostWaterTemperature; // current water temperature of boost motor cooler if present (0 otherwise)
   unsigned char mElectricBoostMotorState; // 0=unavailable 1=inactive, 2=propulsion, 3=regeneration
 
-  // Future use
-  unsigned char mExpansion[111]; // for future use (note that the slot ID has been moved to mID above)
+  // Future use / LMU electronic aids
+  union {
+    unsigned char mExpansion[111];       // for future use (note that the slot ID has been moved to mID above)
+    LMUExtendedTelemetry mLMUExtension;  // Le Mans Ultimate specific telemetry extensions
+  };
 
   // keeping this at the end of the structure to make it easier to replace in future versions
   TelemWheelV01 mWheel[4];       // wheel info (front left, front right, rear left, rear right)
 };
+static_assert(sizeof(LMUExtendedTelemetry) == 111, "LMUExtendedTelemetry size mismatch (must be 111 bytes)");
+static_assert(sizeof(TelemInfoV01) == 1888, "TelemInfoV01 size mismatch (must be 1888 bytes)");
 
 
 struct GraphicsInfoV01
@@ -342,6 +397,15 @@ struct MessageInfoV01
   unsigned char mExpansion[126]; // for future use (possibly what color, what font, and seconds to display)
 };
 
+
+// Le Mans Ultimate (LMU) vehicle scoring extensions (mapped within mExpansion[48])
+struct LMUExtendedVehicleScoring
+{
+  unsigned char mFuelFraction;               // Fuel remaining fraction (0..255)
+  unsigned char mTrackLimitsSteps;           // Vehicle track limits cut steps
+  unsigned char mVehScoringReserved[46];      // Remaining expansion bytes
+};
+static_assert(sizeof(LMUExtendedVehicleScoring) == 48, "LMUExtendedVehicleScoring size mismatch (must be 48 bytes)");
 
 struct VehicleScoringInfoV01
 {
@@ -415,11 +479,25 @@ struct VehicleScoringInfoV01
   float mBestLapSector1;         // sector 1 time from best lap (not necessarily the best sector 1 time)
   float mBestLapSector2;         // sector 2 time from best lap (not necessarily the best sector 2 time)
 
-  // Future use
-  // tag.2012.04.06 - SEE ABOVE!
-  unsigned char mExpansion[48];  // for future use
+  // Future use / LMU vehicle scoring
+  union {
+    unsigned char mExpansion[48];              // for future use
+    LMUExtendedVehicleScoring mLMUExtension;   // Le Mans Ultimate vehicle scoring extensions
+  };
 };
+static_assert(sizeof(VehicleScoringInfoV01) == 584, "VehicleScoringInfoV01 size mismatch (must be 584 bytes)");
 
+// Le Mans Ultimate (LMU) session scoring extensions (mapped within mExpansion[200])
+struct LMUExtendedScoring
+{
+  unsigned char mTrackGripLevel;             // Grip level (0=Default, 1=Green/0.25, 2=Fast/0.50, 3=Optimum/0.75, 4=Rubbered/0.90)
+  unsigned char mTrackLimitsStepsPerPoint;   // Track limits points per penalty
+  unsigned char mTrackLimitsStepsPerPenalty; // Track limits penalty threshold
+  unsigned char mScoringReserved1[1];        // Alignment
+  float mTimeOfDay;                          // Sun / Time of day (seconds since midnight)
+  unsigned char mScoringReserved2[192];      // Remaining expansion bytes
+};
+static_assert(sizeof(LMUExtendedScoring) == 200, "LMUExtendedScoring size mismatch (must be 200 bytes)");
 
 struct ScoringInfoV01
 {
@@ -486,8 +564,11 @@ struct ScoringInfoV01
   //
   double mAvgPathWetness;          // average wetness on main path 0.0-1.0
 
-  // Future use
-  unsigned char mExpansion[200];
+  // Future use / LMU session scoring
+  union {
+    unsigned char mExpansion[200];
+    LMUExtendedScoring mLMUExtension;
+  };
 
   // keeping this at the end of the structure to make it easier to replace in future versions
   VehicleScoringInfoV01 *mVehicle; // array of vehicle scoring info's
