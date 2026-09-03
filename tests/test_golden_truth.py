@@ -24,6 +24,7 @@ from isimotor_rawudp_client.decoder import (
 )
 from isimotor_rawudp_client.models import (
     HWControlCommand,
+    SystemEvent,
     WeatherControlCommand,
 )
 
@@ -109,7 +110,7 @@ class TestGoldenTruth(unittest.TestCase):
         with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
-        self.assertEqual(len(data), 168, f"Expected 168 bytes, got {len(data)}")
+        self.assertEqual(len(data), 160, f"Expected 160 bytes, got {len(data)}")
         s = decode_compact_scoring(data)
         self.assertIsNotNone(s)
 
@@ -333,11 +334,17 @@ class TestGoldenTruth(unittest.TestCase):
         with open(bin_path, "rb") as f:
             data = f.read()
 
-        self.assertEqual(len(data), 6)
+        self.assertEqual(len(data), 2)
         ev = decode_system_event(data)
         self.assertIsNotNone(ev)
         self.assertEqual(ev.event_id, 1)
         self.assertEqual(ev.name, "EnterRealtime")
+
+        # Test decode_packet with SIMP header
+        packet_with_hdr = struct.pack("<4sBBHIdBBH", b"SIMP", 1, 3, 2, 10, 0.0, 0, 1, 1) + data
+        decoded_pkt = decode_packet(packet_with_hdr)
+        self.assertIsInstance(decoded_pkt, SystemEvent)
+        self.assertEqual(decoded_pkt.event_id, 1)
 
     def test_hw_control_golden_decoding_and_encoding(self):
         bin_path = os.path.join(GOLDEN_DIR, "hw_control_golden.bin")

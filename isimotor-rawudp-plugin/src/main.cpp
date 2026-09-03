@@ -79,8 +79,10 @@ struct WSADATA {};
 
 // Module handle saved at DLL injection time
 static HINSTANCE g_hModule = NULL;
+static bool g_enableLogging = false;
 
 static inline void PluginLog(const char* fmt, ...) {
+    if (!g_enableLogging) return;
     char path[MAX_PATH] = {0};
 #ifdef _WIN32
     if (g_hModule) {
@@ -133,12 +135,10 @@ struct RawUdpHeader {
 };
 
 /**
- * Compact Scoring Packet (SIMP Type 2)
- * Lightweight 168-byte representation of session and player timing data.
+ * Compact Scoring Packet Payload (SIMP Type 2, 160 bytes)
+ * Lightweight representation of session and player timing data.
  */
 struct CompactScoringPacket {
-    char magic[4];           // "SIMP"
-    unsigned char packetType;// 2 = Scoring
     char trackName[64];      // Current track name (null-terminated)
     long session;            // 0=testday, 1-4=practice, 5-8=qual, 9=warmup, 10-13=race
     double currentET;        // Current session elapsed time in seconds
@@ -160,13 +160,12 @@ struct CompactScoringPacket {
 };
 
 /**
- * System Event Packet (SIMP Type 3)
- * 6-byte packet triggered on state transitions.
+ * System Event Packet Payload (SIMP Type 3, 2 bytes)
+ * Triggered on state transitions.
  */
 struct SystemEventPacket {
-    char magic[4];           // "SIMP"
-    unsigned char packetType;// 3 = System Event
     unsigned char eventType; // 1 = EnterRealtime, 2 = ExitRealtime, 3 = StartSession, 4 = EndSession
+    unsigned char pad;
 };
 
 /**
@@ -455,11 +454,13 @@ public:
 
 struct PluginConfig {
     bool enabled;
+    bool enableLogging;
     char targetIp[64];
     int targetPort;
     int inboundPort;
     bool enableInboundControl;
-    double telemetryHz;
+    double playerTelemetryHz;
+    double opponentTelemetryHz;
     double compactScoringHz;
     double fullScoringHz;
     double weatherHz;
@@ -482,7 +483,8 @@ private:
     sockaddr_in serverAddr;
     sockaddr_in inboundAddr;
     PluginConfig config;
-    RateLimiter telemetryLimiter;
+    RateLimiter playerTelemetryLimiter;
+    RateLimiter opponentTelemetryLimiters[128];
     RateLimiter compactScoringLimiter;
     RateLimiter fullScoringLimiter;
     RateLimiter weatherLimiter;
@@ -628,22 +630,28 @@ private:
 
     void InitDefaults() {
         config.enabled = true;
+        config.enableLogging = false;
+        g_enableLogging = false;
         std::strncpy(config.targetIp, DEFAULT_UDP_HOST, sizeof(config.targetIp) - 1);
         config.targetIp[sizeof(config.targetIp) - 1] = '\0';
         config.targetPort = DEFAULT_UDP_PORT;
         config.inboundPort = 5001;
         config.enableInboundControl = true;
-        config.telemetryHz = -1.0;     // unlimited
-        config.compactScoringHz = -1.0;// unlimited
-        config.fullScoringHz = 5.0;    // 5Hz
-        config.weatherHz = 1.0;        // 1Hz
-        config.extendedStateHz = 5.0;  // 5Hz
-        config.forceFeedbackHz = -1.0; // unlimited (up to 400Hz)
-        config.graphicsHz = 60.0;      // 60Hz
+        config.playerTelemetryHz = -1.0;   // unlimited
+        config.opponentTelemetryHz = 0.0;  // off (disabled for zero overhead)
+        config.compactScoringHz = 10.0;    // 10Hz
+        config.fullScoringHz = 5.0;        // 5Hz
+        config.weatherHz = 1.0;            // 1Hz
+        config.extendedStateHz = 5.0;      // 5Hz
+        config.forceFeedbackHz = -1.0;     // unlimited (up to 400Hz)
+        config.graphicsHz = 60.0;          // 60Hz
         config.enableSystemEvents = true;
         config.unsubscribedBuffersMask = 0;
 
-        telemetryLimiter.SetRate(config.telemetryHz);
+        playerTelemetryLimiter.SetRate(config.playerTelemetryHz);
+        for (int i = 0; i < 128; ++i) {
+            opponentTelemetryLimiters[i].SetRate(config.opponentTelemetryHz);
+        }
         compactScoringLimiter.SetRate(config.compactScoringHz);
         fullScoringLimiter.SetRate(config.fullScoringHz);
         weatherLimiter.SetRate(config.weatherHz);
@@ -678,6 +686,10 @@ private:
         ExtractJsonString(buf, " Enabled", strVal, sizeof(strVal), "1");
         config.enabled = (ParseIntString(strVal, 1) != 0);
 
+        ExtractJsonString(buf, "EnableLogging", strVal, sizeof(strVal), "Disabled");
+        config.enableLogging = ParseBoolString(strVal, false);
+        g_enableLogging = config.enableLogging;
+
         ExtractJsonString(buf, "TargetIP", config.targetIp, sizeof(config.targetIp), DEFAULT_UDP_HOST);
 
         ExtractJsonString(buf, "TargetPort", strVal, sizeof(strVal), "5000");
@@ -689,11 +701,16 @@ private:
         ExtractJsonString(buf, "InboundControl", strVal, sizeof(strVal), "Enabled");
         config.enableInboundControl = ParseBoolString(strVal, true);
 
-        ExtractJsonString(buf, "TelemetryRate", strVal, sizeof(strVal), "unlimited");
-        config.telemetryHz = ParseRateString(strVal, -1.0);
+        // Player Telemetry Rate
+        ExtractJsonString(buf, "PlayerTelemetryRate", strVal, sizeof(strVal), "unlimited");
+        config.playerTelemetryHz = ParseRateString(strVal, -1.0);
 
-        ExtractJsonString(buf, "CompactScoringRate", strVal, sizeof(strVal), "unlimited");
-        config.compactScoringHz = ParseRateString(strVal, -1.0);
+        // Opponent Telemetry Rate
+        ExtractJsonString(buf, "OpponentTelemetryRate", strVal, sizeof(strVal), "off");
+        config.opponentTelemetryHz = ParseRateString(strVal, 0.0);
+
+        ExtractJsonString(buf, "CompactScoringRate", strVal, sizeof(strVal), "10Hz");
+        config.compactScoringHz = ParseRateString(strVal, 10.0);
 
         ExtractJsonString(buf, "FullScoringRate", strVal, sizeof(strVal), "5Hz");
         config.fullScoringHz = ParseRateString(strVal, 5.0);
@@ -717,7 +734,10 @@ private:
         config.unsubscribedBuffersMask = ParseIntString(strVal, 0);
 
         // Update rate limiters with parsed values
-        telemetryLimiter.SetRate(config.telemetryHz);
+        playerTelemetryLimiter.SetRate(config.playerTelemetryHz);
+        for (int i = 0; i < 128; ++i) {
+            opponentTelemetryLimiters[i].SetRate(config.opponentTelemetryHz);
+        }
         compactScoringLimiter.SetRate(config.compactScoringHz);
         fullScoringLimiter.SetRate(config.fullScoringHz);
         weatherLimiter.SetRate(config.weatherHz);
@@ -763,11 +783,9 @@ public:
     void SendSystemEvent(unsigned char eventType) {
         if (!initialized || !config.enableSystemEvents || udpSocket == INVALID_SOCKET) return;
         SystemEventPacket pkt{};
-        pkt.magic[0] = 'S'; pkt.magic[1] = 'I'; pkt.magic[2] = 'M'; pkt.magic[3] = 'P';
-        pkt.packetType = 3;
         pkt.eventType = eventType;
-        sendto(udpSocket, reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
-               reinterpret_cast<const sockaddr*>(&serverAddr), sizeof(serverAddr));
+        pkt.pad = 0;
+        SendSlicedPayload(3, static_cast<unsigned short>(eventType), &pkt, sizeof(pkt), 0.0);
     }
 
     void ApplyHWControl(const char* name, double value, unsigned short durationMs) {
@@ -1015,20 +1033,16 @@ public:
     // Subscribe to telemetry updates: 1 = Player vehicle only, 2 = All vehicles, 0 = Disabled
     long WantsTelemetryUpdates() override {
         if (config.unsubscribedBuffersMask & UNSUB_TELEMETRY) return 0;
-        return telemetryLimiter.IsEnabled() ? 2 : 0;
+        bool playerOn = playerTelemetryLimiter.IsEnabled();
+        bool opponentOn = (config.opponentTelemetryHz != 0.0);
+        if (opponentOn) return 2; // All vehicles (player + opponents)
+        if (playerOn) return 1;   // Player vehicle only (zero AI overhead)
+        return 0;
     }
 
     // High frequency callback (~60-100Hz): Direct memory dump (zero-copy, zero-allocation)
     void UpdateTelemetry(const TelemInfoV01 &info) override {
         if (!initialized || udpSocket == INVALID_SOCKET) return;
-
-        // Track collision damage impacts
-        if (info.mLastImpactMagnitude > 0.0) {
-            if (info.mLastImpactMagnitude > maxImpactMagnitude) {
-                maxImpactMagnitude = info.mLastImpactMagnitude;
-            }
-            accumulatedImpactMagnitude += info.mLastImpactMagnitude;
-        }
 
         // Periodic ExtendedState stream (SIMP Type 8 @ 5Hz)
         if (extendedStateLimiter.IsEnabled() && extendedStateLimiter.ShouldSend()) {
@@ -1036,7 +1050,25 @@ public:
         }
 
         if (config.unsubscribedBuffersMask & UNSUB_TELEMETRY) return;
-        if (!telemetryLimiter.ShouldSend()) return;
+
+        // Discriminate player vs opponent vehicle
+        bool isPlayer = (info.mID <= 0);
+        if (isPlayer) {
+            // Track collision damage impacts for player
+            if (info.mLastImpactMagnitude > 0.0) {
+                if (info.mLastImpactMagnitude > maxImpactMagnitude) {
+                    maxImpactMagnitude = info.mLastImpactMagnitude;
+                }
+                accumulatedImpactMagnitude += info.mLastImpactMagnitude;
+            }
+
+            if (!playerTelemetryLimiter.ShouldSend()) return;
+        } else {
+            if (config.opponentTelemetryHz == 0.0) return;
+            int slot = (info.mID >= 0 && info.mID < 128) ? info.mID : (info.mID % 128);
+            if (slot < 0) slot = 0;
+            if (!opponentTelemetryLimiters[slot].ShouldSend()) return;
+        }
 
         SendSlicedPayload(1, static_cast<unsigned short>(info.mID >= 0 ? info.mID : 0),
                           &info, sizeof(TelemInfoV01), info.mElapsedTime);
@@ -1055,8 +1087,6 @@ public:
         // 1. Compact Scoring Packet (SIMP Type 2)
         if (compactScoringLimiter.IsEnabled() && compactScoringLimiter.ShouldSend()) {
             CompactScoringPacket pkt{};
-            pkt.magic[0] = 'S'; pkt.magic[1] = 'I'; pkt.magic[2] = 'M'; pkt.magic[3] = 'P';
-            pkt.packetType = 2;
 
             std::strncpy(pkt.trackName, info.mTrackName, sizeof(pkt.trackName) - 1);
             pkt.trackName[sizeof(pkt.trackName) - 1] = '\0';
@@ -1088,8 +1118,7 @@ public:
                 }
             }
 
-            sendto(udpSocket, reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
-                   reinterpret_cast<const sockaddr*>(&serverAddr), sizeof(serverAddr));
+            SendSlicedPayload(2, 0, &pkt, sizeof(pkt), info.mCurrentET);
         }
 
         // 2. Full Multi-Car Scoring Stream (SIMP Type 4, Sliced)
@@ -1405,34 +1434,20 @@ static void Shim_ExitRealtime(void* self) {
 
 static bool Shim_WantsScoringUpdates(void* self) {
     auto* p = GetPlugin(self);
-    bool ret = p ? p->WantsScoringUpdates() : false;
-    PluginLog("Shim_WantsScoringUpdates() -> %s", ret ? "true" : "false");
-    return ret;
+    return p ? p->WantsScoringUpdates() : false;
 }
 
 static void Shim_UpdateScoring(void* self, const ScoringInfoV01 &info) {
-    static int s_scoring_count = 0;
-    if (++s_scoring_count <= 3 || s_scoring_count % 50 == 0) {
-        PluginLog("Shim_UpdateScoring #%d (track='%s', session=%ld, vehicles=%ld, et=%.2f)",
-                  s_scoring_count, info.mTrackName, info.mSession, info.mNumVehicles, info.mCurrentET);
-    }
     auto* p = GetPlugin(self);
     if (p) p->UpdateScoring(info);
 }
 
 static long Shim_WantsTelemetryUpdates(void* self) {
     auto* p = GetPlugin(self);
-    long ret = p ? p->WantsTelemetryUpdates() : 0;
-    PluginLog("Shim_WantsTelemetryUpdates() -> %ld", ret);
-    return ret;
+    return p ? p->WantsTelemetryUpdates() : 0;
 }
 
 static void Shim_UpdateTelemetry(void* self, const TelemInfoV01 &info) {
-    static int s_telem_count = 0;
-    if (++s_telem_count <= 5 || s_telem_count % 100 == 0) {
-        PluginLog("Shim_UpdateTelemetry #%d (et=%.2f, rpm=%.0f, gear=%d)",
-                  s_telem_count, info.mElapsedTime, info.mEngineRPM, info.mGear);
-    }
     auto* p = GetPlugin(self);
     if (p) p->UpdateTelemetry(info);
 }

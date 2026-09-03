@@ -18,53 +18,29 @@ from .lmu import (
 
 
 def decode_compact_scoring(data: bytes, offset: int = 0) -> CompactScoring | None:
-    """Decodes a 168-byte SIMP Type 2 compact scoring packet."""
+    """Decodes a 160-byte SIMP Type 2 compact scoring payload."""
     if len(data) - offset < COMPACT_SCORING_SIZE:
         return None
 
-    # Check magic if starting at 0
-    if offset == 0 and data.startswith(b"SIMP") and len(data) >= 5 and data[4] == 2:
-        # SIMP Type 2 compact scoring layout
-        track = _decode_string(data[5:69])
-        session = struct.unpack_from("<i", data, 72)[0]
-        current_et = struct.unpack_from("<d", data, 76)[0]
-        lap_dist = struct.unpack_from("<d", data, 84)[0]
-        max_laps = struct.unpack_from("<i", data, 92)[0]
-        in_rt = bool(data[96])
-        total_laps = struct.unpack_from("<h", data, 98)[0]
-        sector = struct.unpack_from("<b", data, 100)[0]
-        in_garage = bool(data[101])
-        count_lap_flag = data[102]
+    track = _decode_string(data[offset : offset + 64])
+    session = struct.unpack_from("<i", data, offset + 64)[0]
+    current_et = struct.unpack_from("<d", data, offset + 68)[0]
+    lap_dist = struct.unpack_from("<d", data, offset + 76)[0]
+    max_laps = struct.unpack_from("<i", data, offset + 84)[0]
+    in_rt = bool(data[offset + 88])
+    total_laps = struct.unpack_from("<h", data, offset + 90)[0]
+    sector = struct.unpack_from("<b", data, offset + 92)[0]
+    in_garage = bool(data[offset + 93])
+    count_lap_flag = data[offset + 94]
 
-        cur_s1 = struct.unpack_from("<d", data, 104)[0]
-        cur_s2 = struct.unpack_from("<d", data, 112)[0]
-        last_s1 = struct.unpack_from("<d", data, 120)[0]
-        last_s2 = struct.unpack_from("<d", data, 128)[0]
-        last_lap = struct.unpack_from("<d", data, 136)[0]
-        best_s1 = struct.unpack_from("<d", data, 144)[0]
-        best_s2 = struct.unpack_from("<d", data, 152)[0]
-        best_lap = struct.unpack_from("<d", data, 160)[0]
-    else:
-        # Standard payload unpacking
-        track = _decode_string(data[offset + 5 : offset + 69])
-        session = struct.unpack_from("<i", data, offset + 72)[0]
-        current_et = struct.unpack_from("<d", data, offset + 76)[0]
-        lap_dist = struct.unpack_from("<d", data, offset + 84)[0]
-        max_laps = struct.unpack_from("<i", data, offset + 92)[0]
-        in_rt = bool(data[offset + 96])
-        total_laps = struct.unpack_from("<h", data, offset + 98)[0]
-        sector = struct.unpack_from("<b", data, offset + 100)[0]
-        in_garage = bool(data[offset + 101])
-        count_lap_flag = data[offset + 102]
-
-        cur_s1 = struct.unpack_from("<d", data, offset + 104)[0]
-        cur_s2 = struct.unpack_from("<d", data, offset + 112)[0]
-        last_s1 = struct.unpack_from("<d", data, offset + 120)[0]
-        last_s2 = struct.unpack_from("<d", data, offset + 128)[0]
-        last_lap = struct.unpack_from("<d", data, offset + 136)[0]
-        best_s1 = struct.unpack_from("<d", data, offset + 144)[0]
-        best_s2 = struct.unpack_from("<d", data, offset + 152)[0]
-        best_lap = struct.unpack_from("<d", data, offset + 160)[0]
+    cur_s1 = struct.unpack_from("<d", data, offset + 96)[0]
+    cur_s2 = struct.unpack_from("<d", data, offset + 104)[0]
+    last_s1 = struct.unpack_from("<d", data, offset + 112)[0]
+    last_s2 = struct.unpack_from("<d", data, offset + 120)[0]
+    last_lap = struct.unpack_from("<d", data, offset + 128)[0]
+    best_s1 = struct.unpack_from("<d", data, offset + 136)[0]
+    best_s2 = struct.unpack_from("<d", data, offset + 144)[0]
+    best_lap = struct.unpack_from("<d", data, offset + 152)[0]
 
     return CompactScoring(
         track_name=track,

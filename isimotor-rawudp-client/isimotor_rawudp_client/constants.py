@@ -5,11 +5,11 @@ Protocol and struct layout constants for isiMotor-RawUDP-Plugin.
 # ── Packet Size & Struct Constants ─────────────────────────────────────────────
 HEADER_SIZE = 24
 HEADER_STRUCT = "<4sBBHIdBBH"
-SYSTEM_EVENT_SIZE = 6
-SYSTEM_EVENT_STRUCT = "<4sBB"
+SYSTEM_EVENT_SIZE = 2
+SYSTEM_EVENT_STRUCT = "<BB"
 
 TELEMINFO_SIZE = 1888
-COMPACT_SCORING_SIZE = 168
+COMPACT_SCORING_SIZE = 160
 FULL_SCORING_SESSION_SIZE = 284
 VEHICLE_SCORING_SIZE = 584
 

@@ -30,7 +30,8 @@ class TestInstallerAndConfig(unittest.TestCase):
             "TargetPort",
             "InboundControl",
             "InboundPort",
-            "TelemetryRate",
+            "PlayerTelemetryRate",
+            "OpponentTelemetryRate",
             "CompactScoringRate",
             "FullScoringRate",
             "WeatherRate",
@@ -64,7 +65,8 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertEqual(entry["TargetIP"], "127.0.0.1")
         self.assertEqual(entry["TargetPort"], "5000")
         self.assertEqual(entry["InboundControl"], "Enabled")
-        self.assertEqual(entry["TelemetryRate"], "unlimited")
+        self.assertEqual(entry["PlayerTelemetryRate"], "unlimited")
+        self.assertEqual(entry["OpponentTelemetryRate"], "off")
         self.assertEqual(entry["FullScoringRate"], "5Hz")
         self.assertEqual(entry["WeatherRate"], "1Hz")
         self.assertEqual(entry["ForceFeedbackRate"], "unlimited")
@@ -250,7 +252,7 @@ class TestInstallerAndConfig(unittest.TestCase):
                 form_vars = app._read_config_from_form()
                 self.assertEqual(form_vars["TargetIP"], "192.168.1.50")
                 self.assertEqual(form_vars["TargetPort"], "5055")
-                self.assertEqual(form_vars["TelemetryRate"], "100Hz")
+                self.assertEqual(form_vars["PlayerTelemetryRate"], "100Hz")
                 self.assertEqual(form_vars["WeatherRate"], "off")
                 self.assertEqual(form_vars[" Enabled"], 1)
                 self.assertEqual(form_vars["InboundControl"], "Enabled")

@@ -52,8 +52,6 @@ struct RawUdpHeader {
 };
 
 struct CompactScoringPacket {
-    char magic[4];           // "SIMP"
-    uint8_t packetType;      // 2 = Scoring
     char trackName[64];      // Current track name (null-terminated)
     int32_t session;         // 0=testday, 1-4=practice, 5-8=qual, 9=warmup, 10-13=race
     double currentET;        // Current session elapsed time in seconds
@@ -75,9 +73,8 @@ struct CompactScoringPacket {
 };
 
 struct SystemEventPacket {
-    char magic[4];           // "SIMP"
-    uint8_t packetType;      // 3 = System Event
     uint8_t eventType;       // 1 = EnterRealtime, 2 = ExitRealtime, 3 = StartSession, 4 = EndSession
+    uint8_t pad;
 };
 
 struct FullScoringSessionPacket {
@@ -380,8 +377,6 @@ void populate_golden_telemetry(TelemInfoV01 &t) {
 
 void populate_golden_scoring(CompactScoringPacket &s) {
     std::memset(&s, 0, sizeof(s));
-    s.magic[0] = 'S'; s.magic[1] = 'I'; s.magic[2] = 'M'; s.magic[3] = 'P';
-    s.packetType = 2;
     std::strncpy(s.trackName, "Circuit de la Sarthe - Le Mans", sizeof(s.trackName) - 1);
     s.session = 10; // Race 1
     s.currentET = 1250.456;
@@ -631,9 +626,8 @@ void populate_golden_graphics(GraphicsPacket &gfx) {
 
 void populate_golden_event(SystemEventPacket &ev, uint8_t type = 1) {
     std::memset(&ev, 0, sizeof(ev));
-    ev.magic[0] = 'S'; ev.magic[1] = 'I'; ev.magic[2] = 'M'; ev.magic[3] = 'P';
-    ev.packetType = 3;
     ev.eventType = type;
+    ev.pad = 0;
 }
 
 void populate_golden_hw_control(HWControlCommandPacket &hw) {

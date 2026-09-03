@@ -247,12 +247,14 @@ def find_source_dll(project_root: Path | None = None, custom_dll_path: Path | No
 # Default configuration variables matching InternalsPluginV07 CustomVariable definitions (Human-readable string values)
 DEFAULT_PLUGIN_VARIABLES: dict[str, int | str] = {
     " Enabled": 1,
+    "EnableLogging": "Disabled",
     "TargetIP": "127.0.0.1",
     "TargetPort": "5000",
     "InboundControl": "Enabled",
     "InboundPort": "5001",
-    "TelemetryRate": "unlimited",
-    "CompactScoringRate": "unlimited",
+    "PlayerTelemetryRate": "unlimited",
+    "OpponentTelemetryRate": "off",
+    "CompactScoringRate": "10Hz",
     "FullScoringRate": "5Hz",
     "WeatherRate": "1Hz",
     "ExtendedStateRate": "5Hz",

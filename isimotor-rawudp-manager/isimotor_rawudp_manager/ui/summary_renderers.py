@@ -48,7 +48,7 @@ def render_home_config_summary(overview: dict[str, Any]) -> str:
     target_port = vars_dict.get("TargetPort", "5000")
     inbound_ctrl = vars_dict.get("InboundControl", "Enabled")
     inbound_port = vars_dict.get("InboundPort", "5001")
-    telem_rate = vars_dict.get("TelemetryRate", "unlimited")
+    telem_rate = vars_dict.get("PlayerTelemetryRate", vars_dict.get("TelemetryRate", "unlimited"))
     scoring_rate = vars_dict.get("FullScoringRate", "5Hz")
     rules_rate = vars_dict.get("TrackRulesRate", "3Hz")
     pit_rate = vars_dict.get("PitMenuRate", "100Hz")

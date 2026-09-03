@@ -151,10 +151,10 @@ def extract_config_rows(overview: dict[str, Any]) -> list[TableRow]:
     )
     rows.append(
         (
-            "config.TelemetryRate",
-            active_vars.get("TelemetryRate", "unlimited"),
-            f"[bold #e3b341]{active_vars.get('TelemetryRate', 'unlimited')}[/]",
-            "Raw binary TelemInfo streaming rate (unlimited, 60Hz, 100Hz, Off)",
+            "config.PlayerTelemetryRate",
+            active_vars.get("PlayerTelemetryRate", "unlimited"),
+            f"[bold #e3b341]{active_vars.get('PlayerTelemetryRate', 'unlimited')}[/]",
+            "Player Physics rate (TelemInfoV01) streaming rate (unlimited, 60Hz, 100Hz, Off)",
         )
     )
     rows.append(

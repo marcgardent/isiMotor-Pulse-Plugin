@@ -841,7 +841,7 @@ class IsiMotorBenchmarkApp(App):
 
         # Stream Rates
         rate_configs = [
-            (self.sel_rate_telem, self.input_rate_telem, "box-rate-telem", "TelemetryRate", "100"),
+            (self.sel_rate_telem, self.input_rate_telem, "box-rate-telem", "PlayerTelemetryRate", "unlimited"),
             (self.sel_rate_ffb, self.input_rate_ffb, "box-rate-ffb", "ForceFeedbackRate", "400"),
             (self.sel_rate_full_scoring, self.input_rate_full_scoring, "box-rate-full-scoring", "FullScoringRate", "5"),
             (
@@ -895,13 +895,15 @@ class IsiMotorBenchmarkApp(App):
 
         return {
             " Enabled": enabled_int,
+            "EnableLogging": "Disabled",
             "TargetIP": self.cfg_target_ip.value.strip() or "127.0.0.1",
             "TargetPort": self.cfg_target_port.value.strip() or "5000",
             "InboundControl": inbound_str,
             "InboundPort": self.cfg_inbound_port.value.strip() or "5001",
-            "TelemetryRate": format_mode_and_hz_to_rate(
+            "PlayerTelemetryRate": format_mode_and_hz_to_rate(
                 str(self.sel_rate_telem.value), self.input_rate_telem.value, "100"
             ),
+            "OpponentTelemetryRate": "off",
             "ForceFeedbackRate": format_mode_and_hz_to_rate(
                 str(self.sel_rate_ffb.value), self.input_rate_ffb.value, "400"
             ),
