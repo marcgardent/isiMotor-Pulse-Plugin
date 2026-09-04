@@ -19,6 +19,7 @@
  * - System event state notifications (SIMP Type 3, 6 bytes).
  * - UnsubscribedBuffersMask support matching rF2SharedMemoryMapPlugin.
  * - Standard isiMotor configuration via CustomPluginVariables.JSON (InternalsPluginV07).
+ * - Live hot-reload of configuration (event-based Win32 file watcher, zero polling).
  * - Sub-millisecond latency supporting 120Hz to 400Hz+ streaming.
  */
 
@@ -471,6 +472,139 @@ struct PluginConfig {
     long unsubscribedBuffersMask;
 };
 
+// -------------------------------------------------------------------------
+// ConfigFileWatcher — Event-based file change detection (Win32 native)
+// Uses FindFirstChangeNotification to avoid polling. A dedicated thread
+// sleeps on WaitForSingleObject until the OS signals a directory change.
+// A volatile flag is set for the main plugin thread to check and clear.
+// -------------------------------------------------------------------------
+#ifdef _WIN32
+class ConfigFileWatcher {
+private:
+    HANDLE hChangeNotify;
+    HANDLE hThread;
+    HANDLE hStopEvent;
+    volatile bool dirty;
+    char watchedDir[MAX_PATH];
+
+    static DWORD WINAPI WatcherThreadProc(LPVOID param) {
+        ConfigFileWatcher* self = reinterpret_cast<ConfigFileWatcher*>(param);
+        HANDLE handles[2] = { self->hStopEvent, self->hChangeNotify };
+
+        while (true) {
+            DWORD result = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+
+            if (result == WAIT_OBJECT_0) {
+                // hStopEvent signaled — exit thread
+                break;
+            }
+            if (result == WAIT_OBJECT_0 + 1) {
+                // Directory change detected — debounce: wait 200ms for editor to finish writing
+                Sleep(200);
+                self->dirty = true;
+
+                // Re-arm the notification
+                if (!FindNextChangeNotification(self->hChangeNotify)) {
+                    break;  // Handle invalidated, exit
+                }
+            } else {
+                // Error or abandoned — exit
+                break;
+            }
+        }
+        return 0;
+    }
+
+public:
+    ConfigFileWatcher() : hChangeNotify(INVALID_HANDLE_VALUE), hThread(NULL),
+                          hStopEvent(NULL), dirty(false) {
+        std::memset(watchedDir, 0, sizeof(watchedDir));
+    }
+
+    ~ConfigFileWatcher() {
+        Stop();
+    }
+
+    bool Start(const char* configFilePath) {
+        if (!configFilePath || configFilePath[0] == '\0') return false;
+        Stop();  // Clean up any previous watcher
+
+        // Extract directory from config file path
+        std::strncpy(watchedDir, configFilePath, sizeof(watchedDir) - 1);
+        watchedDir[sizeof(watchedDir) - 1] = '\0';
+        char* lastSlash = std::strrchr(watchedDir, '\\');
+        if (!lastSlash) lastSlash = std::strrchr(watchedDir, '/');
+        if (lastSlash) {
+            *lastSlash = '\0';
+        } else {
+            // No directory separator — watch current directory
+            std::strcpy(watchedDir, ".");
+        }
+
+        // Create stop event for clean shutdown
+        hStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+        if (!hStopEvent) return false;
+
+        // Create change notification handle (watch for file writes in the directory)
+        hChangeNotify = FindFirstChangeNotificationA(
+            watchedDir,
+            FALSE,  // Do not watch subtree
+            FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_FILE_NAME
+        );
+        if (hChangeNotify == INVALID_HANDLE_VALUE) {
+            CloseHandle(hStopEvent);
+            hStopEvent = NULL;
+            return false;
+        }
+
+        dirty = false;
+
+        // Launch watcher thread
+        hThread = CreateThread(NULL, 0, WatcherThreadProc, this, 0, NULL);
+        if (!hThread) {
+            FindCloseChangeNotification(hChangeNotify);
+            hChangeNotify = INVALID_HANDLE_VALUE;
+            CloseHandle(hStopEvent);
+            hStopEvent = NULL;
+            return false;
+        }
+
+        return true;
+    }
+
+    void Stop() {
+        if (hStopEvent) {
+            SetEvent(hStopEvent);
+        }
+        if (hThread) {
+            WaitForSingleObject(hThread, 2000);
+            CloseHandle(hThread);
+            hThread = NULL;
+        }
+        if (hChangeNotify != INVALID_HANDLE_VALUE) {
+            FindCloseChangeNotification(hChangeNotify);
+            hChangeNotify = INVALID_HANDLE_VALUE;
+        }
+        if (hStopEvent) {
+            CloseHandle(hStopEvent);
+            hStopEvent = NULL;
+        }
+    }
+
+    bool CheckAndClearDirty() {
+        if (dirty) {
+            dirty = false;
+            return true;
+        }
+        return false;
+    }
+
+    bool IsRunning() const {
+        return hThread != NULL;
+    }
+};
+#endif // _WIN32
+
 // Static working buffers (zero dynamic allocations)
 static const size_t MAX_UDP_CHUNK_SIZE = 1200;
 static char s_scoringBuffer[sizeof(FullScoringSessionPacket) + 128 * sizeof(VehicleScoringInfoV01)];
@@ -493,6 +627,12 @@ private:
     RateLimiter graphicsLimiter;
     unsigned int sequenceCounters[256];
     bool initialized;
+
+    // Hot-reload: file watcher and resolved config path
+#ifdef _WIN32
+    ConfigFileWatcher configWatcher;
+#endif
+    char resolvedConfigPath[MAX_PATH];
 
     // Inbound Hardware & Pit Menu Controls (FR-07)
     struct ActiveHWControl {
@@ -661,17 +801,30 @@ private:
     }
 
     void LoadConfigFile() {
-        const char* paths[] = {
-            "UserData/player/CustomPluginVariables.JSON",
-            "UserData/CustomPluginVariables.JSON",
-            "../UserData/player/CustomPluginVariables.JSON",
-            "../UserData/CustomPluginVariables.JSON"
-        };
-
         FILE* f = nullptr;
-        for (const char* p : paths) {
-            f = std::fopen(p, "rb");
-            if (f) break;
+
+        // On hot-reload, reuse the previously resolved path
+        if (resolvedConfigPath[0] != '\0') {
+            f = std::fopen(resolvedConfigPath, "rb");
+        }
+
+        // First load (or resolved path became invalid): scan candidate paths
+        if (!f) {
+            const char* paths[] = {
+                "UserData/player/CustomPluginVariables.JSON",
+                "UserData/CustomPluginVariables.JSON",
+                "../UserData/player/CustomPluginVariables.JSON",
+                "../UserData/CustomPluginVariables.JSON"
+            };
+
+            for (const char* p : paths) {
+                f = std::fopen(p, "rb");
+                if (f) {
+                    std::strncpy(resolvedConfigPath, p, sizeof(resolvedConfigPath) - 1);
+                    resolvedConfigPath[sizeof(resolvedConfigPath) - 1] = '\0';
+                    break;
+                }
+            }
         }
         if (!f) return;
 
@@ -860,6 +1013,7 @@ public:
         std::memset(sequenceCounters, 0, sizeof(sequenceCounters));
         std::memset(activeControls, 0, sizeof(activeControls));
         std::memset(&weatherOverride, 0, sizeof(weatherOverride));
+        std::memset(resolvedConfigPath, 0, sizeof(resolvedConfigPath));
         InitDefaults();
     }
 
@@ -934,9 +1088,22 @@ public:
         std::memset(&cachedPhysics, 0, sizeof(cachedPhysics));
         std::memset(activeControls, 0, sizeof(activeControls));
         std::memset(&weatherOverride, 0, sizeof(weatherOverride));
+
+        // Start config file watcher for hot-reload
+#ifdef _WIN32
+        if (resolvedConfigPath[0] != '\0') {
+            if (configWatcher.Start(resolvedConfigPath)) {
+                PluginLog("[RawUDP] Config file watcher started on: %s", resolvedConfigPath);
+            }
+        }
+#endif
     }
 
     void Shutdown() override {
+        // Stop config file watcher before cleaning up
+#ifdef _WIN32
+        configWatcher.Stop();
+#endif
         if (initialized) {
             if (udpSocket != INVALID_SOCKET) {
                 closesocket(udpSocket);
@@ -1082,6 +1249,38 @@ public:
 
     void UpdateScoring(const ScoringInfoV01 &info) override {
         if (!initialized || udpSocket == INVALID_SOCKET) return;
+
+        // Hot-reload: check if config file was modified
+#ifdef _WIN32
+        if (configWatcher.CheckAndClearDirty()) {
+            // Save current network config to detect changes
+            char prevIp[64];
+            std::strncpy(prevIp, config.targetIp, sizeof(prevIp));
+            prevIp[sizeof(prevIp) - 1] = '\0';
+            int prevPort = config.targetPort;
+            int prevInboundPort = config.inboundPort;
+
+            LoadConfigFile();
+
+            // Hot-reloadable: rates and flags are already applied by LoadConfigFile()
+
+            // Network changes: update target address in-place (no socket recreation needed)
+            if (std::strcmp(prevIp, config.targetIp) != 0 || prevPort != config.targetPort) {
+                serverAddr.sin_port = htons(static_cast<u_short>(config.targetPort));
+                inet_pton(AF_INET, config.targetIp, &serverAddr.sin_addr);
+                PluginLog("[RawUDP] Hot-reload: target updated to %s:%d", config.targetIp, config.targetPort);
+            }
+
+            // Inbound port change requires socket re-bind (log warning)
+            if (prevInboundPort != config.inboundPort) {
+                PluginLog("[RawUDP] Hot-reload: InboundPort changed (%d -> %d), restart required to apply",
+                          prevInboundPort, config.inboundPort);
+            }
+
+            PluginLog("[RawUDP] Configuration hot-reloaded from: %s", resolvedConfigPath);
+        }
+#endif
+
         if (config.unsubscribedBuffersMask & UNSUB_SCORING) return;
 
         // 1. Compact Scoring Packet (SIMP Type 2)

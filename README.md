@@ -4,6 +4,7 @@ High-performance, zero-overhead telemetry and scoring plugin for **Le Mans Ultim
 
 * **100% Native Binary Protocol**: Zero dynamic memory allocations and zero third-party dependencies.
 * **Le Mans Ultimate (LMU) & WEC Native Extensions**: Full support for WEC Hypercar Virtual Energy, Live Regeneration (kW), Onboard ECU driver aids (TC, TC Cut/Slip, ABS, Engine Maps, ARBs, active TC/ABS interventions), Tire Compound Enums, Dynamic Track Grip, and Opponent Fuel Fraction.
+* **Live Hot-Reload**: Edit `CustomPluginVariables.JSON` while driving — rates, network target, logging and all flags apply instantly without restarting the simulator (event-based Win32 file watcher, zero polling).
 * **Fully Configurable Network Routing**: Unicast (`127.0.0.1`), LAN Broadcast (`255.255.255.255`), Multicast (`239.255.0.1`), and remote devices.
 * **Python Client Library**: `isimotor-rawudp-client` — ready to use out-of-the-box for custom dashboards, data loggers, and hardware integrations.
 * **Linux / Steam Deck / Proton**: Zero-config — the DLL loads natively, no Wine overrides or launch options required.
@@ -173,6 +174,18 @@ The plugin uses the standard isiMotor plugin configuration system via `UserData/
   }
 }
 ```
+
+### 🔄 Live Hot-Reload
+
+The plugin automatically detects changes to `CustomPluginVariables.JSON` while the simulator is running — **no restart required**. An event-based Win32 file watcher (`FindFirstChangeNotification`) monitors the config directory with zero polling overhead.
+
+**Hot-reloadable parameters** (apply instantly):
+- All streaming rates (`PlayerTelemetryRate`, `OpponentTelemetryRate`, `CompactScoringRate`, `FullScoringRate`, `WeatherRate`, `ExtendedStateRate`, `ForceFeedbackRate`, `GraphicsRate`)
+- `EnableLogging`, `SystemEvents`, `UnsubscribedBuffersMask`
+- `TargetIP` and `TargetPort` (UDP target address updated in-place)
+
+**Restart required**:
+- `InboundPort` — changing the inbound listening port requires a simulator restart (a log warning is emitted).
 
 > 📖 **Full User Notice & Options Guide**: See [**`USER_NOTICE.md`**](USER_NOTICE.md) for the complete index table and configuration documentation.
 

@@ -59,7 +59,8 @@ The Manager features a top navigation bar with 4 dedicated views:
      - **Target Port**: Outgoing UDP telemetry port (default `5000`).
      - **Channel Refresh Rates**: Customize individual refresh frequencies for Player Telemetry (`unlimited` / `100Hz`), Opponents Telemetry (`off` / `20Hz`), Compact Scoring (`10Hz`), Full Scoring (`5Hz`), Weather (`1Hz`), and Force Feedback (`unlimited` / `400Hz`).
      - **Inbound Port**: Inbound command listening port (default `5001`).
-   - Click **`[ 💾 Save ]`** to apply changes across all detected games simultaneously. The simulation engine automatically hot-reloads these settings.
+   - Click **`[ 💾 Save ]`** to apply changes across all detected games simultaneously.
+   - **🔄 Live hot-reload**: The plugin detects file changes in real-time using an event-based Win32 file watcher (zero polling). Most parameters — streaming rates, `TargetIP`, `TargetPort`, `EnableLogging`, `SystemEvents`, `UnsubscribedBuffersMask` — apply instantly without restarting the simulator. Only `InboundPort` requires a restart.
 5. **Uninstalling**:
    - Click **`[ 🗑️ Uninstall ]`** to safely remove the plugin DLL from detected installations.
 
