@@ -55,6 +55,9 @@ def compose_install_view(app: IsiMotorBenchmarkApp) -> ComposeResult:
                     with Horizontal(classes="cfg-form-row"):
                         yield Label("System Events [default: Enabled]:", classes="cfg-label")
                         yield app.sel_sys_events
+                    with Horizontal(classes="cfg-form-row"):
+                        yield Label("Plugin Logging [default: Disabled]:", classes="cfg-label")
+                        yield app.sel_enable_logging
 
                 with Container(classes="form-section-card"):
                     yield Static(
@@ -69,10 +72,16 @@ def compose_install_view(app: IsiMotorBenchmarkApp) -> ComposeResult:
                     classes="form-section-title",
                 )
                 with Horizontal(classes="cfg-rate-row"):
-                    yield Label("Telemetry (1888B) [default: unlimited]:", classes="cfg-rate-label")
+                    yield Label("Player Telemetry (1888B) [default: unlimited]:", classes="cfg-rate-label")
                     yield app.sel_rate_telem
                     with Horizontal(id="box-rate-telem", classes="cfg-rate-input-box"):
                         yield app.input_rate_telem
+                        yield Label("Hz", classes="cfg-hz-unit")
+                with Horizontal(classes="cfg-rate-row"):
+                    yield Label("Opponents Telemetry [default: off]:", classes="cfg-rate-label")
+                    yield app.sel_rate_opponent_telem
+                    with Horizontal(id="box-rate-opponent-telem", classes="cfg-rate-input-box"):
+                        yield app.input_rate_opponent_telem
                         yield Label("Hz", classes="cfg-hz-unit")
                 with Horizontal(classes="cfg-rate-row"):
                     yield Label("Force Feedback [default: unlimited]:", classes="cfg-rate-label")
@@ -87,7 +96,7 @@ def compose_install_view(app: IsiMotorBenchmarkApp) -> ComposeResult:
                         yield app.input_rate_full_scoring
                         yield Label("Hz", classes="cfg-hz-unit")
                 with Horizontal(classes="cfg-rate-row"):
-                    yield Label("Compact Scoring [default: unlimited]:", classes="cfg-rate-label")
+                    yield Label("Compact Scoring [default: 10Hz]:", classes="cfg-rate-label")
                     yield app.sel_rate_compact_scoring
                     with Horizontal(id="box-rate-compact-scoring", classes="cfg-rate-input-box"):
                         yield app.input_rate_compact_scoring

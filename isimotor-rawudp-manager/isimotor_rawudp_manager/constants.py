@@ -56,3 +56,8 @@ INBOUND_ENABLE_OPTIONS: list[tuple[str, str]] = [
     ("Enabled", "Enabled"),
     ("Disabled", "Disabled"),
 ]
+
+LOGGING_ENABLE_OPTIONS: list[tuple[str, str]] = [
+    ("Disabled", "Disabled"),
+    ("Enabled", "Enabled"),
+]

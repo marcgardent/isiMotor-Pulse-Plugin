@@ -154,7 +154,9 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertIn("dll.status", row_keys)
         self.assertIn("config.TargetIP", row_keys)
         self.assertIn("config.TargetPort", row_keys)
-        self.assertIn("config.TelemetryRate", row_keys)
+        self.assertIn("config.EnableLogging", row_keys)
+        self.assertIn("config.PlayerTelemetryRate", row_keys)
+        self.assertIn("config.OpponentTelemetryRate", row_keys)
         self.assertIn("hotreload.architecture", row_keys)
 
     def test_home_summary_renderers_and_app_navigation(self):
@@ -241,21 +243,27 @@ class TestInstallerAndConfig(unittest.TestCase):
                 app.cfg_target_port.value = "5055"
                 app.sel_rate_telem.value = "limited"
                 app.input_rate_telem.value = "100"
+                app.sel_rate_opponent_telem.value = "limited"
+                app.input_rate_opponent_telem.value = "25"
                 app.sel_rate_weather.value = "off"
                 app.sel_plugin_enabled.value = "1"
                 app.sel_inbound_ctrl.value = "Enabled"
+                app.sel_enable_logging.value = "Enabled"
                 await pilot.pause()
 
                 self.assertTrue(app.input_rate_telem.display)
+                self.assertTrue(app.input_rate_opponent_telem.display)
                 self.assertFalse(app.input_rate_weather.display)
 
                 form_vars = app._read_config_from_form()
                 self.assertEqual(form_vars["TargetIP"], "192.168.1.50")
                 self.assertEqual(form_vars["TargetPort"], "5055")
                 self.assertEqual(form_vars["PlayerTelemetryRate"], "100Hz")
+                self.assertEqual(form_vars["OpponentTelemetryRate"], "25Hz")
                 self.assertEqual(form_vars["WeatherRate"], "off")
                 self.assertEqual(form_vars[" Enabled"], 1)
                 self.assertEqual(form_vars["InboundControl"], "Enabled")
+                self.assertEqual(form_vars["EnableLogging"], "Enabled")
 
                 # Test Reset defaults
                 app.action_reset_config_defaults()
@@ -263,7 +271,10 @@ class TestInstallerAndConfig(unittest.TestCase):
                 self.assertEqual(app.cfg_target_ip.value, "127.0.0.1")
                 self.assertEqual(app.cfg_target_port.value, "5000")
                 self.assertEqual(app.sel_rate_telem.value, "unlimited")
+                self.assertEqual(app.sel_rate_opponent_telem.value, "off")
+                self.assertEqual(app.sel_enable_logging.value, "Disabled")
                 self.assertFalse(app.input_rate_telem.display)
+                self.assertFalse(app.input_rate_opponent_telem.display)
                 self.assertTrue(app.input_rate_full_scoring.display)  # Full scoring default is 5Hz (limited)
 
                 # Test Button clicks

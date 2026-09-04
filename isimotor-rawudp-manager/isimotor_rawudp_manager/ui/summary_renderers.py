@@ -48,20 +48,20 @@ def render_home_config_summary(overview: dict[str, Any]) -> str:
     target_port = vars_dict.get("TargetPort", "5000")
     inbound_ctrl = vars_dict.get("InboundControl", "Enabled")
     inbound_port = vars_dict.get("InboundPort", "5001")
-    telem_rate = vars_dict.get("PlayerTelemetryRate", vars_dict.get("TelemetryRate", "unlimited"))
+    player_telem = vars_dict.get("PlayerTelemetryRate", vars_dict.get("TelemetryRate", "unlimited"))
+    opponent_telem = vars_dict.get("OpponentTelemetryRate", "off")
     scoring_rate = vars_dict.get("FullScoringRate", "5Hz")
-    rules_rate = vars_dict.get("TrackRulesRate", "3Hz")
-    pit_rate = vars_dict.get("PitMenuRate", "100Hz")
+    compact_rate = vars_dict.get("CompactScoringRate", "10Hz")
     weather_rate = vars_dict.get("WeatherRate", "1Hz")
     ffb_rate = vars_dict.get("ForceFeedbackRate", "unlimited (400Hz)")
 
     lines = [
-        f"• [bold white]UDP Destination :[/] [bold cyan]{target_ip}:{target_port}[/]",
-        f"• [bold white]Inbound Control :[/] [bold green]{inbound_ctrl}[/] [dim](Port {inbound_port})[/dim]",
-        f"• [bold white]Telemetry Rate  :[/] [bold #58a6ff]{telem_rate}[/]",
-        f"• [bold white]Scoring / Rules :[/] [cyan]{scoring_rate}[/] / [cyan]{rules_rate}[/]",
-        f"• [bold white]Pit / Weather   :[/] [cyan]{pit_rate}[/] / [cyan]{weather_rate}[/]",
-        f"• [bold white]Force Feedback  :[/] [bold #bc8cff]{ffb_rate}[/]",
+        f"• [bold white]UDP Destination    :[/] [bold cyan]{target_ip}:{target_port}[/]",
+        f"• [bold white]Inbound Control    :[/] [bold green]{inbound_ctrl}[/] [dim](Port {inbound_port})[/dim]",
+        f"• [bold white]Player / Opponents :[/] [bold #58a6ff]{player_telem}[/] / [cyan]{opponent_telem}[/]",
+        f"• [bold white]Scoring (Full / C) :[/] [cyan]{scoring_rate}[/] / [cyan]{compact_rate}[/]",
+        f"• [bold white]Weather Rate       :[/] [cyan]{weather_rate}[/]",
+        f"• [bold white]Force Feedback     :[/] [bold #bc8cff]{ffb_rate}[/]",
     ]
     return "\n".join(lines)
 

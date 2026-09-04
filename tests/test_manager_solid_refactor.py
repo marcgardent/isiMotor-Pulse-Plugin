@@ -163,6 +163,9 @@ class TestManagerSolidArchitecture(unittest.TestCase):
         keys = [r[0] for r in rows]
         self.assertIn("dll.status", keys)
         self.assertIn("config.TargetIP", keys)
+        self.assertIn("config.EnableLogging", keys)
+        self.assertIn("config.PlayerTelemetryRate", keys)
+        self.assertIn("config.OpponentTelemetryRate", keys)
 
     def test_rate_helpers(self):
         mode, hz = parse_rate_to_mode_and_hz("unlimited")

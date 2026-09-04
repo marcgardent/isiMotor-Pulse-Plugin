@@ -119,6 +119,14 @@ def extract_config_rows(overview: dict[str, Any]) -> list[TableRow]:
     )
     rows.append(
         (
+            "config.EnableLogging",
+            active_vars.get("EnableLogging", "Disabled"),
+            f"[bold {'green' if str(active_vars.get('EnableLogging')).lower() in ('enabled', 'true', '1') else 'red'}]{active_vars.get('EnableLogging', 'Disabled')}[/]",
+            "Debug file logging (isiMotor_RawUDP.log) in UserData directory (Enabled / Disabled)",
+        )
+    )
+    rows.append(
+        (
             "config.TargetIP",
             active_vars.get("TargetIP", "127.0.0.1"),
             f"[bold cyan]{active_vars.get('TargetIP', '127.0.0.1')}[/]",
@@ -159,10 +167,18 @@ def extract_config_rows(overview: dict[str, Any]) -> list[TableRow]:
     )
     rows.append(
         (
+            "config.OpponentTelemetryRate",
+            active_vars.get("OpponentTelemetryRate", "off"),
+            f"[bold #e3b341]{active_vars.get('OpponentTelemetryRate', 'off')}[/]",
+            "Opponents multi-vehicle physics rate (off, 10Hz, 20Hz, unlimited)",
+        )
+    )
+    rows.append(
+        (
             "config.CompactScoringRate",
-            active_vars.get("CompactScoringRate", "unlimited"),
-            f"[bold #e3b341]{active_vars.get('CompactScoringRate', 'unlimited')}[/]",
-            "Compact timing & lap scoring stream rate (unlimited, 10Hz, 5Hz, Off)",
+            active_vars.get("CompactScoringRate", "10Hz"),
+            f"[bold #e3b341]{active_vars.get('CompactScoringRate', '10Hz')}[/]",
+            "Compact timing & lap scoring stream rate (10Hz, unlimited, Off)",
         )
     )
     rows.append(
@@ -171,22 +187,6 @@ def extract_config_rows(overview: dict[str, Any]) -> list[TableRow]:
             active_vars.get("FullScoringRate", "5Hz"),
             f"[bold #e3b341]{active_vars.get('FullScoringRate', '5Hz')}[/]",
             "Multi-vehicle full grid scoring stream rate (5Hz, 10Hz, Off)",
-        )
-    )
-    rows.append(
-        (
-            "config.TrackRulesRate",
-            active_vars.get("TrackRulesRate", "3Hz"),
-            f"[bold #e3b341]{active_vars.get('TrackRulesRate', '3Hz')}[/]",
-            "Safety car, FCY & track rules stream rate (3Hz, 5Hz, Off)",
-        )
-    )
-    rows.append(
-        (
-            "config.PitMenuRate",
-            active_vars.get("PitMenuRate", "100Hz"),
-            f"[bold #e3b341]{active_vars.get('PitMenuRate', '100Hz')}[/]",
-            "Interactive pit stop menu stream rate (100Hz, 60Hz, Off)",
         )
     )
     rows.append(

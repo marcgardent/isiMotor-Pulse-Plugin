@@ -64,13 +64,13 @@ class TelemetryEngine:
 
         self.stats: dict[str, PacketStats] = {
             PKT_RAW_TELEMETRY: PacketStats(PKT_RAW_TELEMETRY, "Sliced/Raw SIMP", "1888/1904 B"),
-            PKT_COMPACT_SCORING: PacketStats(PKT_COMPACT_SCORING, "Binary SIMP", "168 B"),
+            PKT_COMPACT_SCORING: PacketStats(PKT_COMPACT_SCORING, "Binary SIMP", "160 B"),
             PKT_FULL_SCORING: PacketStats(PKT_FULL_SCORING, "Sliced SIMP", "Multi-KB"),
             PKT_WEATHER: PacketStats(PKT_WEATHER, "Binary SIMP", "108 B"),
             PKT_EXTENDED_STATE: PacketStats(PKT_EXTENDED_STATE, "Binary SIMP", "68 B"),
             PKT_FORCE_FEEDBACK: PacketStats(PKT_FORCE_FEEDBACK, "Binary SIMP", "8 B"),
             PKT_GRAPHICS: PacketStats(PKT_GRAPHICS, "Binary SIMP", "128 B"),
-            PKT_SYSTEM_EVENT: PacketStats(PKT_SYSTEM_EVENT, "Binary SIMP", "6 B"),
+            PKT_SYSTEM_EVENT: PacketStats(PKT_SYSTEM_EVENT, "Binary SIMP", "2 B"),
             PKT_HW_CONTROL: PacketStats(PKT_HW_CONTROL, "Binary SIMP", "44 B"),
             PKT_WEATHER_CONTROL: PacketStats(PKT_WEATHER_CONTROL, "Binary SIMP", "64 B"),
             PKT_FOREIGN: PacketStats(PKT_FOREIGN, "Raw/Other", "Variable"),

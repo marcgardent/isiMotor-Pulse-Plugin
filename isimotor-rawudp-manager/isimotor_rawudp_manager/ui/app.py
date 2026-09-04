@@ -29,6 +29,7 @@ from textual.widgets import (
 
 from ..constants import (
     INBOUND_ENABLE_OPTIONS,
+    LOGGING_ENABLE_OPTIONS,
     NAV_COMMANDS,
     NAV_EXPLORER,
     NAV_HOME,
@@ -175,11 +176,19 @@ class IsiMotorBenchmarkApp(App):
         self.sel_sys_events = Select(
             INBOUND_ENABLE_OPTIONS, value="Enabled", allow_blank=False, id="sel-sys-events", classes="cfg-select-box"
         )
+        self.sel_enable_logging = Select(
+            LOGGING_ENABLE_OPTIONS, value="Disabled", allow_blank=False, id="sel-enable-logging", classes="cfg-select-box"
+        )
 
         self.sel_rate_telem = Select(
             RATE_SELECT_OPTIONS, value="unlimited", allow_blank=False, id="sel-rate-telem", classes="cfg-rate-select"
         )
         self.input_rate_telem = Input(placeholder="100", id="input-rate-telem", classes="cfg-rate-hz-input")
+
+        self.sel_rate_opponent_telem = Select(
+            RATE_SELECT_OPTIONS, value="off", allow_blank=False, id="sel-rate-opponent-telem", classes="cfg-rate-select"
+        )
+        self.input_rate_opponent_telem = Input(placeholder="20", id="input-rate-opponent-telem", classes="cfg-rate-hz-input")
 
         self.sel_rate_ffb = Select(
             RATE_SELECT_OPTIONS, value="unlimited", allow_blank=False, id="sel-rate-ffb", classes="cfg-rate-select"
@@ -197,13 +206,13 @@ class IsiMotorBenchmarkApp(App):
 
         self.sel_rate_compact_scoring = Select(
             RATE_SELECT_OPTIONS,
-            value="unlimited",
+            value="limited",
             allow_blank=False,
             id="sel-rate-compact-scoring",
             classes="cfg-rate-select",
         )
         self.input_rate_compact_scoring = Input(
-            placeholder="20", id="input-rate-compact-scoring", classes="cfg-rate-hz-input"
+            placeholder="10", id="input-rate-compact-scoring", classes="cfg-rate-hz-input"
         )
 
         self.sel_rate_weather = Select(
@@ -235,7 +244,7 @@ class IsiMotorBenchmarkApp(App):
             Tab("⚡ FFB (400Hz)", id=TAB_FFB),
             Tab("🎥 Graphics", id=TAB_GRAPHICS),
             Tab("🔧 Physics & Aids", id=TAB_PHYSICS),
-            Tab("🔔 Events (6 B)", id=TAB_EVENT),
+            Tab("🔔 Events (2 B)", id=TAB_EVENT),
             Tab("📊 Stream Rates", id=TAB_STATS),
             active=TAB_TELEM,
             id="packet-tabs",
@@ -839,9 +848,20 @@ class IsiMotorBenchmarkApp(App):
         events_str = str(events_raw).strip()
         self.sel_sys_events.value = "Enabled" if events_str.lower() in ["enabled", "1", "true"] else "Disabled"
 
+        logging_raw = vars_dict.get("EnableLogging", "Disabled")
+        logging_str = str(logging_raw).strip()
+        self.sel_enable_logging.value = "Enabled" if logging_str.lower() in ["enabled", "1", "true"] else "Disabled"
+
         # Stream Rates
         rate_configs = [
             (self.sel_rate_telem, self.input_rate_telem, "box-rate-telem", "PlayerTelemetryRate", "unlimited"),
+            (
+                self.sel_rate_opponent_telem,
+                self.input_rate_opponent_telem,
+                "box-rate-opponent-telem",
+                "OpponentTelemetryRate",
+                "20",
+            ),
             (self.sel_rate_ffb, self.input_rate_ffb, "box-rate-ffb", "ForceFeedbackRate", "400"),
             (self.sel_rate_full_scoring, self.input_rate_full_scoring, "box-rate-full-scoring", "FullScoringRate", "5"),
             (
@@ -849,7 +869,7 @@ class IsiMotorBenchmarkApp(App):
                 self.input_rate_compact_scoring,
                 "box-rate-compact-scoring",
                 "CompactScoringRate",
-                "20",
+                "10",
             ),
             (self.sel_rate_weather, self.input_rate_weather, "box-rate-weather", "WeatherRate", "1"),
             (self.sel_rate_extended, self.input_rate_extended, "box-rate-extended", "ExtendedStateRate", "5"),
@@ -892,10 +912,11 @@ class IsiMotorBenchmarkApp(App):
 
         inbound_str = str(self.sel_inbound_ctrl.value) if self.sel_inbound_ctrl.value != Select.NULL else "Enabled"
         sys_events_str = str(self.sel_sys_events.value) if self.sel_sys_events.value != Select.NULL else "Enabled"
+        logging_str = str(self.sel_enable_logging.value) if self.sel_enable_logging.value != Select.NULL else "Disabled"
 
         return {
             " Enabled": enabled_int,
-            "EnableLogging": "Disabled",
+            "EnableLogging": logging_str,
             "TargetIP": self.cfg_target_ip.value.strip() or "127.0.0.1",
             "TargetPort": self.cfg_target_port.value.strip() or "5000",
             "InboundControl": inbound_str,
@@ -903,7 +924,9 @@ class IsiMotorBenchmarkApp(App):
             "PlayerTelemetryRate": format_mode_and_hz_to_rate(
                 str(self.sel_rate_telem.value), self.input_rate_telem.value, "100"
             ),
-            "OpponentTelemetryRate": "off",
+            "OpponentTelemetryRate": format_mode_and_hz_to_rate(
+                str(self.sel_rate_opponent_telem.value), self.input_rate_opponent_telem.value, "20"
+            ),
             "ForceFeedbackRate": format_mode_and_hz_to_rate(
                 str(self.sel_rate_ffb.value), self.input_rate_ffb.value, "400"
             ),
@@ -911,7 +934,7 @@ class IsiMotorBenchmarkApp(App):
                 str(self.sel_rate_full_scoring.value), self.input_rate_full_scoring.value, "5"
             ),
             "CompactScoringRate": format_mode_and_hz_to_rate(
-                str(self.sel_rate_compact_scoring.value), self.input_rate_compact_scoring.value, "20"
+                str(self.sel_rate_compact_scoring.value), self.input_rate_compact_scoring.value, "10"
             ),
             "WeatherRate": format_mode_and_hz_to_rate(
                 str(self.sel_rate_weather.value), self.input_rate_weather.value, "1"

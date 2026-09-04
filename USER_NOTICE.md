@@ -57,7 +57,7 @@ The Manager features a top navigation bar with 4 dedicated views:
    - Adjust options directly in the configuration editor:
      - **Target IP**: Destination address (`127.0.0.1` for local overlays, `192.168.1.50` for LAN dashboard tablets, `239.255.0.1` for Multicast).
      - **Target Port**: Outgoing UDP telemetry port (default `5000`).
-     - **Channel Refresh Rates**: Customize individual refresh frequencies for Telemetry (`unlimited` / `100Hz`), Full Scoring (`5Hz`), Pit Menu (`100Hz`), Weather (`1Hz`), and Force Feedback (`unlimited` / `400Hz`).
+     - **Channel Refresh Rates**: Customize individual refresh frequencies for Player Telemetry (`unlimited` / `100Hz`), Opponents Telemetry (`off` / `20Hz`), Compact Scoring (`10Hz`), Full Scoring (`5Hz`), Weather (`1Hz`), and Force Feedback (`unlimited` / `400Hz`).
      - **Inbound Port**: Inbound command listening port (default `5001`).
    - Click **`[ 💾 Save ]`** to apply changes across all detected games simultaneously. The simulation engine automatically hot-reloads these settings.
 5. **Uninstalling**:
