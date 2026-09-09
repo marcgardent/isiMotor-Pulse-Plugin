@@ -69,7 +69,7 @@ def render_home_config_summary(overview: dict[str, Any]) -> str:
 def render_home_network_summary(engine: TelemetryEngine, elapsed: float) -> str:
     """Renders formatted Rich markup for the Home Connectivity summary card."""
     total_kb_s = sum(s.bandwidth_kb_s for s in engine.stats.values())
-    total_freq = sum(s.current_freq for s in engine.stats.values())
+    total_freq = sum(s.display_freq for s in engine.stats.values())
 
     if engine.total_packets > 0 and total_freq > 0.1:
         status_tag = "[bold green]🟢 Streaming (Game Active)[/]"

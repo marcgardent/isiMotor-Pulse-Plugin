@@ -48,8 +48,8 @@ def extract_stats_rows(engine: TelemetryEngine) -> list[TableRow]:
                 (f"{prefix}.packets_count", st.count, f"{st.count:,}", f"{st.name} total packets received"),
                 (
                     f"{prefix}.frequency_hz",
-                    st.current_freq,
-                    f"[bold #e3b341]{st.current_freq:5.1f} Hz[/]",
+                    st.display_freq,
+                    f"[bold #e3b341]{st.display_freq:5.1f} Hz[/]",
                     f"{st.name} live packet frequency (1s window)",
                 ),
                 (
