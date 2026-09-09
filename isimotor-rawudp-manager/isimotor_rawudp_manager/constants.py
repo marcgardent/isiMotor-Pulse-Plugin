@@ -31,6 +31,7 @@ VIEW_COMMANDS: Final[str] = "view-commands"
 # ── Stream Explorer Tabs ───────────────────────────────────────────────────────
 TAB_TELEM: Final[str] = "tab-telem"
 TAB_SCORING: Final[str] = "tab-scoring"
+TAB_COMPACT_SCORING: Final[str] = "tab-compact-scoring"
 TAB_WEATHER: Final[str] = "tab-weather"
 TAB_FFB: Final[str] = "tab-ffb"
 TAB_GRAPHICS: Final[str] = "tab-graphics"

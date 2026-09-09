@@ -237,6 +237,7 @@ class TelemetryEngine:
                         fs = decode_full_scoring(payload)
                         if fs:
                             self.latest_full_scoring = fs
+                            self.stats[PKT_FULL_SCORING].record_logical(now)
                     else:
                         key = (hdr.packet_type, hdr.sequence_number)
                         if key not in self.reassembly_buffers:
@@ -253,6 +254,7 @@ class TelemetryEngine:
                             fs = decode_full_scoring(b"".join(ordered))
                             if fs:
                                 self.latest_full_scoring = fs
+                                self.stats[PKT_FULL_SCORING].record_logical(now)
                 elif hdr.packet_type == 7:
                     pkt_type = PKT_WEATHER
                     w = decode_weather(payload)

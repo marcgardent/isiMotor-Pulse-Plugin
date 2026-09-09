@@ -44,6 +44,7 @@ from ..constants import (
     PKT_WEATHER,
     PLUGIN_ENABLE_OPTIONS,
     RATE_SELECT_OPTIONS,
+    TAB_COMPACT_SCORING,
     TAB_EVENT,
     TAB_FFB,
     TAB_GRAPHICS,
@@ -116,12 +117,13 @@ class IsiMotorBenchmarkApp(App):
         Binding("slash", "focus_search", "Search", show=True),
         Binding("1", "select_tab_telem", "Telem", show=False),
         Binding("2", "select_tab_scoring", "Scoring", show=False),
-        Binding("3", "select_tab_weather", "Weather", show=False),
-        Binding("4", "select_tab_ffb", "FFB", show=False),
-        Binding("5", "select_tab_graphics", "Graphics", show=False),
-        Binding("6", "select_tab_physics", "Physics", show=False),
-        Binding("7", "select_tab_event", "Event", show=False),
-        Binding("8", "select_tab_stats", "Stats", show=False),
+        Binding("3", "select_tab_compact_scoring", "Compact Scoring", show=False),
+        Binding("4", "select_tab_weather", "Weather", show=False),
+        Binding("5", "select_tab_ffb", "FFB", show=False),
+        Binding("6", "select_tab_graphics", "Graphics", show=False),
+        Binding("7", "select_tab_physics", "Physics", show=False),
+        Binding("8", "select_tab_event", "Event", show=False),
+        Binding("9", "select_tab_stats", "Stats", show=False),
         Binding("w", "inbound_rain_toggle", "Rain Toggle", show=False),
     ]
 
@@ -239,7 +241,8 @@ class IsiMotorBenchmarkApp(App):
         # Explorer View widgets
         self.packet_tabs = Tabs(
             Tab("🏎️ TelemInfo (1888 B)", id=TAB_TELEM),
-            Tab("🏁 Grid Scoring", id=TAB_SCORING),
+            Tab("🏁 Full Scoring", id=TAB_SCORING),
+            Tab("📋 Compact Scoring", id=TAB_COMPACT_SCORING),
             Tab("🌦️ Weather", id=TAB_WEATHER),
             Tab("⚡ FFB (400Hz)", id=TAB_FFB),
             Tab("🎥 Graphics", id=TAB_GRAPHICS),
@@ -429,6 +432,10 @@ class IsiMotorBenchmarkApp(App):
         self.main_tabs.active = NAV_EXPLORER
         self.packet_tabs.active = TAB_SCORING
 
+    def action_select_tab_compact_scoring(self) -> None:
+        self.main_tabs.active = NAV_EXPLORER
+        self.packet_tabs.active = TAB_COMPACT_SCORING
+
     def action_select_tab_weather(self) -> None:
         self.main_tabs.active = NAV_EXPLORER
         self.packet_tabs.active = TAB_WEATHER
@@ -597,12 +604,9 @@ class IsiMotorBenchmarkApp(App):
         if self.active_tab == TAB_TELEM:
             return extract_telemetry_rows(self.engine.latest_telemetry, self.engine.stats[PKT_RAW_TELEMETRY])
         elif self.active_tab == TAB_SCORING:
-            st = (
-                self.engine.stats.get(PKT_FULL_SCORING)
-                if self.engine.latest_full_scoring
-                else self.engine.stats[PKT_COMPACT_SCORING]
-            )
-            return extract_scoring_rows(self.engine.latest_scoring, self.engine.latest_full_scoring, st)
+            return extract_scoring_rows(None, self.engine.latest_full_scoring, self.engine.stats[PKT_FULL_SCORING])
+        elif self.active_tab == TAB_COMPACT_SCORING:
+            return extract_scoring_rows(self.engine.latest_scoring, None, self.engine.stats[PKT_COMPACT_SCORING])
         elif self.active_tab == TAB_WEATHER:
             return extract_weather_rows(self.engine.latest_weather, self.engine.stats[PKT_WEATHER])
         elif self.active_tab == TAB_FFB:
@@ -653,27 +657,29 @@ class IsiMotorBenchmarkApp(App):
                 return d
             return {"status": "No TelemInfo packet received yet"}
         elif self.active_tab == TAB_SCORING:
+            st = self.engine.stats[PKT_FULL_SCORING]
             if self.engine.latest_full_scoring:
-                st = self.engine.stats[PKT_FULL_SCORING]
                 d = model_to_clean_dict(self.engine.latest_full_scoring)
                 d["_channel_diagnostics"] = {
-                    "frequency_hz": round(st.current_freq, 2),
-                    "packets_count": st.count,
-                    "avg_delay_ms": round(st.avg_interval_ms, 2),
-                    "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
-                }
-                return d
-            elif self.engine.latest_scoring:
-                st = self.engine.stats[PKT_COMPACT_SCORING]
-                d = model_to_clean_dict(self.engine.latest_scoring)
-                d["_channel_diagnostics"] = {
-                    "frequency_hz": round(st.current_freq, 2),
+                    "frequency_hz": round(st.display_freq, 2),
                     "packets_count": st.count,
                     "avg_delay_ms": round(st.avg_interval_ms, 2),
                     "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
                 }
                 return d
             return {"status": "No Scoring packet received yet"}
+        elif self.active_tab == TAB_COMPACT_SCORING:
+            st = self.engine.stats[PKT_COMPACT_SCORING]
+            if self.engine.latest_scoring:
+                d = model_to_clean_dict(self.engine.latest_scoring)
+                d["_channel_diagnostics"] = {
+                    "frequency_hz": round(st.display_freq, 2),
+                    "packets_count": st.count,
+                    "avg_delay_ms": round(st.avg_interval_ms, 2),
+                    "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
+                }
+                return d
+            return {"status": "No Compact Scoring packet received yet"}
         elif self.active_tab == TAB_WEATHER:
             st = self.engine.stats[PKT_WEATHER]
             if self.engine.latest_weather:
@@ -993,7 +999,7 @@ class IsiMotorBenchmarkApp(App):
         now = time.time()
         elapsed = now - self.engine.start_time
         current_kb_s = sum(s.bandwidth_kb_s for s in self.engine.stats.values())
-        current_total_freq = sum(s.current_freq for s in self.engine.stats.values())
+        current_total_freq = sum(s.display_freq for s in self.engine.stats.values())
 
         # Update Top Global Metrics Bar
         self.lbl_elapsed.update(f"⏱️ Elapsed: [bold green]{int(elapsed // 60):02d}:{int(elapsed % 60):02d}s[/]")
@@ -1039,13 +1045,14 @@ class IsiMotorBenchmarkApp(App):
                     f"📶 [bold cyan]TelemInfo:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
                 )
             elif self.active_tab == TAB_SCORING:
-                st = (
-                    self.engine.stats[PKT_FULL_SCORING]
-                    if self.engine.latest_full_scoring and PKT_FULL_SCORING in self.engine.stats
-                    else self.engine.stats[PKT_COMPACT_SCORING]
-                )
+                st = self.engine.stats[PKT_FULL_SCORING]
                 self.lbl_channel_freq.update(
-                    f"📶 [bold cyan]Scoring:[/] [bold yellow]{st.current_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+                    f"📶 [bold cyan]Full Scoring:[/] [bold yellow]{st.display_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
+                )
+            elif self.active_tab == TAB_COMPACT_SCORING:
+                st = self.engine.stats[PKT_COMPACT_SCORING]
+                self.lbl_channel_freq.update(
+                    f"📶 [bold cyan]Compact Scoring:[/] [bold yellow]{st.display_freq:5.1f} Hz[/] [dim]({st.count:,} pkts)[/dim]"
                 )
             elif self.active_tab == TAB_WEATHER:
                 st = self.engine.stats[PKT_WEATHER]

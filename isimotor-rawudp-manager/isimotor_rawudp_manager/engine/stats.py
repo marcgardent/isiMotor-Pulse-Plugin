@@ -18,6 +18,7 @@ class PacketStats:
     bytes_total: int = 0
     timestamps: deque[float] = field(default_factory=lambda: deque(maxlen=300))
     intervals: deque[float] = field(default_factory=lambda: deque(maxlen=150))
+    logical_timestamps: deque[float] = field(default_factory=lambda: deque(maxlen=300))
     last_timestamp: float = 0.0
     last_size: int = 0
 
@@ -32,22 +33,43 @@ class PacketStats:
         self.bytes_total += size
         self.last_size = size
 
-    @property
-    def current_freq(self) -> float:
-        """Calculates instantaneous reception frequency (Hz) over recent sliding window."""
+    def record_logical(self, now: float) -> None:
+        """Records a reassembled logical update event, for sliced/chunked packet types (e.g. FullScoring)."""
+        self.logical_timestamps.append(now)
+
+    def _windowed_freq(self, timestamps: "deque[float]") -> float:
+        """Shared sliding-window Hz computation over an arbitrary timestamp deque."""
         now = time.time()
-        if not self.timestamps or (now - self.last_timestamp) > 2.0:
+        if not timestamps or (now - timestamps[-1]) > 2.0:
             return 0.0
-        recent = [t for t in self.timestamps if (now - t) <= 1.5]
+        recent = [t for t in timestamps if (now - t) <= 1.5]
         if len(recent) >= 2:
             dt = recent[-1] - recent[0]
             if dt > 0:
                 return (len(recent) - 1) / dt
-        if self.intervals:
+        return 0.0
+
+    @property
+    def current_freq(self) -> float:
+        """Calculates instantaneous reception frequency (Hz) over recent sliding window."""
+        freq = self._windowed_freq(self.timestamps)
+        if freq > 0:
+            return freq
+        if self.timestamps and (time.time() - self.timestamps[-1]) <= 2.0 and self.intervals:
             avg_ms = sum(list(self.intervals)[-10:]) / min(len(self.intervals), 10)
             if avg_ms > 0:
                 return 1000.0 / avg_ms
         return 0.0
+
+    @property
+    def logical_freq(self) -> float:
+        """Calculates logical (reassembled) update frequency (Hz) for sliced streams."""
+        return self._windowed_freq(self.logical_timestamps)
+
+    @property
+    def display_freq(self) -> float:
+        """Frequency to show the user: logical update rate if recorded, else raw current_freq."""
+        return self.logical_freq if self.logical_timestamps else self.current_freq
 
     @property
     def avg_interval_ms(self) -> float:
@@ -74,5 +96,6 @@ class PacketStats:
         self.bytes_total = 0
         self.timestamps.clear()
         self.intervals.clear()
+        self.logical_timestamps.clear()
         self.last_timestamp = 0.0
         self.last_size = 0

@@ -20,11 +20,11 @@ def extract_scoring_rows(
 
     # Channel / Stream Diagnostics
     if st is not None:
-        freq_str = f"[bold #e3b341]{st.current_freq:5.1f} Hz[/]"
+        freq_str = f"[bold #e3b341]{st.display_freq:5.1f} Hz[/]"
         delay_str = f"{st.avg_interval_ms:4.1f} ms" if st.intervals else "-"
         rows.extend(
             [
-                ("_channel.frequency_hz", st.current_freq, freq_str, "Real-time reception frequency of Scoring stream"),
+                ("_channel.frequency_hz", st.display_freq, freq_str, "Real-time reception frequency of Scoring stream"),
                 ("_channel.packets_count", st.count, f"{st.count:,}", "Total Scoring packets received on this channel"),
                 (
                     "_channel.avg_delay_ms",
@@ -202,7 +202,7 @@ class ScoringExtractor(BaseExtractor):
             d = model_to_clean_dict(fs)
             if st is not None:
                 d["_channel_diagnostics"] = {
-                    "frequency_hz": round(st.current_freq, 2),
+                    "frequency_hz": round(st.display_freq, 2),
                     "packets_count": st.count,
                     "avg_delay_ms": round(st.avg_interval_ms, 2),
                     "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
@@ -212,7 +212,7 @@ class ScoringExtractor(BaseExtractor):
             d = model_to_clean_dict(s)
             if st is not None:
                 d["_channel_diagnostics"] = {
-                    "frequency_hz": round(st.current_freq, 2),
+                    "frequency_hz": round(st.display_freq, 2),
                     "packets_count": st.count,
                     "avg_delay_ms": round(st.avg_interval_ms, 2),
                     "bandwidth_kb_s": round(st.bandwidth_kb_s, 2),
