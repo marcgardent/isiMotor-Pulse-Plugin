@@ -1,4 +1,4 @@
-.PHONY: help all build cross test benchmark install uninstall status info clean lint format typecheck check version bump verify-version check-version french-drift drift
+.PHONY: help all build cross test benchmark install uninstall status info clean lint format format-check typecheck check version bump verify-version check-version french-drift drift
 
 BUILD_DIR = build
 BIN_DIR   = bin
@@ -18,8 +18,9 @@ help:
 	@echo "  make                - Display this help menu"
 	@echo "  make lint           - Run Ruff fast static linter"
 	@echo "  make format         - Auto-format codebase with Ruff"
+	@echo "  make format-check   - Check codebase formatting with Ruff (no changes)"
 	@echo "  make typecheck      - Run Mypy strict static type checker"
-	@echo "  make check          - Run all static checks (lint + typecheck + test)"
+	@echo "  make check          - Run all static checks (lint + format-check + typecheck + test)"
 	@echo "  make test           - Run full C++ mock & golden dataset integration tests"
 	@echo "  make cross          - Compile standard universal DLL using MinGW-w64"
 	@echo "  make build          - Alias for 'make cross' (standard universal build)"
@@ -51,11 +52,15 @@ format:
 	@echo "==> Auto-formatting codebase with Ruff..."
 	@$(UV) run --with ruff ruff format .
 
+format-check:
+	@echo "==> Checking codebase formatting with Ruff..."
+	@$(UV) run --with ruff ruff format --check .
+
 typecheck:
 	@echo "==> Running Mypy static type checker..."
 	@$(UV) run --with mypy --with textual --with rich mypy
 
-check: lint typecheck test
+check: lint format-check typecheck test
 	@echo "==> All static analysis checks and test suites passed successfully!"
 
 test:

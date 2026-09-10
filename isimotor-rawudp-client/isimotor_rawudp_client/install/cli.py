@@ -48,7 +48,7 @@ def show_status() -> None:
         logger.info("\nNo supported games detected via standard Steam libraries.")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="isiMotor-RawUDP Plugin Installer & Game Detector")
     parser.add_argument("--status", action="store_true", help="Display detected games and installation status")
     parser.add_argument("--uninstall", action="store_true", help="Uninstall plugin from game directory")

@@ -23,13 +23,13 @@ jobs:
         run: uv python install 3.12
 
       - name: Run Ruff Linter
-        run: uv run --with ruff ruff check .
+        run: make lint
 
       - name: Run Ruff Formatter Check
-        run: uv run --with ruff ruff format --check .
+        run: make format-check
 
       - name: Run Mypy Type Checker
-        run: uv run --with mypy --with textual --with rich mypy
+        run: make typecheck
 
   test:
     name: Tests & Mock Integration

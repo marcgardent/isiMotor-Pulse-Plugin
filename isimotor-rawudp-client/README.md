@@ -175,15 +175,15 @@ The package also bundles the compiled `isiMotor_RawUDP.dll` and exposes a public
 
 ```python
 from isimotor_rawudp_client.install import (
-    detect_game_installations,      # -> {"LMU": [Path, ...], "rF2": [Path, ...]}
-    copy_and_install_dll,           # -> (success, message, installed_paths)
-    uninstall_plugin,               # -> bool
-    get_configuration_overview,     # -> structured dict (DLL status, per-game JSON status)
-    read_plugin_json_variables,     # -> dict of current plugin variables
-    write_plugin_json_variables,    # -> (success, message)
-    save_configuration_to_all_games,# -> (success, message, saved_paths)
-    DEFAULT_PLUGIN_VARIABLES,       # default CustomPluginVariables.JSON values
-    SUPPORTED_GAMES,                # {"LMU": {...}, "rF2": {...}}
+    detect_game_installations,  # -> {"LMU": [Path, ...], "rF2": [Path, ...]}
+    copy_and_install_dll,  # -> (success, message, installed_paths)
+    uninstall_plugin,  # -> bool
+    get_configuration_overview,  # -> structured dict (DLL status, per-game JSON status)
+    read_plugin_json_variables,  # -> dict of current plugin variables
+    write_plugin_json_variables,  # -> (success, message)
+    save_configuration_to_all_games,  # -> (success, message, saved_paths)
+    DEFAULT_PLUGIN_VARIABLES,  # default CustomPluginVariables.JSON values
+    SUPPORTED_GAMES,  # {"LMU": {...}, "rF2": {...}}
 )
 
 # Detect installed games via Steam's libraryfolders.vdf

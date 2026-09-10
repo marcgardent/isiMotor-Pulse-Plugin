@@ -22,7 +22,12 @@ logger = logging.getLogger("isimotor_rawudp_client.install")
 def get_project_root() -> Path:
     """Returns the root path of the isiMotor-RawUDP-Plugin repository."""
     current = Path(__file__).resolve()
-    for parent in [current.parent, current.parent.parent, current.parent.parent.parent, current.parent.parent.parent.parent]:
+    for parent in [
+        current.parent,
+        current.parent.parent,
+        current.parent.parent.parent,
+        current.parent.parent.parent.parent,
+    ]:
         if (parent / "isimotor-rawudp-plugin").exists() or (parent / "isimotor-rawudp-client").exists():
             return parent
     return current.parent.parent.parent.parent

@@ -182,7 +182,11 @@ class IsiMotorBenchmarkApp(App):
             INBOUND_ENABLE_OPTIONS, value="Enabled", allow_blank=False, id="sel-sys-events", classes="cfg-select-box"
         )
         self.sel_enable_logging = Select(
-            LOGGING_ENABLE_OPTIONS, value="Disabled", allow_blank=False, id="sel-enable-logging", classes="cfg-select-box"
+            LOGGING_ENABLE_OPTIONS,
+            value="Disabled",
+            allow_blank=False,
+            id="sel-enable-logging",
+            classes="cfg-select-box",
         )
 
         self.sel_rate_telem = Select(
@@ -193,7 +197,9 @@ class IsiMotorBenchmarkApp(App):
         self.sel_rate_opponent_telem = Select(
             RATE_SELECT_OPTIONS, value="off", allow_blank=False, id="sel-rate-opponent-telem", classes="cfg-rate-select"
         )
-        self.input_rate_opponent_telem = Input(placeholder="20", id="input-rate-opponent-telem", classes="cfg-rate-hz-input")
+        self.input_rate_opponent_telem = Input(
+            placeholder="20", id="input-rate-opponent-telem", classes="cfg-rate-hz-input"
+        )
 
         self.sel_rate_ffb = Select(
             RATE_SELECT_OPTIONS, value="unlimited", allow_blank=False, id="sel-rate-ffb", classes="cfg-rate-select"
