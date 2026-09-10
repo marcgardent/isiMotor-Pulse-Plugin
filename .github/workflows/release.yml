@@ -157,9 +157,9 @@ jobs:
           name: release-manager-linux
           path: dist/isiMotor-RawUDP-Manager-x86_64
 
-  # --- 5. Package Python Client SDK ---
+  # --- 5. Package Python SDKs (types + client) ---
   package-python:
-    name: Build Python Client Package
+    name: Build Python Packages
     runs-on: ubuntu-latest
     needs: [run-tests, build-dll]
     steps:
@@ -174,19 +174,22 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
-      - name: Build Python Package
+      - name: Build Python Packages
         run: |
+          uv run --with build python -m build isimotor-rawudp-types
           uv run --with build python -m build isimotor-rawudp-client
 
-      - name: Validate Distribution
+      - name: Validate Distributions
         run: |
-          uv run --with twine twine check isimotor-rawudp-client/dist/*
+          uv run --with twine twine check isimotor-rawudp-types/dist/* isimotor-rawudp-client/dist/*
 
       - name: Upload Python Dists
         uses: actions/upload-artifact@v4
         with:
           name: release-python-dist
-          path: isimotor-rawudp-client/dist/*
+          path: |
+            isimotor-rawudp-types/dist/*
+            isimotor-rawudp-client/dist/*
 
   # --- 6. Publish Release Assets ---
   publish-release:
@@ -287,20 +290,23 @@ jobs:
 
           ---
 
-          #### 🐍 Python SDK (`isimotor_rawudp_client`)
+          #### 🐍 Python SDK (`isimotor_rawudp_types` + `isimotor_rawudp_client`)
           | Package | Description |
           |---------|-------------|
+          | `isimotor_rawudp_types` | Shared dataclasses & enums for raw UDP telemetry packets |
           | `isimotor_rawudp_client` | Low-level Python UDP client & binary packet decoders |
 
           **How to install and consume wheels from this release:**
 
           *Option 1 — Direct remote install via pip with release wheel URL:*
           ```bash
+          pip install "${REPO_URL}/releases/download/${TAG}/isimotor_rawudp_types-${VERSION}-py3-none-any.whl"
           pip install "${REPO_URL}/releases/download/${TAG}/isimotor_rawudp_client-${VERSION}-py3-none-any.whl"
           ```
 
-          *Option 2 — Install locally downloaded .whl file:*
+          *Option 2 — Install locally downloaded .whl files:*
           ```bash
+          pip install isimotor_rawudp_types-${VERSION}-py3-none-any.whl
           pip install isimotor_rawudp_client-${VERSION}-py3-none-any.whl
           ```
 
