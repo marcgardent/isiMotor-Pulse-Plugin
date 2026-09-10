@@ -33,7 +33,7 @@ class Graphics:
 
     @property
     def camera_type_str(self) -> str:
-        types = {
+        types: dict[int, str] = {
             CameraType.TV_COCKPIT: "TV Cockpit",
             CameraType.COCKPIT: "Cockpit",
             CameraType.NOSE: "Nosecam",

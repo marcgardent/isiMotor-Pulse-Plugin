@@ -67,7 +67,7 @@ class TelemWheel:
     """Wear (0.0-1.0, fraction of maximum)."""
     terrain_name: str = ""
     """Material prefix from the TDF file (up to 16 chars)."""
-    surface_type: SurfaceType = SurfaceType.DRY
+    surface_type: int = SurfaceType.DRY
     """See `SurfaceType`."""
     flat: bool = False
     """Whether tire is flat."""
@@ -242,7 +242,7 @@ class TelemInfo:
     """Current output torque (Nm)."""
     current_sector: int = 1
     """1=Sector 1, 2=Sector 2, 3=Sector 3."""
-    speed_limiter: SpeedLimiterState = SpeedLimiterState.OFF
+    speed_limiter: int = SpeedLimiterState.OFF
     """See `SpeedLimiterState` (pit limiter)."""
     max_gears: int = 6
     """Forward gear count."""
@@ -253,9 +253,9 @@ class TelemInfo:
     front_flap_activated: int = 0
     rear_flap_activated: int = 0
     """DRS / active aero."""
-    rear_flap_legal_status: RearFlapLegalStatus = RearFlapLegalStatus.DISALLOWED
+    rear_flap_legal_status: int = RearFlapLegalStatus.DISALLOWED
     """See `RearFlapLegalStatus` (DRS)."""
-    ignition_starter: IgnitionStarterState = IgnitionStarterState.OFF
+    ignition_starter: int = IgnitionStarterState.OFF
     """See `IgnitionStarterState`."""
     front_tire_compound_name: str = ""
     rear_tire_compound_name: str = ""
@@ -276,7 +276,7 @@ class TelemInfo:
     electric_boost_motor_rpm: float = 0.0
     electric_boost_motor_temperature: float = 0.0
     electric_boost_water_temperature: float = 0.0
-    electric_boost_motor_state: ElectricBoostMotorState = ElectricBoostMotorState.UNAVAILABLE
+    electric_boost_motor_state: int = ElectricBoostMotorState.UNAVAILABLE
     """See `ElectricBoostMotorState`."""
 
     # Le Mans Ultimate telemetry extensions (ECU, Hypercar virtual energy, regen, track cuts)

@@ -13,13 +13,13 @@ class PhysicsOptions:
     Active driving aids, physics rules & multipliers (SIMP Type 8 Physics sub-block, 40 bytes).
     """
 
-    traction_control: TractionControl = TractionControl.OFF
+    traction_control: int = TractionControl.OFF
     """See `TractionControl`."""
-    anti_lock_brakes: AntiLockBrakes = AntiLockBrakes.OFF
+    anti_lock_brakes: int = AntiLockBrakes.OFF
     """See `AntiLockBrakes`."""
-    stability_control: StabilityControl = StabilityControl.OFF
+    stability_control: int = StabilityControl.OFF
     """See `StabilityControl`."""
-    auto_shift: AutoShift = AutoShift.MANUAL
+    auto_shift: int = AutoShift.MANUAL
     """See `AutoShift`."""
     auto_clutch: int = 0
     """0 (off), 1 (on)."""
@@ -43,7 +43,7 @@ class PhysicsOptions:
     """Fuel usage multiplier (0x - 7x)."""
     tire_mult: int = 1
     """Tire wear multiplier (0x - 7x)."""
-    mech_fail: MechFailure = MechFailure.NORMAL
+    mech_fail: int = MechFailure.NORMAL
     """See `MechFailure`."""
     allow_pitcrew_push: int = 0
     """0 (off), 1 (on)."""
@@ -66,38 +66,42 @@ class PhysicsOptions:
 
     @property
     def traction_control_str(self) -> str:
-        return {
+        options: dict[int, str] = {
             TractionControl.OFF: "Off",
             TractionControl.LOW: "Low",
             TractionControl.MEDIUM: "Medium",
             TractionControl.HIGH: "High",
-        }.get(self.traction_control, f"TC({self.traction_control})")
+        }
+        return options.get(self.traction_control, f"TC({self.traction_control})")
 
     @property
     def anti_lock_brakes_str(self) -> str:
-        return {
+        options: dict[int, str] = {
             AntiLockBrakes.OFF: "Off",
             AntiLockBrakes.LOW: "Low",
             AntiLockBrakes.HIGH: "High",
-        }.get(self.anti_lock_brakes, f"ABS({self.anti_lock_brakes})")
+        }
+        return options.get(self.anti_lock_brakes, f"ABS({self.anti_lock_brakes})")
 
     @property
     def stability_control_str(self) -> str:
-        return {
+        options: dict[int, str] = {
             StabilityControl.OFF: "Off",
             StabilityControl.LOW: "Low",
             StabilityControl.MEDIUM: "Medium",
             StabilityControl.HIGH: "High",
-        }.get(self.stability_control, f"ESC({self.stability_control})")
+        }
+        return options.get(self.stability_control, f"ESC({self.stability_control})")
 
     @property
     def auto_shift_str(self) -> str:
-        return {
+        options: dict[int, str] = {
             AutoShift.MANUAL: "Manual",
             AutoShift.AUTO_UP: "Auto Up",
             AutoShift.AUTO_DOWN: "Auto Down",
             AutoShift.FULL_AUTO: "Full Auto",
-        }.get(self.auto_shift, f"Shift({self.auto_shift})")
+        }
+        return options.get(self.auto_shift, f"Shift({self.auto_shift})")
 
 
 @dataclass(frozen=True)

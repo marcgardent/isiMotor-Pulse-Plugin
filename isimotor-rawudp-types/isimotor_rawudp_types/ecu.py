@@ -57,7 +57,7 @@ class EcuState:
     rear_arb_max: int = 0
     """Maximum rear ARB setting."""
 
-    wiper_state: WiperState = WiperState.OFF
+    wiper_state: int = WiperState.OFF
     """Windshield wiper state; see `WiperState`."""
     lift_and_coast: float = 0.0
     """Lift and coast target progress (fraction: 0.0 to 1.0)."""

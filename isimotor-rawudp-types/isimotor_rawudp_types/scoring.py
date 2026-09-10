@@ -31,7 +31,7 @@ class CompactScoring:
 
     track_name: str = ""
     """Track name string."""
-    session: SessionType = SessionType.TEST_DAY
+    session: int = SessionType.TEST_DAY
     """See `SessionType`."""
     current_et: float = 0.0
     """Current session elapsed time in seconds."""
@@ -43,11 +43,11 @@ class CompactScoring:
     """True if currently in active driving mode."""
     total_laps: int = 0
     """Player completed laps."""
-    sector: SectorId = SectorId.SECTOR_1
+    sector: int = SectorId.SECTOR_1
     """See `SectorId`."""
     in_garage_stall: bool = False
     """True if inside pit garage."""
-    count_lap_flag: CountLapFlag = CountLapFlag.VALID_LAP_AND_TIME
+    count_lap_flag: int = CountLapFlag.VALID_LAP_AND_TIME
     """See `CountLapFlag`."""
 
     cur_sector1: float = 0.0
@@ -114,9 +114,9 @@ class VehicleScoring:
     """Vehicle / livery name (up to 64 chars)."""
     total_laps: int = 0
     """Completed laps."""
-    sector: SectorId = SectorId.SECTOR_3
+    sector: int = SectorId.SECTOR_3
     """See `SectorId`."""
-    finish_status: FinishStatus = FinishStatus.RUNNING
+    finish_status: int = FinishStatus.RUNNING
     """See `FinishStatus`."""
     vehicle_lap_dist: float = 0.0
     """Distance traveled by this vehicle along the current lap (meters); differs per vehicle, unlike CompactScoring/FullScoringSession.total_lap_dist."""
@@ -148,7 +148,7 @@ class VehicleScoring:
     """Outstanding penalties count."""
     is_player: bool = False
     """1 if local player car."""
-    control: VehicleControl = VehicleControl.NOBODY
+    control: int = VehicleControl.NOBODY
     """See `VehicleControl`."""
     in_pits: bool = False
     """Pitting / in pit lane."""
@@ -187,7 +187,7 @@ class VehicleScoring:
 
     headlights: int = 0
     """Headlights state."""
-    pit_state: PitState = PitState.NONE
+    pit_state: int = PitState.NONE
     """See `PitState`."""
     server_scored: int = 1
     individual_phase: int = 0
@@ -200,11 +200,11 @@ class VehicleScoring:
 
     pit_group: str = ""
     """Pit stall / team group."""
-    flag: Flag = Flag.GREEN
+    flag: int = Flag.GREEN
     """See `Flag`."""
     under_yellow: bool = False
     """Taken caution flag."""
-    count_lap_flag: CountLapFlag = CountLapFlag.VALID_LAP_AND_TIME
+    count_lap_flag: int = CountLapFlag.VALID_LAP_AND_TIME
     """See `CountLapFlag`."""
     in_garage_stall: bool = False
     pit_lap_dist: float = 0.0
@@ -269,7 +269,7 @@ class VehicleScoring:
     @property
     def finish_status_str(self) -> str:
         """Human-readable finish status."""
-        statuses = {
+        statuses: dict[int, str] = {
             FinishStatus.RUNNING: "Running",
             FinishStatus.FINISHED: "Finished",
             FinishStatus.DNF: "DNF",
@@ -280,7 +280,7 @@ class VehicleScoring:
     @property
     def pit_state_str(self) -> str:
         """Human-readable pit state."""
-        states = {
+        states: dict[int, str] = {
             PitState.NONE: "On Track",
             PitState.REQUEST: "Pit Request",
             PitState.ENTERING: "Entering Pits",
@@ -299,7 +299,7 @@ class FullScoringSession:
 
     track_name: str = ""
     """Track name."""
-    session: SessionType = SessionType.TEST_DAY
+    session: int = SessionType.TEST_DAY
     """See `SessionType`."""
     current_et: float = 0.0
     """Current session elapsed time in seconds."""
@@ -311,9 +311,9 @@ class FullScoringSession:
     """Total lap/track distance in meters (constant for the session, not a vehicle's live progress)."""
     num_vehicles: int = 0
     """Number of active vehicles in grid."""
-    game_phase: GamePhase = GamePhase.GREEN_FLAG
+    game_phase: int = GamePhase.GREEN_FLAG
     """See `GamePhase`."""
-    yellow_flag_state: YellowFlagState = YellowFlagState.NONE
+    yellow_flag_state: int = YellowFlagState.NONE
     """See `YellowFlagState`."""
     sector_flags: tuple[int, int, int] = (0, 0, 0)
     """Local yellows in S3, S1, S2."""
@@ -352,9 +352,7 @@ class FullScoringSession:
     @property
     def leaderboard(self) -> list[VehicleScoring]:
         """Returns active vehicles sorted by overall place (1st to last)."""
-        return sorted(
-            self.vehicles, key=lambda v: v.place if v.place > 0 else self._UNRANKED_PLACE_SORT_KEY
-        )
+        return sorted(self.vehicles, key=lambda v: v.place if v.place > 0 else self._UNRANKED_PLACE_SORT_KEY)
 
     @property
     def is_fcy(self) -> bool:
@@ -369,7 +367,7 @@ class FullScoringSession:
     @property
     def game_phase_str(self) -> str:
         """Human-readable session phase name."""
-        phases = {
+        phases: dict[int, str] = {
             GamePhase.GARAGE: "Garage",
             GamePhase.WARMUP: "WarmUp",
             GamePhase.GRID_WALK: "GridWalk",

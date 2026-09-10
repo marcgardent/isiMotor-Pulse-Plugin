@@ -64,7 +64,7 @@ class LMUScoringExtension:
     LMU-specific global session scoring extensions (unpacked from scoring mExpansion[200]).
     """
 
-    track_grip_level: TrackGripLevel = TrackGripLevel.DEFAULT
+    track_grip_level: int = TrackGripLevel.DEFAULT
     """See `TrackGripLevel`."""
     track_limits_steps_per_point: int = 0
     """Infraction steps required per penalty point."""

@@ -105,7 +105,7 @@ class TrackGripLevel(IntEnum):
     RUBBERED = 4
 
 
-TRACK_GRIP_FRACTION: Final[dict[TrackGripLevel, float]] = {
+TRACK_GRIP_FRACTION: Final[dict[int, float]] = {
     TrackGripLevel.DEFAULT: 0.0,
     TrackGripLevel.GREEN: 0.25,
     TrackGripLevel.FAST: 0.50,
@@ -193,9 +193,7 @@ class SessionType(IntEnum):
     RACE_4 = 13
 
 
-QUALIFYING_SESSION_RANGE: Final[range] = range(
-    SessionType.QUALIFYING_1, SessionType.QUALIFYING_4 + 1
-)
+QUALIFYING_SESSION_RANGE: Final[range] = range(SessionType.QUALIFYING_1, SessionType.QUALIFYING_4 + 1)
 """Inclusive range of `session` values considered qualifying (5-8)."""
 
 RACE_SESSION_RANGE: Final[range] = range(SessionType.RACE_1, SessionType.RACE_4 + 1)
