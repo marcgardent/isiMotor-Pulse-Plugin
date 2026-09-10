@@ -46,7 +46,8 @@ class SystemEvent:
     System state event packet (SIMP Type 3, 6 bytes).
     """
 
-    event_id: int = 0  # 1=EnterRealtime, 2=ExitRealtime, 3=StartSession, 4=EndSession
+    event_id: int = 0
+    """1=EnterRealtime, 2=ExitRealtime, 3=StartSession, 4=EndSession."""
 
     @property
     def name(self) -> str:

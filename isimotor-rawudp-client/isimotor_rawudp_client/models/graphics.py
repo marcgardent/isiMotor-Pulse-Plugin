@@ -20,8 +20,10 @@ class Graphics:
         TelemVect3(0.0, 0.0, 1.0),
     )
     ambient_rgb: tuple[float, float, float] = (1.0, 1.0, 1.0)
-    slot_id: int = -1  # Slot ID being viewed (-1 if none)
-    camera_type: int = 1  # 0=TV Cockpit, 1=Cockpit, 2=Nose, 3=Swingman, 4=Trackside, 5+=Onboard
+    slot_id: int = -1
+    """Slot ID being viewed (-1 if none)."""
+    camera_type: int = 1
+    """0=TV Cockpit, 1=Cockpit, 2=Nose, 3=Swingman, 4=Trackside, 5+=Onboard."""
 
     @property
     def is_cockpit_view(self) -> bool:

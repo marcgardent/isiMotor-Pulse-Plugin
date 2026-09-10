@@ -174,7 +174,7 @@ def extract_scoring_rows(
                 ("session", s.session, format_value(s.session), "Session numeric code"),
                 ("session_type", session_label, f"[bold #58a6ff]{session_label}[/]", "Decoded session type"),
                 ("current_et", s.current_et, f"{s.current_et:.3f} s", "Current session elapsed time (seconds)"),
-                ("lap_dist", s.lap_dist, f"{s.lap_dist:.1f} m", "Total circuit lap distance (meters)"),
+                ("total_lap_dist", s.total_lap_dist, f"{s.total_lap_dist:.1f} m", "Total circuit lap distance (meters)"),
                 ("max_laps", s.max_laps, format_value(s.max_laps), "Session scheduled lap limit"),
                 ("in_realtime", s.in_realtime, format_value(s.in_realtime), "Real-time driving active state on track"),
                 ("total_laps", s.total_laps, format_value(s.total_laps), "Completed lap count for player vehicle"),

@@ -31,10 +31,14 @@ class LMUTelemetryExtension:
     """
 
     ecu: EcuState = field(default_factory=EcuState)
-    virtual_energy: float = 0.0  # Hypercar remaining virtual energy fraction (0.0 to 1.0)
-    regen_kw: float = 0.0  # Instantaneous electrical regeneration power in kW
-    track_limits_steps: int = 0  # Accumulated track limits infraction steps
-    vehicle_model: str = ""  # Specific chassis/model designation (e.g. 'Ferrari 499P')
+    virtual_energy: float = 0.0
+    """Hypercar remaining virtual energy fraction (0.0 to 1.0)."""
+    regen_kw: float = 0.0
+    """Instantaneous electrical regeneration power in kW."""
+    track_limits_steps: int = 0
+    """Accumulated track limits infraction steps."""
+    vehicle_model: str = ""
+    """Specific chassis/model designation (e.g. 'Ferrari 499P')."""
 
     @property
     def has_hypercar_energy(self) -> bool:
@@ -49,7 +53,8 @@ class LMUWheelExtension:
     """
 
     compound_type: LMUCompoundType = LMUCompoundType.UNKNOWN
-    brake_wear_meters: float = 0.0  # Residual pad/disc thickness in meters
+    brake_wear_meters: float = 0.0
+    """Residual pad/disc thickness in meters."""
 
 
 @dataclass(slots=True)
@@ -58,10 +63,14 @@ class LMUScoringExtension:
     LMU-specific global session scoring extensions (unpacked from scoring mExpansion[200]).
     """
 
-    track_grip_level: int = 0  # 0=Default, 1=Green, 2=Fast, 3=Optimum, 4=Rubbered
-    track_limits_steps_per_point: int = 0  # Infraction steps required per penalty point
-    track_limits_steps_per_penalty: int = 0  # Step threshold triggering a DT / Stop&Go
-    time_of_day_seconds: float = 0.0  # Exact solar simulation time in seconds since midnight
+    track_grip_level: int = 0
+    """0=Default, 1=Green, 2=Fast, 3=Optimum, 4=Rubbered."""
+    track_limits_steps_per_point: int = 0
+    """Infraction steps required per penalty point."""
+    track_limits_steps_per_penalty: int = 0
+    """Step threshold triggering a DT / Stop&Go."""
+    time_of_day_seconds: float = 0.0
+    """Exact solar simulation time in seconds since midnight."""
 
     @property
     def grip_fraction(self) -> float:
@@ -85,5 +94,7 @@ class LMUVehicleScoringExtension:
     LMU-specific per-vehicle scoring extensions (unpacked from vehicle scoring mExpansion[48]).
     """
 
-    fuel_fraction: float = 0.0  # Opponent estimated fuel fraction (0.0 to 1.0)
-    track_limits_steps: int = 0  # Vehicle cumulative cut count
+    fuel_fraction: float = 0.0
+    """Opponent estimated fuel fraction (0.0 to 1.0)."""
+    track_limits_steps: int = 0
+    """Vehicle cumulative cut count."""

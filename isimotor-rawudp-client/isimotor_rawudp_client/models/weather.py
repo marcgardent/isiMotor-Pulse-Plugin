@@ -17,9 +17,12 @@ class WeatherControl:
         (0.0, 0.0, 0.0),
         (0.0, 0.0, 0.0),
     )
-    cloudiness: float = 0.0  # 0.0 (clear) to 1.0 (dark overcast)
-    ambient_temp_k: float = 293.15  # Air temp in Kelvin
-    wind_max_speed: float = 0.0  # Wind speed in m/s
+    cloudiness: float = 0.0
+    """0.0 (clear) to 1.0 (dark overcast)."""
+    ambient_temp_k: float = 293.15
+    """Air temp in Kelvin."""
+    wind_max_speed: float = 0.0
+    """Wind speed in m/s."""
     apply_cloudiness_instantly: bool = False
 
     @property
