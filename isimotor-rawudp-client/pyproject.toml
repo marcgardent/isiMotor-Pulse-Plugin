@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "isimotor-rawudp-client"
-version = "0.5.0"
+version = "0.5.1"
 description = "High-performance Python client and binary decoder for isiMotor / Le Mans Ultimate / rFactor 2 raw UDP telemetry"
 readme = "README.md"
 authors = [{ name = "Marc GARDENT" }]
