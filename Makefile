@@ -94,20 +94,17 @@ manager:
 benchmark: manager
 
 sync-resources:
-	@echo "==> Syncing compiled DLL and resources into Manager package..."
-	@mkdir -p isimotor-rawudp-manager/isimotor_rawudp_manager/resources isimotor-rawudp-manager/resources
+	@echo "==> Syncing compiled DLL and resources into Client package..."
+	@mkdir -p isimotor-rawudp-client/isimotor_rawudp_client/resources
 	@if [ -f $(BUILD_DIR)/isiMotor_RawUDP.dll ]; then \
-		cp $(BUILD_DIR)/isiMotor_RawUDP.dll isimotor-rawudp-manager/isimotor_rawudp_manager/resources/; \
-		cp $(BUILD_DIR)/isiMotor_RawUDP.dll isimotor-rawudp-manager/resources/; \
-		echo "  ✓ Copied $(BUILD_DIR)/isiMotor_RawUDP.dll to manager resources"; \
+		cp $(BUILD_DIR)/isiMotor_RawUDP.dll isimotor-rawudp-client/isimotor_rawudp_client/resources/; \
+		echo "  ✓ Copied $(BUILD_DIR)/isiMotor_RawUDP.dll to client resources"; \
 	elif [ -f $(BIN_DIR)/isiMotor_RawUDP.dll ]; then \
-		cp $(BIN_DIR)/isiMotor_RawUDP.dll isimotor-rawudp-manager/isimotor_rawudp_manager/resources/; \
-		cp $(BIN_DIR)/isiMotor_RawUDP.dll isimotor-rawudp-manager/resources/; \
-		echo "  ✓ Copied $(BIN_DIR)/isiMotor_RawUDP.dll to manager resources"; \
+		cp $(BIN_DIR)/isiMotor_RawUDP.dll isimotor-rawudp-client/isimotor_rawudp_client/resources/; \
+		echo "  ✓ Copied $(BIN_DIR)/isiMotor_RawUDP.dll to client resources"; \
 	elif [ -f isiMotor_RawUDP.dll ]; then \
-		cp isiMotor_RawUDP.dll isimotor-rawudp-manager/isimotor_rawudp_manager/resources/; \
-		cp isiMotor_RawUDP.dll isimotor-rawudp-manager/resources/; \
-		echo "  ✓ Copied isiMotor_RawUDP.dll to manager resources"; \
+		cp isiMotor_RawUDP.dll isimotor-rawudp-client/isimotor_rawudp_client/resources/; \
+		echo "  ✓ Copied isiMotor_RawUDP.dll to client resources"; \
 	fi
 
 package: sync-resources
@@ -124,20 +121,20 @@ briefcase-build: sync-resources
 
 standalone-linux: sync-resources
 	@echo "==> Building standalone Linux manager binary with PyInstaller..."
-	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-RawUDP-Manager-x86_64" --add-data "isimotor-rawudp-manager/isimotor_rawudp_manager/resources:isimotor_rawudp_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client scripts/entrypoint_manager.py
+	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-RawUDP-Manager-x86_64" --add-data "isimotor-rawudp-client/isimotor_rawudp_client/resources:isimotor_rawudp_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client scripts/entrypoint_manager.py
 
 standalone-windows: sync-resources
 	@echo "==> Building standalone Windows manager binary with PyInstaller..."
-	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_RawUDP_Manager" --add-data "isimotor-rawudp-manager/isimotor_rawudp_manager/resources;isimotor_rawudp_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client scripts/entrypoint_manager.py
+	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_RawUDP_Manager" --add-data "isimotor-rawudp-client/isimotor_rawudp_client/resources;isimotor_rawudp_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client scripts/entrypoint_manager.py
 
 install:
-	@PYTHONPATH=isimotor-rawudp-manager $(PYTHON) -m isimotor_rawudp_manager.installer
+	@PYTHONPATH=isimotor-rawudp-client $(PYTHON) -m isimotor_rawudp_client.install.cli
 
 uninstall:
-	@PYTHONPATH=isimotor-rawudp-manager $(PYTHON) -m isimotor_rawudp_manager.installer --uninstall
+	@PYTHONPATH=isimotor-rawudp-client $(PYTHON) -m isimotor_rawudp_client.install.cli --uninstall
 
 status:
-	@PYTHONPATH=isimotor-rawudp-manager $(PYTHON) -m isimotor_rawudp_manager.installer --status
+	@PYTHONPATH=isimotor-rawudp-client $(PYTHON) -m isimotor_rawudp_client.install.cli --status
 
 info:
 	@echo "=================================================================="

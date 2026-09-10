@@ -4,6 +4,20 @@ isiMotor-RawUDP-Manager — Telemetry Diagnostics, Stream Inspector & Plugin Ins
 
 __version__ = "0.4.0"
 
+from isimotor_rawudp_client.install import (
+    DEFAULT_PLUGIN_VARIABLES,
+    SUPPORTED_GAMES,
+    configure_game_json,
+    copy_and_install_dll,
+    detect_game_installations,
+    find_source_dll,
+    get_configuration_overview,
+    install_plugin,
+    read_plugin_json_variables,
+    uninstall_plugin,
+)
+from isimotor_rawudp_client.install.cli import show_status
+
 from .constants import (
     NAV_COMMANDS,
     NAV_EXPLORER,
@@ -55,19 +69,6 @@ from .extractors import (
     extract_stats_rows,
     extract_telemetry_rows,
     extract_weather_rows,
-)
-from .installer import (
-    DEFAULT_PLUGIN_VARIABLES,
-    SUPPORTED_GAMES,
-    configure_game_json,
-    copy_and_install_dll,
-    detect_game_installations,
-    find_source_dll,
-    get_configuration_overview,
-    install_plugin,
-    read_plugin_json_variables,
-    show_status,
-    uninstall_plugin,
 )
 from .ui import (
     IsiMotorBenchmarkApp,

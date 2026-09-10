@@ -1,6 +1,10 @@
 """
 isiMotor-RawUDP Python Client Package
 High-performance, zero-overhead telemetry & scoring reader for Le Mans Ultimate and rFactor 2.
+
+Installation, Steam detection & JSON configuration helpers live in the
+`isimotor_rawudp_client.install` subpackage (see its `__all__`), and are not
+re-exported here to keep the top-level namespace focused on the telemetry API.
 """
 
 from .client import IsiMotorClient

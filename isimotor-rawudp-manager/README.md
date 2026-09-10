@@ -49,10 +49,10 @@ isi-manager
 # or:
 python -m isimotor_rawudp_manager
 
-# Run game detector & plugin installer:
+# Run game detector & plugin installer (provided by isimotor-rawudp-client):
 isi-install --status
 # or:
-python -m isimotor_rawudp_manager.installer
+python -m isimotor_rawudp_client.install.cli
 ```
 
 

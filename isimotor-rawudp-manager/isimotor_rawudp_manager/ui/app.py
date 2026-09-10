@@ -27,6 +27,13 @@ from textual.widgets import (
     Tabs,
 )
 
+from isimotor_rawudp_client.install import (
+    DEFAULT_PLUGIN_VARIABLES,
+    copy_and_install_dll,
+    get_configuration_overview,
+    save_configuration_to_all_games,
+)
+
 from ..constants import (
     INBOUND_ENABLE_OPTIONS,
     LOGGING_ENABLE_OPTIONS,
@@ -74,12 +81,6 @@ from ..extractors import (
     extract_weather_rows,
     is_lmu_key,
     model_to_clean_dict,
-)
-from ..installer import (
-    DEFAULT_PLUGIN_VARIABLES,
-    copy_and_install_dll,
-    get_configuration_overview,
-    save_configuration_to_all_games,
 )
 from .helpers import format_mode_and_hz_to_rate, parse_rate_to_mode_and_hz
 from .styles import APP_CSS

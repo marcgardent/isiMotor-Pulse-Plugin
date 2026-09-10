@@ -14,14 +14,16 @@ requires-python = ">=3.8"
 dependencies = [
     "textual>=0.50.0",
     "rich>=13.0.0",
+    "isimotor-rawudp-client",
 ]
 
 [project.scripts]
 isi-manager = "isimotor_rawudp_manager.app:main"
 isimotor-manager = "isimotor_rawudp_manager.app:main"
 isi-benchmark = "isimotor_rawudp_manager.app:main"
-isi-install = "isimotor_rawudp_manager.installer:main"
-isi-installer = "isimotor_rawudp_manager.installer:main"
+
+[tool.uv.sources]
+isimotor-rawudp-client = { workspace = true }
 
 [tool.setuptools.packages.find]
 where = ["."]

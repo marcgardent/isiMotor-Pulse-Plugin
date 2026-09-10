@@ -20,6 +20,13 @@ if str(manager_root) not in sys.path:
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+from isimotor_rawudp_client.install import (
+    DEFAULT_PLUGIN_VARIABLES,
+    copy_and_install_dll,
+    get_configuration_overview,
+    save_configuration_to_all_games,
+)
+
 from .constants import (
     INBOUND_ENABLE_OPTIONS,
     NAV_COMMANDS,
@@ -84,12 +91,6 @@ from .extractors import (
     extract_weather_rows,
     format_value,
     model_to_clean_dict,
-)
-from .installer import (
-    DEFAULT_PLUGIN_VARIABLES,
-    copy_and_install_dll,
-    get_configuration_overview,
-    save_configuration_to_all_games,
 )
 from .ui import (
     APP_CSS,

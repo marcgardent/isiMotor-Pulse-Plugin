@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from isimotor_rawudp_manager.installer import (
+from isimotor_rawudp_client.install import (
     DEFAULT_PLUGIN_VARIABLES,
     configure_game_json,
 )
@@ -105,7 +105,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertEqual(entry["WeatherRate"], "1Hz")
 
     def test_get_configuration_overview_and_extract_rows(self):
-        from isimotor_rawudp_manager.installer import (
+        from isimotor_rawudp_client.install import (
             copy_and_install_dll,
             get_configuration_overview,
             read_plugin_json_variables,
@@ -160,7 +160,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertIn("hotreload.architecture", row_keys)
 
     def test_home_summary_renderers_and_app_navigation(self):
-        from isimotor_rawudp_manager.installer import get_configuration_overview
+        from isimotor_rawudp_client.install import get_configuration_overview
         from isimotor_rawudp_manager.sniffer import (
             NAV_HOME,
             TAB_TELEM,
@@ -288,7 +288,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         asyncio.run(_run())
 
     def test_write_and_save_plugin_variables(self):
-        from isimotor_rawudp_manager.installer import (
+        from isimotor_rawudp_client.install import (
             DEFAULT_PLUGIN_VARIABLES,
             read_plugin_json_variables,
             save_configuration_to_all_games,
@@ -325,7 +325,7 @@ class TestInstallerAndConfig(unittest.TestCase):
 
     def test_parse_vdf_library_paths(self):
         """Tests parsing modern and legacy Steam libraryfolders.vdf structures."""
-        from isimotor_rawudp_manager.installer import parse_vdf_library_paths
+        from isimotor_rawudp_client.install import parse_vdf_library_paths
 
         steam_root = self.test_dir / "SteamRoot"
         secondary_lib = self.test_dir / "SecondaryLib"
@@ -370,7 +370,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         """Tests that game detection strictly queries libraries registered in libraryfolders.vdf."""
         from unittest.mock import patch
 
-        from isimotor_rawudp_manager.installer import detect_game_installations
+        from isimotor_rawudp_client.install import detect_game_installations
 
         steam_root = self.test_dir / "Steam"
         steam_root.mkdir(parents=True)
@@ -396,7 +396,7 @@ class TestInstallerAndConfig(unittest.TestCase):
 }}'''
         vdf_file.write_text(vdf_content, encoding="utf-8")
 
-        with patch("isimotor_rawudp_manager.installer.get_steam_vdf_candidate_paths", return_value=[vdf_file]):
+        with patch("isimotor_rawudp_client.install.steam.get_steam_vdf_candidate_paths", return_value=[vdf_file]):
             detected = detect_game_installations()
 
             # LMU was in registered Steam library -> detected

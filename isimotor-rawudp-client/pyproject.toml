@@ -27,6 +27,13 @@ classifiers = [
 ]
 dependencies = []
 
+[project.scripts]
+isi-install = "isimotor_rawudp_client.install.cli:main"
+isi-installer = "isimotor_rawudp_client.install.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["isimotor_rawudp_client*"]
+
+[tool.setuptools.package-data]
+isimotor_rawudp_client = ["resources/*"]
