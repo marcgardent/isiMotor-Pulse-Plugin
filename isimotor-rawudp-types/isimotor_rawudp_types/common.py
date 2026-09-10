@@ -5,6 +5,8 @@ Common data models: 3D vector, packet header, and system events.
 import math
 from dataclasses import dataclass
 
+from .enums import SystemEventType
+
 
 @dataclass(frozen=True)
 class TelemVect3:
@@ -32,6 +34,7 @@ class RawUdpHeader:
     magic: bytes = b"SIMP"
     protocol_version: int = 1
     packet_type: int = 0
+    """Discriminates the payload's wire format; see `PacketType`."""
     payload_size: int = 0
     sequence_number: int = 0
     session_et: float = 0.0
@@ -43,26 +46,23 @@ class RawUdpHeader:
 @dataclass(frozen=True)
 class SystemEvent:
     """
-    System state event packet (SIMP Type 3, 6 bytes).
+    System state event packet (SIMP Type 3 / PacketType.SYSTEM_EVENT, 6 bytes).
     """
 
     event_id: int = 0
-    """1=EnterRealtime, 2=ExitRealtime, 3=StartSession, 4=EndSession."""
+    """See `SystemEventType`."""
 
     @property
     def name(self) -> str:
-        names = {
-            1: "EnterRealtime",
-            2: "ExitRealtime",
-            3: "StartSession",
-            4: "EndSession",
-        }
-        return names.get(self.event_id, f"Unknown({self.event_id})")
+        try:
+            return SystemEventType(self.event_id).name.title().replace("_", "")
+        except ValueError:
+            return f"Unknown({self.event_id})"
 
     @property
     def in_realtime(self) -> bool | None:
-        if self.event_id in (1, 3):
+        if self.event_id in (SystemEventType.ENTER_REALTIME, SystemEventType.START_SESSION):
             return True
-        elif self.event_id in (2, 4):
+        elif self.event_id in (SystemEventType.EXIT_REALTIME, SystemEventType.END_SESSION):
             return False
         return None

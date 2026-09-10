@@ -5,6 +5,8 @@ Provides native telemetry for Le Mans Ultimate (LMU) and modern isiMotor simulat
 
 from dataclasses import dataclass
 
+from .enums import WiperState
+
 
 @dataclass(slots=True)
 class EcuState:
@@ -55,8 +57,8 @@ class EcuState:
     rear_arb_max: int = 0
     """Maximum rear ARB setting."""
 
-    wiper_state: int = 0
-    """Windshield wiper state (0=off, 1=auto, 2=slow, 3=fast)."""
+    wiper_state: WiperState = WiperState.OFF
+    """Windshield wiper state; see `WiperState`."""
     lift_and_coast: float = 0.0
     """Lift and coast target progress (fraction: 0.0 to 1.0)."""
 

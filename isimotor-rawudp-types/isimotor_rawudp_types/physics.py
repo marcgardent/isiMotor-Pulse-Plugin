@@ -4,6 +4,8 @@ Physics options, driving aids, impact and damage data models.
 
 from dataclasses import dataclass, field
 
+from .enums import MS_TO_KMH, AntiLockBrakes, AutoShift, MechFailure, StabilityControl, TractionControl
+
 
 @dataclass(frozen=True)
 class PhysicsOptions:
@@ -11,14 +13,14 @@ class PhysicsOptions:
     Active driving aids, physics rules & multipliers (SIMP Type 8 Physics sub-block, 40 bytes).
     """
 
-    traction_control: int = 0
-    """0 (off) - 3 (high)."""
-    anti_lock_brakes: int = 0
-    """0 (off) - 2 (high)."""
-    stability_control: int = 0
-    """0 (off) - 2 (high)."""
-    auto_shift: int = 0
-    """0 (off), 1 (upshifts), 2 (downshifts), 3 (all)."""
+    traction_control: TractionControl = TractionControl.OFF
+    """See `TractionControl`."""
+    anti_lock_brakes: AntiLockBrakes = AntiLockBrakes.OFF
+    """See `AntiLockBrakes`."""
+    stability_control: StabilityControl = StabilityControl.OFF
+    """See `StabilityControl`."""
+    auto_shift: AutoShift = AutoShift.MANUAL
+    """See `AutoShift`."""
     auto_clutch: int = 0
     """0 (off), 1 (on)."""
     invulnerable: int = 0
@@ -41,8 +43,8 @@ class PhysicsOptions:
     """Fuel usage multiplier (0x - 7x)."""
     tire_mult: int = 1
     """Tire wear multiplier (0x - 7x)."""
-    mech_fail: int = 1
-    """0 (off), 1 (normal), 2 (timescaled)."""
+    mech_fail: MechFailure = MechFailure.NORMAL
+    """See `MechFailure`."""
     allow_pitcrew_push: int = 0
     """0 (off), 1 (on)."""
     repeat_shifts: int = 0
@@ -64,23 +66,38 @@ class PhysicsOptions:
 
     @property
     def traction_control_str(self) -> str:
-        return {0: "Off", 1: "Low", 2: "Medium", 3: "High"}.get(self.traction_control, f"TC({self.traction_control})")
+        return {
+            TractionControl.OFF: "Off",
+            TractionControl.LOW: "Low",
+            TractionControl.MEDIUM: "Medium",
+            TractionControl.HIGH: "High",
+        }.get(self.traction_control, f"TC({self.traction_control})")
 
     @property
     def anti_lock_brakes_str(self) -> str:
-        return {0: "Off", 1: "Low", 2: "High"}.get(self.anti_lock_brakes, f"ABS({self.anti_lock_brakes})")
+        return {
+            AntiLockBrakes.OFF: "Off",
+            AntiLockBrakes.LOW: "Low",
+            AntiLockBrakes.HIGH: "High",
+        }.get(self.anti_lock_brakes, f"ABS({self.anti_lock_brakes})")
 
     @property
     def stability_control_str(self) -> str:
-        return {0: "Off", 1: "Low", 2: "Medium", 3: "High"}.get(
-            self.stability_control, f"ESC({self.stability_control})"
-        )
+        return {
+            StabilityControl.OFF: "Off",
+            StabilityControl.LOW: "Low",
+            StabilityControl.MEDIUM: "Medium",
+            StabilityControl.HIGH: "High",
+        }.get(self.stability_control, f"ESC({self.stability_control})")
 
     @property
     def auto_shift_str(self) -> str:
-        return {0: "Manual", 1: "Auto Up", 2: "Auto Down", 3: "Full Auto"}.get(
-            self.auto_shift, f"Shift({self.auto_shift})"
-        )
+        return {
+            AutoShift.MANUAL: "Manual",
+            AutoShift.AUTO_UP: "Auto Up",
+            AutoShift.AUTO_DOWN: "Auto Down",
+            AutoShift.FULL_AUTO: "Full Auto",
+        }.get(self.auto_shift, f"Shift({self.auto_shift})")
 
 
 @dataclass(frozen=True)
@@ -106,4 +123,4 @@ class ExtendedState:
     @property
     def current_pit_speed_limit_kmh(self) -> float:
         """Pit lane speed limit in km/h."""
-        return self.current_pit_speed_limit * 3.6
+        return self.current_pit_speed_limit * MS_TO_KMH

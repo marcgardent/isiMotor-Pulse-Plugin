@@ -4,6 +4,8 @@ Environmental conditions and live weather grid data models.
 
 from dataclasses import dataclass
 
+from .enums import KELVIN_TO_CELSIUS_OFFSET
+
 
 @dataclass(frozen=True)
 class WeatherControl:
@@ -19,8 +21,8 @@ class WeatherControl:
     )
     cloudiness: float = 0.0
     """0.0 (clear) to 1.0 (dark overcast)."""
-    ambient_temp_k: float = 293.15
-    """Air temp in Kelvin."""
+    ambient_temp_k: float = 20.0 + KELVIN_TO_CELSIUS_OFFSET
+    """Air temp in Kelvin (defaults to 20°C)."""
     wind_max_speed: float = 0.0
     """Wind speed in m/s."""
     apply_cloudiness_instantly: bool = False
@@ -28,7 +30,7 @@ class WeatherControl:
     @property
     def ambient_temp_c(self) -> float:
         """Air temperature in Celsius (°C)."""
-        return self.ambient_temp_k - 273.15
+        return self.ambient_temp_k - KELVIN_TO_CELSIUS_OFFSET
 
     @property
     def origin_raining(self) -> float:

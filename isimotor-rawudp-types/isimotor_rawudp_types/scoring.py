@@ -5,6 +5,20 @@ Scoring, leaderboard, timing and session data models.
 from dataclasses import dataclass, field
 
 from .common import TelemVect3
+from .enums import (
+    MS_TO_KMH,
+    QUALIFYING_SESSION_RANGE,
+    RACE_SESSION_RANGE,
+    CountLapFlag,
+    FinishStatus,
+    Flag,
+    GamePhase,
+    PitState,
+    SectorId,
+    SessionType,
+    VehicleControl,
+    YellowFlagState,
+)
 from .lmu import LMUScoringExtension, LMUVehicleScoringExtension
 
 
@@ -17,8 +31,8 @@ class CompactScoring:
 
     track_name: str = ""
     """Track name string."""
-    session: int = 0
-    """0=testday, 1-4=practice, 5-8=qual, 9=warmup, 10-13=race."""
+    session: SessionType = SessionType.TEST_DAY
+    """See `SessionType`."""
     current_et: float = 0.0
     """Current session elapsed time in seconds."""
     total_lap_dist: float = 0.0
@@ -29,12 +43,12 @@ class CompactScoring:
     """True if currently in active driving mode."""
     total_laps: int = 0
     """Player completed laps."""
-    sector: int = 1
-    """Current sector: 0=sector3, 1=sector1, 2=sector2."""
+    sector: SectorId = SectorId.SECTOR_1
+    """See `SectorId`."""
     in_garage_stall: bool = False
     """True if inside pit garage."""
-    count_lap_flag: int = 2
-    """0=invalid lap, 1=lap count only, 2=valid lap and time."""
+    count_lap_flag: CountLapFlag = CountLapFlag.VALID_LAP_AND_TIME
+    """See `CountLapFlag`."""
 
     cur_sector1: float = 0.0
     """Current sector 1 time (seconds)."""
@@ -77,12 +91,12 @@ class CompactScoring:
     @property
     def is_race_session(self) -> bool:
         """True if current session is a race."""
-        return 10 <= self.session <= 13
+        return self.session in RACE_SESSION_RANGE
 
     @property
     def is_qualifying_session(self) -> bool:
         """True if current session is qualifying."""
-        return 5 <= self.session <= 8
+        return self.session in QUALIFYING_SESSION_RANGE
 
 
 @dataclass
@@ -100,10 +114,10 @@ class VehicleScoring:
     """Vehicle / livery name (up to 64 chars)."""
     total_laps: int = 0
     """Completed laps."""
-    sector: int = 0
-    """0=S3, 1=S1, 2=S2."""
-    finish_status: int = 0
-    """0=none, 1=finished, 2=dnf, 3=dq."""
+    sector: SectorId = SectorId.SECTOR_3
+    """See `SectorId`."""
+    finish_status: FinishStatus = FinishStatus.RUNNING
+    """See `FinishStatus`."""
     vehicle_lap_dist: float = 0.0
     """Distance traveled by this vehicle along the current lap (meters); differs per vehicle, unlike CompactScoring/FullScoringSession.total_lap_dist."""
     path_lateral: float = 0.0
@@ -134,8 +148,8 @@ class VehicleScoring:
     """Outstanding penalties count."""
     is_player: bool = False
     """1 if local player car."""
-    control: int = 0
-    """-1=nobody, 0=player, 1=AI, 2=remote, 3=replay."""
+    control: VehicleControl = VehicleControl.NOBODY
+    """See `VehicleControl`."""
     in_pits: bool = False
     """Pitting / in pit lane."""
     place: int = 1
@@ -173,8 +187,8 @@ class VehicleScoring:
 
     headlights: int = 0
     """Headlights state."""
-    pit_state: int = 0
-    """0=none, 1=request, 2=entering, 3=stopped, 4=exiting."""
+    pit_state: PitState = PitState.NONE
+    """See `PitState`."""
     server_scored: int = 1
     individual_phase: int = 0
     qualification: int = 0
@@ -186,12 +200,12 @@ class VehicleScoring:
 
     pit_group: str = ""
     """Pit stall / team group."""
-    flag: int = 0
-    """Primary flag (0=green, 6=blue)."""
+    flag: Flag = Flag.GREEN
+    """See `Flag`."""
     under_yellow: bool = False
     """Taken caution flag."""
-    count_lap_flag: int = 2
-    """0=invalid, 1=lap count only, 2=valid lap & time."""
+    count_lap_flag: CountLapFlag = CountLapFlag.VALID_LAP_AND_TIME
+    """See `CountLapFlag`."""
     in_garage_stall: bool = False
     pit_lap_dist: float = 0.0
     """Distance of pit stall along lap."""
@@ -212,7 +226,7 @@ class VehicleScoring:
     @property
     def speed_kmh(self) -> float:
         """Speed in km/h."""
-        return self.speed_mps * 3.6
+        return self.speed_mps * MS_TO_KMH
 
     @property
     def forward_speed_mps(self) -> float:
@@ -222,7 +236,7 @@ class VehicleScoring:
     @property
     def forward_speed_kmh(self) -> float:
         """Forward speed in km/h."""
-        return self.forward_speed_mps * 3.6
+        return self.forward_speed_mps * MS_TO_KMH
 
     @property
     def cur_sector2_individual(self) -> float:
@@ -255,13 +269,24 @@ class VehicleScoring:
     @property
     def finish_status_str(self) -> str:
         """Human-readable finish status."""
-        statuses = {0: "Running", 1: "Finished", 2: "DNF", 3: "DQ"}
+        statuses = {
+            FinishStatus.RUNNING: "Running",
+            FinishStatus.FINISHED: "Finished",
+            FinishStatus.DNF: "DNF",
+            FinishStatus.DQ: "DQ",
+        }
         return statuses.get(self.finish_status, "Unknown")
 
     @property
     def pit_state_str(self) -> str:
         """Human-readable pit state."""
-        states = {0: "On Track", 1: "Pit Request", 2: "Entering Pits", 3: "In Pit Box", 4: "Exiting Pits"}
+        states = {
+            PitState.NONE: "On Track",
+            PitState.REQUEST: "Pit Request",
+            PitState.ENTERING: "Entering Pits",
+            PitState.STOPPED: "In Pit Box",
+            PitState.EXITING: "Exiting Pits",
+        }
         return states.get(self.pit_state, "Unknown")
 
 
@@ -274,8 +299,8 @@ class FullScoringSession:
 
     track_name: str = ""
     """Track name."""
-    session: int = 0
-    """0=testday, 1-4=practice, 5-8=qual, 9=warmup, 10-13=race."""
+    session: SessionType = SessionType.TEST_DAY
+    """See `SessionType`."""
     current_et: float = 0.0
     """Current session elapsed time in seconds."""
     end_et: float = 0.0
@@ -286,10 +311,10 @@ class FullScoringSession:
     """Total lap/track distance in meters (constant for the session, not a vehicle's live progress)."""
     num_vehicles: int = 0
     """Number of active vehicles in grid."""
-    game_phase: int = 5
-    """0=Garage..5=GreenFlag, 6=FCY..8=SessionOver."""
-    yellow_flag_state: int = 0
-    """-1=Invalid, 0=None, 1=Pending, 2=PitClosed, 3=PitLeadLap, 4=PitOpen, 5=LastLap, 6=Resume."""
+    game_phase: GamePhase = GamePhase.GREEN_FLAG
+    """See `GamePhase`."""
+    yellow_flag_state: YellowFlagState = YellowFlagState.NONE
+    """See `YellowFlagState`."""
     sector_flags: tuple[int, int, int] = (0, 0, 0)
     """Local yellows in S3, S1, S2."""
     start_light: int = 0
@@ -317,37 +342,42 @@ class FullScoringSession:
     def player_vehicle(self) -> VehicleScoring | None:
         """Finds the local player vehicle in the grid."""
         for v in self.vehicles:
-            if v.is_player or v.control == 0:
+            if v.is_player or v.control == VehicleControl.PLAYER:
                 return v
         return self.vehicles[0] if self.vehicles else None
+
+    _UNRANKED_PLACE_SORT_KEY = 999
+    """Sort-order fallback for vehicles with no assigned place (place <= 0)."""
 
     @property
     def leaderboard(self) -> list[VehicleScoring]:
         """Returns active vehicles sorted by overall place (1st to last)."""
-        return sorted(self.vehicles, key=lambda v: v.place if v.place > 0 else 999)
+        return sorted(
+            self.vehicles, key=lambda v: v.place if v.place > 0 else self._UNRANKED_PLACE_SORT_KEY
+        )
 
     @property
     def is_fcy(self) -> bool:
         """True if session is currently under Full Course Yellow / Safety Car."""
-        return self.game_phase == 6 or self.yellow_flag_state > 0
+        return self.game_phase == GamePhase.FULL_COURSE_YELLOW or self.yellow_flag_state > YellowFlagState.NONE
 
     @property
     def is_race(self) -> bool:
         """True if current session is race."""
-        return 10 <= self.session <= 13
+        return self.session in RACE_SESSION_RANGE
 
     @property
     def game_phase_str(self) -> str:
         """Human-readable session phase name."""
         phases = {
-            0: "Garage",
-            1: "WarmUp",
-            2: "GridWalk",
-            3: "Formation",
-            4: "Countdown",
-            5: "GreenFlag",
-            6: "FullCourseYellow",
-            7: "SessionStopped",
-            8: "SessionOver",
+            GamePhase.GARAGE: "Garage",
+            GamePhase.WARMUP: "WarmUp",
+            GamePhase.GRID_WALK: "GridWalk",
+            GamePhase.FORMATION: "Formation",
+            GamePhase.COUNTDOWN: "Countdown",
+            GamePhase.GREEN_FLAG: "GreenFlag",
+            GamePhase.FULL_COURSE_YELLOW: "FullCourseYellow",
+            GamePhase.SESSION_STOPPED: "SessionStopped",
+            GamePhase.SESSION_OVER: "SessionOver",
         }
         return phases.get(self.game_phase, f"Phase_{self.game_phase}")

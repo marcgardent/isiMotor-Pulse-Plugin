@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 
 from .ecu import EcuState
+from .enums import SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE, TRACK_GRIP_FRACTION, TrackGripLevel
 
 
 class LMUCompoundType(IntEnum):
@@ -63,8 +64,8 @@ class LMUScoringExtension:
     LMU-specific global session scoring extensions (unpacked from scoring mExpansion[200]).
     """
 
-    track_grip_level: int = 0
-    """0=Default, 1=Green, 2=Fast, 3=Optimum, 4=Rubbered."""
+    track_grip_level: TrackGripLevel = TrackGripLevel.DEFAULT
+    """See `TrackGripLevel`."""
     track_limits_steps_per_point: int = 0
     """Infraction steps required per penalty point."""
     track_limits_steps_per_penalty: int = 0
@@ -75,16 +76,15 @@ class LMUScoringExtension:
     @property
     def grip_fraction(self) -> float:
         """Continuous grip level fraction (0.0 to 1.0)."""
-        mapping = {0: 0.0, 1: 0.25, 2: 0.50, 3: 0.75, 4: 0.90}
-        return mapping.get(self.track_grip_level, 0.0)
+        return TRACK_GRIP_FRACTION.get(self.track_grip_level, 0.0)
 
     @property
     def time_of_day_str(self) -> str:
         """Formatted 24h clock string 'HH:MM:SS'."""
-        total_sec = int(self.time_of_day_seconds) % 86400
-        hours = total_sec // 3600
-        minutes = (total_sec % 3600) // 60
-        secs = total_sec % 60
+        total_sec = int(self.time_of_day_seconds) % SECONDS_PER_DAY
+        hours = total_sec // SECONDS_PER_HOUR
+        minutes = (total_sec % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE
+        secs = total_sec % SECONDS_PER_MINUTE
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 

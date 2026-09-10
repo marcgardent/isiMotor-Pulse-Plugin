@@ -6,6 +6,17 @@ from dataclasses import dataclass, field
 
 from .common import TelemVect3
 from .ecu import EcuState
+from .enums import (
+    GEAR_NEUTRAL,
+    GEAR_REVERSE,
+    KELVIN_TO_CELSIUS_OFFSET,
+    MS_TO_KMH,
+    ElectricBoostMotorState,
+    IgnitionStarterState,
+    RearFlapLegalStatus,
+    SpeedLimiterState,
+    SurfaceType,
+)
 from .lmu import LMUTelemetryExtension, LMUWheelExtension
 
 
@@ -56,8 +67,8 @@ class TelemWheel:
     """Wear (0.0-1.0, fraction of maximum)."""
     terrain_name: str = ""
     """Material prefix from the TDF file (up to 16 chars)."""
-    surface_type: int = 0
-    """0=dry, 1=wet, 2=grass, 3=dirt, 4=gravel, 5=rumblestrip, 6=special."""
+    surface_type: SurfaceType = SurfaceType.DRY
+    """See `SurfaceType`."""
     flat: bool = False
     """Whether tire is flat."""
     detached: bool = False
@@ -84,22 +95,26 @@ class TelemWheel:
     @property
     def temperature_celsius(self) -> tuple[float, float, float]:
         """Tire surface temperatures in Celsius (left, center, right)."""
-        return (self.temperature[0] - 273.15, self.temperature[1] - 273.15, self.temperature[2] - 273.15)
+        return (
+            self.temperature[0] - KELVIN_TO_CELSIUS_OFFSET,
+            self.temperature[1] - KELVIN_TO_CELSIUS_OFFSET,
+            self.temperature[2] - KELVIN_TO_CELSIUS_OFFSET,
+        )
 
     @property
     def carcass_temp_celsius(self) -> float:
         """Tire carcass temperature in Celsius."""
-        return self.tire_carcass_temperature - 273.15
+        return self.tire_carcass_temperature - KELVIN_TO_CELSIUS_OFFSET
 
     @property
     def patch_speed_kmh(self) -> float:
         """Longitudinal contact patch speed in km/h."""
-        return self.longitudinal_patch_vel * 3.6
+        return self.longitudinal_patch_vel * MS_TO_KMH
 
     @property
     def ground_speed_kmh(self) -> float:
         """Longitudinal ground surface speed in km/h."""
-        return self.longitudinal_ground_vel * 3.6
+        return self.longitudinal_ground_vel * MS_TO_KMH
 
     @property
     def slip_ratio(self) -> float:
@@ -152,8 +167,8 @@ class TelemInfo:
     local_rot_accel: TelemVect3 = field(default_factory=TelemVect3)
     """Rotational acceleration (rad/s^2)."""
 
-    gear: int = 0
-    """-1=Reverse, 0=Neutral, 1+=Forward."""
+    gear: int = GEAR_NEUTRAL
+    """GEAR_REVERSE (-1), GEAR_NEUTRAL (0), or 1+ for forward gears."""
     engine_rpm: float = 0.0
     """Engine RPM."""
     engine_water_temp: float = 0.0
@@ -227,8 +242,8 @@ class TelemInfo:
     """Current output torque (Nm)."""
     current_sector: int = 1
     """1=Sector 1, 2=Sector 2, 3=Sector 3."""
-    speed_limiter: int = 0
-    """0=off, 1=on (pit limiter)."""
+    speed_limiter: SpeedLimiterState = SpeedLimiterState.OFF
+    """See `SpeedLimiterState` (pit limiter)."""
     max_gears: int = 6
     """Forward gear count."""
     front_tire_compound_index: int = 0
@@ -238,10 +253,10 @@ class TelemInfo:
     front_flap_activated: int = 0
     rear_flap_activated: int = 0
     """DRS / active aero."""
-    rear_flap_legal_status: int = 0
-    """0=disallowed, 1=detected, 2=allowed (DRS enabled)."""
-    ignition_starter: int = 0
-    """0=off, 1=ignition, 2=ignition+starter."""
+    rear_flap_legal_status: RearFlapLegalStatus = RearFlapLegalStatus.DISALLOWED
+    """See `RearFlapLegalStatus` (DRS)."""
+    ignition_starter: IgnitionStarterState = IgnitionStarterState.OFF
+    """See `IgnitionStarterState`."""
     front_tire_compound_name: str = ""
     rear_tire_compound_name: str = ""
 
@@ -261,8 +276,8 @@ class TelemInfo:
     electric_boost_motor_rpm: float = 0.0
     electric_boost_motor_temperature: float = 0.0
     electric_boost_water_temperature: float = 0.0
-    electric_boost_motor_state: int = 0
-    """0=unavailable, 1=inactive, 2=propulsion, 3=regeneration."""
+    electric_boost_motor_state: ElectricBoostMotorState = ElectricBoostMotorState.UNAVAILABLE
+    """See `ElectricBoostMotorState`."""
 
     # Le Mans Ultimate telemetry extensions (ECU, Hypercar virtual energy, regen, track cuts)
     lmu: LMUTelemetryExtension = field(default_factory=LMUTelemetryExtension)
@@ -289,7 +304,7 @@ class TelemInfo:
     @property
     def speed_kmh(self) -> float:
         """Vehicle 3D absolute speed in km/h."""
-        return self.speed_mps * 3.6
+        return self.speed_mps * MS_TO_KMH
 
     @property
     def forward_speed_mps(self) -> float:
@@ -299,14 +314,14 @@ class TelemInfo:
     @property
     def forward_speed_kmh(self) -> float:
         """Forward speed in km/h."""
-        return self.forward_speed_mps * 3.6
+        return self.forward_speed_mps * MS_TO_KMH
 
     @property
     def gear_str(self) -> str:
         """Human-readable gear label ('R', 'N', '1', '2', etc.)."""
-        if self.gear == -1:
+        if self.gear == GEAR_REVERSE:
             return "R"
-        elif self.gear == 0:
+        elif self.gear == GEAR_NEUTRAL:
             return "N"
         return str(self.gear)
 
