@@ -1,0 +1,4 @@
+#!/bin/sh
+# Run the full workspace check suite (lint, format-check, typecheck, test)
+# before allowing a commit. Bypass with `git commit --no-verify` if needed.
+make check
