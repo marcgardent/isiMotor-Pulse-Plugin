@@ -40,6 +40,14 @@ class TestVerifyVersion(unittest.TestCase):
         )
         (client_dir / "__init__.py").write_text(f'__version__ = "{version}"\n', encoding="utf-8")
 
+        # 2b. Types
+        types_dir = tmp_root / "isimotor-rawudp-types" / "isimotor_rawudp_types"
+        types_dir.mkdir(parents=True, exist_ok=True)
+        (tmp_root / "isimotor-rawudp-types" / "pyproject.toml").write_text(
+            f'[project]\nname = "types"\nversion = "{version}"\n', encoding="utf-8"
+        )
+        (types_dir / "__init__.py").write_text(f'__version__ = "{version}"\n', encoding="utf-8")
+
         # 3. Manager
         manager_dir = tmp_root / "isimotor-rawudp-manager" / "isimotor_rawudp_manager"
         manager_dir.mkdir(parents=True, exist_ok=True)
@@ -69,7 +77,7 @@ class TestVerifyVersion(unittest.TestCase):
             is_valid, resolved, file_versions = verify_versions(tmp_root)
             self.assertTrue(is_valid)
             self.assertEqual(resolved, "1.5.0")
-            self.assertEqual(len(file_versions), 8)
+            self.assertEqual(len(file_versions), 10)
             for v in file_versions.values():
                 self.assertIn(v, ["1.5.0", "1.5.0"])
 

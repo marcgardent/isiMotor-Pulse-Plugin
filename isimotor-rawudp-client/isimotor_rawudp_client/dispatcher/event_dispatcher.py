@@ -5,7 +5,7 @@ Event dispatching layer for routing typed telemetry & scoring packets to callbac
 from collections.abc import Callable
 from typing import Any
 
-from ..models import (
+from isimotor_rawudp_types import (
     CompactScoring,
     ExtendedState,
     ForceFeedback,

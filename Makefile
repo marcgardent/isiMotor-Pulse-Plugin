@@ -68,9 +68,9 @@ test:
 	@make -C tests/cpp_mock --silent
 	@./tests/cpp_mock/isi_mock_host --dump-truth tests/golden
 	@if command -v $(UV) >/dev/null 2>&1; then \
-		PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(UV) run --with textual --with rich python -m unittest discover -s tests -p "test_*.py" -v; \
+		PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager:isimotor-rawudp-types $(UV) run --with textual --with rich python -m unittest discover -s tests -p "test_*.py" -v; \
 	else \
-		PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v; \
+		PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager:isimotor-rawudp-types $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v; \
 	fi
 
 cross:
@@ -126,20 +126,20 @@ briefcase-build: sync-resources
 
 standalone-linux: sync-resources
 	@echo "==> Building standalone Linux manager binary with PyInstaller..."
-	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-RawUDP-Manager-x86_64" --add-data "isimotor-rawudp-client/isimotor_rawudp_client/resources:isimotor_rawudp_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client scripts/entrypoint_manager.py
+	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager:isimotor-rawudp-types $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-RawUDP-Manager-x86_64" --add-data "isimotor-rawudp-client/isimotor_rawudp_client/resources:isimotor_rawudp_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client --collect-all isimotor_rawudp_types scripts/entrypoint_manager.py
 
 standalone-windows: sync-resources
 	@echo "==> Building standalone Windows manager binary with PyInstaller..."
-	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_RawUDP_Manager" --add-data "isimotor-rawudp-client/isimotor_rawudp_client/resources;isimotor_rawudp_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client scripts/entrypoint_manager.py
+	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager:isimotor-rawudp-types $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_RawUDP_Manager" --add-data "isimotor-rawudp-client/isimotor_rawudp_client/resources;isimotor_rawudp_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client --collect-all isimotor_rawudp_types scripts/entrypoint_manager.py
 
 install:
-	@PYTHONPATH=isimotor-rawudp-client $(PYTHON) -m isimotor_rawudp_client.install.cli
+	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-types $(PYTHON) -m isimotor_rawudp_client.install.cli
 
 uninstall:
-	@PYTHONPATH=isimotor-rawudp-client $(PYTHON) -m isimotor_rawudp_client.install.cli --uninstall
+	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-types $(PYTHON) -m isimotor_rawudp_client.install.cli --uninstall
 
 status:
-	@PYTHONPATH=isimotor-rawudp-client $(PYTHON) -m isimotor_rawudp_client.install.cli --status
+	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-types $(PYTHON) -m isimotor_rawudp_client.install.cli --status
 
 info:
 	@echo "=================================================================="
@@ -185,3 +185,10 @@ clean:
 	@echo "==> Cleaning build artifacts..."
 	@rm -rf $(BUILD_DIR) $(BIN_DIR)
 	@echo "==> Clean complete."
+
+
+# Removes Co-authored-by/Claude-Session trailers from commit messages —
+# this history is not free advertising space for a tool.
+strip-attribution:
+	$(PYTHON) ./scripts/strip_commit_attribution.py
+	git gc --prune=now

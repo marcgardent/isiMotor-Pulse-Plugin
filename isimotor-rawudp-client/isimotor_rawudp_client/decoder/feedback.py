@@ -4,8 +4,9 @@ Steering shaft force feedback packet decoder.
 
 import struct
 
+from isimotor_rawudp_types import ForceFeedback
+
 from ..constants import FORCE_FEEDBACK_SIZE, FORCE_FEEDBACK_STRUCT
-from ..models import ForceFeedback
 
 
 def decode_force_feedback(data: bytes, offset: int = 0) -> ForceFeedback | None:

@@ -4,8 +4,9 @@ Graphics rendering and camera viewpoint packet decoder.
 
 import struct
 
+from isimotor_rawudp_types import Graphics, TelemVect3
+
 from ..constants import GRAPHICS_SIZE, GRAPHICS_STRUCT
-from ..models import Graphics, TelemVect3
 
 
 def decode_graphics(data: bytes, offset: int = 0) -> Graphics | None:

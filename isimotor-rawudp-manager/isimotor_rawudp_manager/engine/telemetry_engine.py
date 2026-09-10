@@ -21,7 +21,7 @@ from isimotor_rawudp_client.decoder import (
     encode_hw_control,
     encode_weather_control,
 )
-from isimotor_rawudp_client.models import (
+from isimotor_rawudp_types import (
     CompactScoring,
     ExtendedState,
     ForceFeedback,

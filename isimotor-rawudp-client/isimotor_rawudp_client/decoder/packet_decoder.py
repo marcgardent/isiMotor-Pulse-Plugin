@@ -6,6 +6,19 @@ Open/Closed Principle compliant: packet types and decoders can be registered and
 from collections.abc import Callable
 from typing import Any, Union
 
+from isimotor_rawudp_types import (
+    CompactScoring,
+    ExtendedState,
+    ForceFeedback,
+    FullScoringSession,
+    Graphics,
+    HWControlCommand,
+    SystemEvent,
+    TelemInfo,
+    WeatherControl,
+    WeatherControlCommand,
+)
+
 from ..constants import (
     HEADER_SIZE,
     PKT_TYPE_COMPACT_SCORING,
@@ -18,18 +31,6 @@ from ..constants import (
     PKT_TYPE_TELEMETRY,
     PKT_TYPE_WEATHER,
     PKT_TYPE_WEATHER_CONTROL,
-)
-from ..models import (
-    CompactScoring,
-    ExtendedState,
-    ForceFeedback,
-    FullScoringSession,
-    Graphics,
-    HWControlCommand,
-    SystemEvent,
-    TelemInfo,
-    WeatherControl,
-    WeatherControlCommand,
 )
 from .commands import decode_hw_control, decode_weather_control
 from .events import decode_system_event

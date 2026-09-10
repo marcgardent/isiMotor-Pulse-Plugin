@@ -5,18 +5,6 @@ Unit and SOLID architecture tests for isimotor_rawudp_manager modular refactor.
 import unittest
 
 from isimotor_rawudp_client.constants import TELEMINFO_SIZE
-from isimotor_rawudp_client.models import (
-    CompactScoring,
-    ExtendedState,
-    ForceFeedback,
-    FullScoringSession,
-    Graphics,
-    PhysicsOptions,
-    SystemEvent,
-    TelemInfo,
-    TelemVect3,
-    WeatherControl,
-)
 from isimotor_rawudp_manager.constants import (
     PKT_RAW_TELEMETRY,
 )
@@ -37,6 +25,18 @@ from isimotor_rawudp_manager.extractors import (
 from isimotor_rawudp_manager.ui import (
     format_mode_and_hz_to_rate,
     parse_rate_to_mode_and_hz,
+)
+from isimotor_rawudp_types import (
+    CompactScoring,
+    ExtendedState,
+    ForceFeedback,
+    FullScoringSession,
+    Graphics,
+    PhysicsOptions,
+    SystemEvent,
+    TelemInfo,
+    TelemVect3,
+    WeatherControl,
 )
 
 

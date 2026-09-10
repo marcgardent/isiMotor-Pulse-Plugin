@@ -4,7 +4,7 @@ Scoring and multi-vehicle grid packet row extractor.
 
 from typing import Any
 
-from isimotor_rawudp_client.models import CompactScoring, FullScoringSession
+from isimotor_rawudp_types import CompactScoring, FullScoringSession
 
 from ..engine.stats import PacketStats
 from .base import LMU_DESC_PREFIX, BaseExtractor, TableRow, format_value, model_to_clean_dict

@@ -4,7 +4,7 @@ Telemetry packet row extractor and presentation builder for TelemInfo.
 
 from typing import Any
 
-from isimotor_rawudp_client.models import TelemInfo
+from isimotor_rawudp_types import TelemInfo
 
 from ..engine.stats import PacketStats
 from .base import LMU_DESC_PREFIX, BaseExtractor, TableRow, format_value, model_to_clean_dict

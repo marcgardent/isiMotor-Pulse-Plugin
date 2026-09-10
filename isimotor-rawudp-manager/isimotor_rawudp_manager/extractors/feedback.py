@@ -4,7 +4,7 @@ Force feedback packet row extractor and presentation builder.
 
 from typing import Any
 
-from isimotor_rawudp_client.models import ForceFeedback
+from isimotor_rawudp_types import ForceFeedback
 
 from ..engine.stats import PacketStats
 from .base import BaseExtractor, TableRow, format_value, model_to_clean_dict

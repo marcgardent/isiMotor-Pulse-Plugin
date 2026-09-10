@@ -4,13 +4,14 @@ Inbound hardware control and weather override encoders and decoders.
 
 import struct
 
+from isimotor_rawudp_types import HWControlCommand, WeatherControlCommand
+
 from ..constants import (
     HW_CONTROL_COMMAND_SIZE,
     HW_CONTROL_COMMAND_STRUCT,
     WEATHER_CONTROL_COMMAND_SIZE,
     WEATHER_CONTROL_COMMAND_STRUCT,
 )
-from ..models import HWControlCommand, WeatherControlCommand
 from .base import _decode_string
 from .header import encode_header
 

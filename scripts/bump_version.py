@@ -96,6 +96,16 @@ def bump_all_files(root: Path, new_version: str) -> list[Path]:
     if update_file(client_init, r'(?m)^__version__\s*=\s*"[^"]+"', f'__version__ = "{new_version}"'):
         updated_files.append(client_init)
 
+    # 3b. isimotor-rawudp-types/pyproject.toml
+    types_pyproject = root / "isimotor-rawudp-types" / "pyproject.toml"
+    if update_file(types_pyproject, r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"', count=1):
+        updated_files.append(types_pyproject)
+
+    # 3c. isimotor-rawudp-types/isimotor_rawudp_types/__init__.py
+    types_init = root / "isimotor-rawudp-types" / "isimotor_rawudp_types" / "__init__.py"
+    if update_file(types_init, r'(?m)^__version__\s*=\s*"[^"]+"', f'__version__ = "{new_version}"'):
+        updated_files.append(types_init)
+
     # 4. isimotor-rawudp-manager/pyproject.toml (under [project] and [tool.briefcase])
     manager_pyproject = root / "isimotor-rawudp-manager" / "pyproject.toml"
     if update_file(manager_pyproject, r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"'):

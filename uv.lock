@@ -12,6 +12,7 @@ resolution-markers = [
 members = [
     "isimotor-rawudp-client",
     "isimotor-rawudp-manager",
+    "isimotor-rawudp-types",
     "isimotor-rawudp-workspace",
 ]
 
@@ -19,6 +20,12 @@ members = [
 name = "isimotor-rawudp-client"
 version = "0.5.1"
 source = { editable = "isimotor-rawudp-client" }
+dependencies = [
+    { name = "isimotor-rawudp-types" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "isimotor-rawudp-types", editable = "isimotor-rawudp-types" }]
 
 [[package]]
 name = "isimotor-rawudp-manager"
@@ -26,6 +33,7 @@ version = "0.5.1"
 source = { editable = "isimotor-rawudp-manager" }
 dependencies = [
     { name = "isimotor-rawudp-client" },
+    { name = "isimotor-rawudp-types" },
     { name = "rich", version = "14.3.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "rich", version = "15.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
     { name = "textual", version = "0.73.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8.1'" },
@@ -36,9 +44,15 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "isimotor-rawudp-client", editable = "isimotor-rawudp-client" },
+    { name = "isimotor-rawudp-types", editable = "isimotor-rawudp-types" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "textual", specifier = ">=0.50.0" },
 ]
+
+[[package]]
+name = "isimotor-rawudp-types"
+version = "0.5.1"
+source = { editable = "isimotor-rawudp-types" }
 
 [[package]]
 name = "isimotor-rawudp-workspace"

@@ -15,6 +15,7 @@ dependencies = [
     "textual>=0.50.0",
     "rich>=13.0.0",
     "isimotor-rawudp-client",
+    "isimotor-rawudp-types",
 ]
 
 [project.scripts]
@@ -24,6 +25,7 @@ isi-benchmark = "isimotor_rawudp_manager.app:main"
 
 [tool.uv.sources]
 isimotor-rawudp-client = { workspace = true }
+isimotor-rawudp-types = { workspace = true }
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -50,6 +52,7 @@ console_app = true
 sources = [
     "isimotor_rawudp_manager",
     "../isimotor-rawudp-client/isimotor_rawudp_client",
+    "../isimotor-rawudp-types/isimotor_rawudp_types",
 ]
 test_sources = []
 requires = [

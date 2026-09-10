@@ -4,8 +4,9 @@ Standardized SIMP packet header decoder and encoder.
 
 import struct
 
+from isimotor_rawudp_types import RawUdpHeader
+
 from ..constants import HEADER_SIZE, HEADER_STRUCT
-from ..models import RawUdpHeader
 
 
 def decode_header(data: bytes) -> RawUdpHeader | None:

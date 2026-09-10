@@ -5,7 +5,7 @@ System event packet row extractor.
 import time
 from typing import Any
 
-from isimotor_rawudp_client.models import SystemEvent
+from isimotor_rawudp_types import SystemEvent
 
 from ..engine.stats import PacketStats
 from .base import BaseExtractor, TableRow, format_value, model_to_clean_dict

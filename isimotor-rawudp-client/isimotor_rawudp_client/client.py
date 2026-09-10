@@ -10,9 +10,7 @@ Architectural Design:
 from collections.abc import Callable
 from typing import Any
 
-from .decoder.packet_decoder import AnyPacket, PacketDecoderRegistry
-from .dispatcher import EventDispatcher, PacketCallback
-from .models import (
+from isimotor_rawudp_types import (
     CompactScoring,
     ExtendedState,
     ForceFeedback,
@@ -24,6 +22,9 @@ from .models import (
     WeatherControl,
     WeatherControlCommand,
 )
+
+from .decoder.packet_decoder import AnyPacket, PacketDecoderRegistry
+from .dispatcher import EventDispatcher, PacketCallback
 from .reassembly import ChunkReassembler
 from .state import StateStore
 from .transport import UdpReceiver, UdpSender

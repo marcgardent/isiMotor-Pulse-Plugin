@@ -53,6 +53,18 @@ def collect_file_versions(root: Path) -> dict[str, str | None]:
         client_init, r'(?m)^__version__\s*=\s*"([^"]+)"'
     )
 
+    # 3b. Types pyproject.toml
+    types_pyproject = root / "isimotor-rawudp-types" / "pyproject.toml"
+    versions["isimotor-rawudp-types/pyproject.toml"] = extract_regex_first_group(
+        types_pyproject, r'(?m)^version\s*=\s*"([^"]+)"'
+    )
+
+    # 3c. Types __init__.py
+    types_init = root / "isimotor-rawudp-types" / "isimotor_rawudp_types" / "__init__.py"
+    versions["isimotor_rawudp_types/__init__.py"] = extract_regex_first_group(
+        types_init, r'(?m)^__version__\s*=\s*"([^"]+)"'
+    )
+
     # 4. Manager pyproject.toml (project.version)
     manager_pyproject = root / "isimotor-rawudp-manager" / "pyproject.toml"
     versions["isimotor-rawudp-manager/pyproject.toml [project]"] = extract_regex_first_group(

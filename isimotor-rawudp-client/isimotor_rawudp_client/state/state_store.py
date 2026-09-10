@@ -5,7 +5,7 @@ Thread-safe client state and latest telemetry / scoring cache store.
 import threading
 from typing import Any
 
-from ..models import (
+from isimotor_rawudp_types import (
     CompactScoring,
     ExtendedState,
     ForceFeedback,

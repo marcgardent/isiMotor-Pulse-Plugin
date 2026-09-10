@@ -4,7 +4,7 @@ Weather packet row extractor and presentation builder.
 
 from typing import Any
 
-from isimotor_rawudp_client.models import WeatherControl
+from isimotor_rawudp_types import WeatherControl
 
 from ..engine.stats import PacketStats
 from .base import BaseExtractor, TableRow, model_to_clean_dict

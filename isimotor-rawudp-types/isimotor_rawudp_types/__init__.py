@@ -65,6 +65,8 @@ from .weather import (
     WeatherControl,
 )
 
+__version__ = "0.5.1"
+
 __all__ = [
     "CompactScoring",
     "EcuState",

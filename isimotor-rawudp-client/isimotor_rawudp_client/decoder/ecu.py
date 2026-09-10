@@ -4,7 +4,7 @@ Electronic Control Unit (ECU) and onboard driver aids binary decoder.
 
 import struct
 
-from ..models.ecu import EcuState
+from isimotor_rawudp_types.ecu import EcuState
 
 # 20 consecutive unsigned 8-bit integers (20 bytes)
 _ECU_FORMAT = struct.Struct("<20B")

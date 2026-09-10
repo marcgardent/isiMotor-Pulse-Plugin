@@ -4,8 +4,9 @@ Extended game state, physics options, and damage decoder.
 
 import struct
 
+from isimotor_rawudp_types import ExtendedState, PhysicsOptions
+
 from ..constants import EXTENDED_STATE_SIZE, EXTENDED_STATE_STRUCT
-from ..models import ExtendedState, PhysicsOptions
 
 
 def decode_extended_state(data: bytes, offset: int = 0) -> ExtendedState | None:

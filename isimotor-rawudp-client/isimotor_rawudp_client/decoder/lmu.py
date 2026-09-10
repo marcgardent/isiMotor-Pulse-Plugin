@@ -5,13 +5,14 @@ Decodes extended telemetry and scoring structures embedded within expansion zone
 
 import struct
 
-from ..models.lmu import (
+from isimotor_rawudp_types.lmu import (
     LMUCompoundType,
     LMUScoringExtension,
     LMUTelemetryExtension,
     LMUVehicleScoringExtension,
     LMUWheelExtension,
 )
+
 from .base import _decode_string
 from .ecu import decode_ecu_state
 

@@ -4,7 +4,7 @@ Extended state, driving aids, physics multipliers & damage row extractor.
 
 from typing import Any
 
-from isimotor_rawudp_client.models import ExtendedState
+from isimotor_rawudp_types import ExtendedState
 
 from ..engine.stats import PacketStats
 from .base import BaseExtractor, TableRow, format_value, model_to_clean_dict

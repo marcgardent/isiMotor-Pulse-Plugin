@@ -7,6 +7,30 @@ Installation, Steam detection & JSON configuration helpers live in the
 re-exported here to keep the top-level namespace focused on the telemetry API.
 """
 
+from isimotor_rawudp_types import (
+    CompactScoring,
+    EcuState,
+    ExtendedState,
+    ForceFeedback,
+    FullScoringSession,
+    Graphics,
+    HWControlCommand,
+    LMUCompoundType,
+    LMUScoringExtension,
+    LMUTelemetryExtension,
+    LMUVehicleScoringExtension,
+    LMUWheelExtension,
+    PhysicsOptions,
+    RawUdpHeader,
+    SystemEvent,
+    TelemInfo,
+    TelemVect3,
+    TelemWheel,
+    VehicleScoring,
+    WeatherControl,
+    WeatherControlCommand,
+)
+
 from .client import IsiMotorClient
 from .decoder import (
     decode_compact_scoring,
@@ -30,29 +54,6 @@ from .decoder import (
     encode_header,
     encode_hw_control,
     encode_weather_control,
-)
-from .models import (
-    CompactScoring,
-    EcuState,
-    ExtendedState,
-    ForceFeedback,
-    FullScoringSession,
-    Graphics,
-    HWControlCommand,
-    LMUCompoundType,
-    LMUScoringExtension,
-    LMUTelemetryExtension,
-    LMUVehicleScoringExtension,
-    LMUWheelExtension,
-    PhysicsOptions,
-    RawUdpHeader,
-    SystemEvent,
-    TelemInfo,
-    TelemVect3,
-    TelemWheel,
-    VehicleScoring,
-    WeatherControl,
-    WeatherControlCommand,
 )
 
 __version__ = "0.5.1"

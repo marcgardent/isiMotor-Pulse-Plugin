@@ -4,12 +4,13 @@ Scoring, timing, and multi-vehicle leaderboard decoders.
 
 import struct
 
+from isimotor_rawudp_types import CompactScoring, FullScoringSession, TelemVect3, VehicleScoring
+
 from ..constants import (
     COMPACT_SCORING_SIZE,
     FULL_SCORING_SESSION_SIZE,
     VEHICLE_SCORING_SIZE,
 )
-from ..models import CompactScoring, FullScoringSession, TelemVect3, VehicleScoring
 from .base import _decode_string
 from .lmu import (
     decode_lmu_scoring_extension,

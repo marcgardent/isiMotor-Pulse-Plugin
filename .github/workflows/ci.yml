@@ -88,7 +88,8 @@ jobs:
 
       - name: Build Python packages & validate with twine
         run: |
+          uv run --with build python -m build isimotor-rawudp-types
           uv run --with build python -m build isimotor-rawudp-client
           uv run --with build python -m build isimotor-rawudp-manager
-          uv run --with twine twine check isimotor-rawudp-client/dist/* isimotor-rawudp-manager/dist/*
+          uv run --with twine twine check isimotor-rawudp-types/dist/* isimotor-rawudp-client/dist/* isimotor-rawudp-manager/dist/*
 

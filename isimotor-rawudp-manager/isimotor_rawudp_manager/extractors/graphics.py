@@ -4,7 +4,7 @@ Graphics & camera viewpoints packet row extractor.
 
 from typing import Any
 
-from isimotor_rawudp_client.models import Graphics
+from isimotor_rawudp_types import Graphics
 
 from ..engine.stats import PacketStats
 from .base import BaseExtractor, TableRow, format_value, model_to_clean_dict

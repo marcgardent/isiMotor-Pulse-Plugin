@@ -2,7 +2,7 @@
 System state event packet decoder.
 """
 
-from ..models import SystemEvent
+from isimotor_rawudp_types import SystemEvent
 
 
 def decode_system_event(data: bytes, offset: int = 0) -> SystemEvent | None:

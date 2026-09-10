@@ -4,8 +4,9 @@ Environmental conditions and weather grid decoder.
 
 import struct
 
+from isimotor_rawudp_types import WeatherControl
+
 from ..constants import WEATHER_SIZE, WEATHER_STRUCT
-from ..models import WeatherControl
 
 
 def decode_weather(data: bytes, offset: int = 0) -> WeatherControl | None:

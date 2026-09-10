@@ -4,8 +4,9 @@ High-frequency vehicle telemetry (TelemInfoV01) and wheel decoder.
 
 import struct
 
+from isimotor_rawudp_types import TelemInfo, TelemVect3, TelemWheel
+
 from ..constants import TELEMINFO_SIZE
-from ..models import TelemInfo, TelemVect3, TelemWheel
 from .base import _decode_string
 from .lmu import decode_lmu_telemetry_extension, decode_lmu_wheel_extension
 
