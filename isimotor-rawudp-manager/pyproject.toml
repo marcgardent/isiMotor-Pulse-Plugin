@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "isimotor-rawudp-manager"
-version = "0.5.1"
+version = "0.6.0"
 description = "Complete Manager, Telemetry Diagnostics & Automated Plugin Installer for Le Mans Ultimate and rFactor 2"
 readme = "README.md"
 authors = [{ name = "Marc GARDENT" }]
@@ -37,7 +37,7 @@ isimotor_rawudp_manager = ["resources/*"]
 [tool.briefcase]
 project_name = "isiMotor RawUDP Manager"
 bundle = "com.github.marcgardent"
-version = "0.5.1"
+version = "0.6.0"
 url = "https://github.com/marcgardent/isiMotor-RawUDP-Plugin"
 license = "Apache-2.0"
 license_files = ["LICENSE"]
