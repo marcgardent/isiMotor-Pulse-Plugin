@@ -166,6 +166,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Determine Release Tag
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:
@@ -174,9 +183,30 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
-      - name: Build Python Packages
+      - name: Build Types Package
         run: |
           uv run --with build python -m build isimotor-rawudp-types
+
+      - name: Point Client Dependency at the Release Wheel URL
+        # The client depends on isimotor-rawudp-types, which isn't published to any
+        # index (PyPI, etc.) -- only attached as a GitHub Release asset. Without this,
+        # `pip install`/`uv add` of the client wheel can't resolve that dependency.
+        # Rewrite it to a direct https:// URL dependency (PEP 508) pointing at this
+        # same release's types wheel, so installing the client pulls it in automatically.
+        # This edit is CI-only / ephemeral -- never committed back to the repo.
+        run: |
+          TAG="${{ steps.vars.outputs.TAG }}"
+          VERSION="${TAG#v}"
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+          TYPES_WHEEL_URL="${REPO_URL}/releases/download/${TAG}/isimotor_rawudp_types-${VERSION}-py3-none-any.whl"
+
+          sed -i "s|\"isimotor-rawudp-types\",|\"isimotor-rawudp-types @ ${TYPES_WHEEL_URL}\",|" \
+            isimotor-rawudp-client/pyproject.toml
+
+          grep -n "isimotor-rawudp-types" isimotor-rawudp-client/pyproject.toml
+
+      - name: Build Client Package
+        run: |
           uv run --with build python -m build isimotor-rawudp-client
 
       - name: Validate Distributions
@@ -298,16 +328,23 @@ jobs:
 
           **How to install and consume wheels from this release:**
 
+          `isimotor_rawudp_client` depends on `isimotor_rawudp_types` via a direct URL
+          pointing at this same release, so installing the client alone pulls the types
+          package in automatically — no separate install step needed.
+
           *Option 1 — Direct remote install via pip with release wheel URL:*
           ```bash
-          pip install "${REPO_URL}/releases/download/${TAG}/isimotor_rawudp_types-${VERSION}-py3-none-any.whl"
           pip install "${REPO_URL}/releases/download/${TAG}/isimotor_rawudp_client-${VERSION}-py3-none-any.whl"
           ```
 
-          *Option 2 — Install locally downloaded .whl files:*
+          *Option 2 — Install a locally downloaded .whl file:*
           ```bash
-          pip install isimotor_rawudp_types-${VERSION}-py3-none-any.whl
           pip install isimotor_rawudp_client-${VERSION}-py3-none-any.whl
+          ```
+
+          *Installing `isimotor_rawudp_types` on its own:*
+          ```bash
+          pip install "${REPO_URL}/releases/download/${TAG}/isimotor_rawudp_types-${VERSION}-py3-none-any.whl"
           ```
 
           👉 **Client README & Examples**: [isimotor-rawudp-client/README.md](${REPO_URL}/blob/${TAG}/isimotor-rawudp-client/README.md)
