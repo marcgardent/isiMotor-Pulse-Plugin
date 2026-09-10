@@ -18,7 +18,7 @@ members = [
 
 [[package]]
 name = "isimotor-rawudp-client"
-version = "0.6.1"
+version = "0.6.2"
 source = { editable = "isimotor-rawudp-client" }
 dependencies = [
     { name = "isimotor-rawudp-types" },
@@ -29,7 +29,7 @@ requires-dist = [{ name = "isimotor-rawudp-types", editable = "isimotor-rawudp-t
 
 [[package]]
 name = "isimotor-rawudp-manager"
-version = "0.6.1"
+version = "0.6.2"
 source = { editable = "isimotor-rawudp-manager" }
 dependencies = [
     { name = "isimotor-rawudp-client" },
@@ -51,12 +51,12 @@ requires-dist = [
 
 [[package]]
 name = "isimotor-rawudp-types"
-version = "0.6.1"
+version = "0.6.2"
 source = { editable = "isimotor-rawudp-types" }
 
 [[package]]
 name = "isimotor-rawudp-workspace"
-version = "0.6.1"
+version = "0.6.2"
 source = { virtual = "." }
 
 [[package]]

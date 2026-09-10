@@ -1,6 +1,6 @@
 # 🏎️ isiMotor RawUDP Manager — User Guide
 
-> **Version**: 0.6.1  
+> **Version**: 0.6.2  
 > **Supported Simulators**: Le Mans Ultimate (LMU), rFactor 2 (rF2)  
 > **Platforms**: Windows 10/11 (x64), Linux & Steam Deck (SteamOS)  
 

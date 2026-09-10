@@ -2,7 +2,7 @@
 isiMotor-RawUDP-Manager — Telemetry Diagnostics, Stream Inspector & Plugin Installer.
 """
 
-__version__ = "0.6.1"
+__version__ = "0.6.2"
 
 from isimotor_rawudp_client.install import (
     DEFAULT_PLUGIN_VARIABLES,
