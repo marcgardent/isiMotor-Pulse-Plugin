@@ -8,6 +8,19 @@ from typing import Any
 # Type alias for table row representation: (key, raw_value, formatted_markup, description)
 TableRow = tuple[str, Any, str, str]
 
+# Warm amber accent reserved for Le Mans Ultimate (LMU) specific extension fields, so they
+# stand out from the base isiMotor fields everywhere they surface (Explorer key colour, etc.).
+LMU_ACCENT_COLOR = "#ffa657"
+
+# Plain-text prefix applied to descriptions of LMU-specific extension fields.
+LMU_DESC_PREFIX = "LMU · "
+
+
+def is_lmu_key(key: str) -> bool:
+    """True if a table row key refers to an LMU-specific extension field (e.g. 'lmu.ecu.tc_active',
+    'wheels.fl.lmu.compound_type', 'car[01].lmu.fuel_fraction')."""
+    return key.startswith("lmu.") or ".lmu." in key
+
 
 def format_value(val: Any) -> str:
     """Formats Python values cleanly for UI table presentation with Rich color tags."""

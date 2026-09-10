@@ -7,7 +7,7 @@ from typing import Any
 from isimotor_rawudp_client.models import CompactScoring, FullScoringSession
 
 from ..engine.stats import PacketStats
-from .base import BaseExtractor, TableRow, format_value, model_to_clean_dict
+from .base import LMU_DESC_PREFIX, BaseExtractor, TableRow, format_value, model_to_clean_dict
 
 
 def extract_scoring_rows(
@@ -91,6 +91,38 @@ def extract_scoring_rows(
             ]
         )
 
+        # LMU-Specific Session Extensions (track grip, time of day, penalty rules, mExpansion[200])
+        grip_labels = {0: "Default", 1: "Green", 2: "Fast", 3: "Optimum", 4: "Rubbered"}
+        grip_label = grip_labels.get(fs.lmu.track_grip_level, f"Level({fs.lmu.track_grip_level})")
+        rows.extend(
+            [
+                (
+                    "grid.lmu.track_grip_level",
+                    fs.lmu.track_grip_level,
+                    f"[bold #ffa657]{grip_label}[/]",
+                    f"{LMU_DESC_PREFIX}Track surface grip/rubbering level",
+                ),
+                (
+                    "grid.lmu.time_of_day",
+                    fs.lmu.time_of_day_seconds,
+                    fs.lmu.time_of_day_str,
+                    f"{LMU_DESC_PREFIX}Exact solar simulation time of day",
+                ),
+                (
+                    "grid.lmu.track_limits_steps_per_point",
+                    fs.lmu.track_limits_steps_per_point,
+                    format_value(fs.lmu.track_limits_steps_per_point),
+                    f"{LMU_DESC_PREFIX}Infraction steps required per penalty point",
+                ),
+                (
+                    "grid.lmu.track_limits_steps_per_penalty",
+                    fs.lmu.track_limits_steps_per_penalty,
+                    format_value(fs.lmu.track_limits_steps_per_penalty),
+                    f"{LMU_DESC_PREFIX}Step threshold triggering a Drive-Through / Stop&Go",
+                ),
+            ]
+        )
+
         # Leaderboard entries
         for rank, v in enumerate(fs.leaderboard, start=1):
             tag = f"car[{rank:02d}]"
@@ -117,6 +149,18 @@ def extract_scoring_rows(
                     (f"{tag}.gap_leader", v.time_behind_leader, gap_str, "Gap to session leader (seconds)"),
                     (f"{tag}.best_lap", v.best_lap_time, best_lap_str, "Personal best lap time"),
                     (f"{tag}.last_lap", v.last_lap_time, last_lap_str, "Last completed lap time"),
+                    (
+                        f"{tag}.lmu.fuel_fraction",
+                        v.lmu.fuel_fraction,
+                        f"{v.lmu.fuel_fraction * 100:.1f} %",
+                        f"{LMU_DESC_PREFIX}Estimated fuel fraction remaining (opponents)",
+                    ),
+                    (
+                        f"{tag}.lmu.track_limits_steps",
+                        v.lmu.track_limits_steps,
+                        format_value(v.lmu.track_limits_steps),
+                        f"{LMU_DESC_PREFIX}Cumulative track limits infraction steps",
+                    ),
                 ]
             )
         return rows

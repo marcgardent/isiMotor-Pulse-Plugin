@@ -7,7 +7,7 @@ from typing import Any
 from isimotor_rawudp_client.models import TelemInfo
 
 from ..engine.stats import PacketStats
-from .base import BaseExtractor, TableRow, format_value, model_to_clean_dict
+from .base import LMU_DESC_PREFIX, BaseExtractor, TableRow, format_value, model_to_clean_dict
 
 
 def extract_telemetry_rows(t: TelemInfo | None, st: PacketStats | None = None) -> list[TableRow]:
@@ -266,6 +266,110 @@ def extract_telemetry_rows(t: TelemInfo | None, st: PacketStats | None = None) -
         ]
     )
 
+    # LMU-Specific Extensions (Le Mans Ultimate / WEC Hypercar telemetry, mExpansion[111])
+    lmu = t.lmu
+    ecu = lmu.ecu
+    rows.extend(
+        [
+            (
+                "lmu.vehicle_model",
+                lmu.vehicle_model,
+                format_value(lmu.vehicle_model),
+                f"{LMU_DESC_PREFIX}Specific chassis/model designation (e.g. 'Ferrari 499P')",
+            ),
+            (
+                "lmu.virtual_energy",
+                lmu.virtual_energy,
+                f"{lmu.virtual_energy * 100:.1f} %",
+                f"{LMU_DESC_PREFIX}WEC Hypercar remaining virtual energy fraction",
+            ),
+            (
+                "lmu.regen_kw",
+                lmu.regen_kw,
+                f"{lmu.regen_kw:.1f} kW",
+                f"{LMU_DESC_PREFIX}Instantaneous electrical regeneration power",
+            ),
+            (
+                "lmu.track_limits_steps",
+                lmu.track_limits_steps,
+                format_value(lmu.track_limits_steps),
+                f"{LMU_DESC_PREFIX}Accumulated track limits infraction steps",
+            ),
+            (
+                "lmu.ecu.tc_active",
+                ecu.tc_active,
+                format_value(ecu.tc_active),
+                f"{LMU_DESC_PREFIX}Traction Control actively cutting/intervening",
+            ),
+            (
+                "lmu.ecu.tc_level",
+                ecu.tc_level,
+                f"{ecu.tc_level} / {ecu.tc_max}",
+                f"{LMU_DESC_PREFIX}Traction Control level / maximum setting",
+            ),
+            (
+                "lmu.ecu.tc_cut",
+                ecu.tc_cut,
+                f"{ecu.tc_cut} / {ecu.tc_cut_max}",
+                f"{LMU_DESC_PREFIX}TC engine power cut level / maximum setting",
+            ),
+            (
+                "lmu.ecu.tc_slip",
+                ecu.tc_slip,
+                f"{ecu.tc_slip} / {ecu.tc_slip_max}",
+                f"{LMU_DESC_PREFIX}TC slip angle allowance level / maximum setting",
+            ),
+            (
+                "lmu.ecu.abs_active",
+                ecu.abs_active,
+                format_value(ecu.abs_active),
+                f"{LMU_DESC_PREFIX}Anti-lock Braking System actively modulating pressure",
+            ),
+            (
+                "lmu.ecu.abs_level",
+                ecu.abs_level,
+                f"{ecu.abs_level} / {ecu.abs_max}",
+                f"{LMU_DESC_PREFIX}ABS level / maximum setting",
+            ),
+            (
+                "lmu.ecu.motor_map",
+                ecu.motor_map,
+                f"{ecu.motor_map} / {ecu.motor_map_max}",
+                f"{LMU_DESC_PREFIX}Engine / Motor power map level / maximum setting",
+            ),
+            (
+                "lmu.ecu.brake_migration",
+                ecu.brake_migration,
+                f"{ecu.brake_migration} / {ecu.brake_migration_max}",
+                f"{LMU_DESC_PREFIX}Dynamic brake migration level / maximum setting",
+            ),
+            (
+                "lmu.ecu.front_arb",
+                ecu.front_arb,
+                f"{ecu.front_arb} / {ecu.front_arb_max}",
+                f"{LMU_DESC_PREFIX}Onboard adjustable front anti-roll bar level / maximum setting",
+            ),
+            (
+                "lmu.ecu.rear_arb",
+                ecu.rear_arb,
+                f"{ecu.rear_arb} / {ecu.rear_arb_max}",
+                f"{LMU_DESC_PREFIX}Onboard adjustable rear anti-roll bar level / maximum setting",
+            ),
+            (
+                "lmu.ecu.wiper_state",
+                ecu.wiper_state,
+                format_value(ecu.wiper_state),
+                f"{LMU_DESC_PREFIX}Windshield wiper state (0=off, 1=auto, 2=slow, 3=fast)",
+            ),
+            (
+                "lmu.ecu.lift_and_coast",
+                ecu.lift_and_coast,
+                f"{ecu.lift_and_coast * 100:.1f} %",
+                f"{LMU_DESC_PREFIX}Lift and coast target progress",
+            ),
+        ]
+    )
+
     # 4 Wheels Diagnostics
     wheel_specs = [(0, "fl", "Front Left"), (1, "fr", "Front Right"), (2, "rl", "Rear Left"), (3, "rr", "Rear Right")]
     for idx, code, lbl in wheel_specs:
@@ -349,6 +453,18 @@ def extract_telemetry_rows(t: TelemInfo | None, st: PacketStats | None = None) -
                     w.vertical_tire_deflection,
                     f"{w.vertical_tire_deflection * 1000:.2f} mm",
                     f"{lbl} vertical tire carcass compression (mm)",
+                ),
+                (
+                    f"wheels.{code}.lmu.compound_type",
+                    w.lmu.compound_type,
+                    f"[bold #f1e05a]{w.lmu.compound_type}[/]",
+                    f"{LMU_DESC_PREFIX}{lbl} official tire compound",
+                ),
+                (
+                    f"wheels.{code}.lmu.brake_wear_meters",
+                    w.lmu.brake_wear_meters,
+                    f"{w.lmu.brake_wear_meters * 1000:.3f} mm",
+                    f"{LMU_DESC_PREFIX}{lbl} residual brake pad/disc thickness",
                 ),
             ]
         )

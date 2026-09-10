@@ -60,6 +60,7 @@ from ..constants import (
 )
 from ..engine.telemetry_engine import TelemetryEngine
 from ..extractors import (
+    LMU_ACCENT_COLOR,
     TableRow,
     extract_config_rows,
     extract_event_rows,
@@ -71,6 +72,7 @@ from ..extractors import (
     extract_stats_rows,
     extract_telemetry_rows,
     extract_weather_rows,
+    is_lmu_key,
     model_to_clean_dict,
 )
 from ..installer import (
@@ -782,6 +784,7 @@ class IsiMotorBenchmarkApp(App):
                 .replace("[bold #e3b341]", "")
                 .replace("[bold #f1e05a]", "")
                 .replace("[bold #bc8cff]", "")
+                .replace(f"[bold {LMU_ACCENT_COLOR}]", "")
                 .replace("[#a5d6ff]", "")
                 .replace("[dim]", "")
                 .replace("[/dim]", "")
@@ -826,7 +829,8 @@ class IsiMotorBenchmarkApp(App):
         self._current_explorer_keys = []
 
         for key, _raw_val, fmt_val, desc in filtered_rows:
-            self.table_explorer.add_row(f"[bold #58a6ff]{key}[/]", fmt_val, desc, key=key)
+            key_display = f"[bold {LMU_ACCENT_COLOR}]🏎 {key}[/]" if is_lmu_key(key) else f"[bold #58a6ff]{key}[/]"
+            self.table_explorer.add_row(key_display, fmt_val, desc, key=key)
             self._current_explorer_keys.append(key)
 
         self.lbl_visible_rows.update(f"🔍 Fields: [bold cyan]{len(filtered_rows)} / {len(all_rows)}[/]")
