@@ -56,7 +56,7 @@ from .decoder import (
     encode_weather_control,
 )
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 __all__ = [
     "CompactScoring",
     "EcuState",

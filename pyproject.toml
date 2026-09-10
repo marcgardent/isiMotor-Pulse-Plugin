@@ -1,6 +1,6 @@
 [project]
 name = "isimotor-rawudp-workspace"
-version = "0.6.0"
+version = "0.6.1"
 description = "High-performance zero-overhead UDP telemetry & scoring plugin for isiMotor (Le Mans Ultimate & rFactor 2) with Python SDK and Textual Manager"
 readme = "README.md"
 authors = [{ name = "Marc GARDENT" }]
