@@ -4,6 +4,8 @@ Modern, interactive terminal telemetry diagnostics, stream inspector, and automa
 
 Packaged and distributed as a standalone application using **[Briefcase](https://briefcase.readthedocs.io/)** / **[Textual](https://textual.textualize.io/)**.
 
+> ℹ️ Steam detection, DLL install/uninstall and JSON configuration are implemented in the **[`isimotor-rawudp-client`](../isimotor-rawudp-client#-installer-api-isimotor_rawudp_clientinstall)** package (`isimotor_rawudp_client.install`) — the Manager UI is just one consumer of that public API. Use the client package directly if you want to automate installation without the TUI.
+
 ---
 
 ## 🚀 Key Features

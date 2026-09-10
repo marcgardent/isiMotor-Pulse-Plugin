@@ -166,3 +166,38 @@ with IsiMotorClient(port=5000) as client:
                 print(f"Virtual Energy: {telem.lmu.virtual_energy * 100:.1f}%")
         time.sleep(0.01)
 ```
+
+---
+
+## 📦 Installer API (`isimotor_rawudp_client.install`)
+
+The package also bundles the compiled `isiMotor_RawUDP.dll` and exposes a public API to detect Steam installations of Le Mans Ultimate / rFactor 2, install or remove the plugin DLL, and read/write its `CustomPluginVariables.JSON` / `Settings.JSON` configuration — no need for the Manager TUI to automate a setup flow.
+
+```python
+from isimotor_rawudp_client.install import (
+    detect_game_installations,      # -> {"LMU": [Path, ...], "rF2": [Path, ...]}
+    copy_and_install_dll,           # -> (success, message, installed_paths)
+    uninstall_plugin,               # -> bool
+    get_configuration_overview,     # -> structured dict (DLL status, per-game JSON status)
+    read_plugin_json_variables,     # -> dict of current plugin variables
+    write_plugin_json_variables,    # -> (success, message)
+    save_configuration_to_all_games,# -> (success, message, saved_paths)
+    DEFAULT_PLUGIN_VARIABLES,       # default CustomPluginVariables.JSON values
+    SUPPORTED_GAMES,                # {"LMU": {...}, "rF2": {...}}
+)
+
+# Detect installed games via Steam's libraryfolders.vdf
+games = detect_game_installations()
+
+# Install the bundled DLL + configure JSON into every detected game
+success, message, installed_paths = copy_and_install_dll()
+```
+
+A CLI is also available, installed as `isi-install` / `isi-installer` (or `python -m isimotor_rawudp_client.install.cli`):
+
+```bash
+isi-install --status      # List detected games and installation status
+isi-install               # Install the DLL + configure JSON on all detected games
+isi-install --uninstall   # Remove the DLL from all detected games
+isi-install --target-dir "/path/to/game"   # Install into a manual/custom path
+```

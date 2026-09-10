@@ -33,15 +33,16 @@ isiMotor-RawUDP-Plugin/
 │   └── isimotor_rawudp_client/ # Package source (models, decoders, client)
 │       ├── models/             # Domain dataclasses (base isiMotor + .lmu models)
 │       ├── decoder/            # Binary decoders (telemetry, scoring, LMU extensions)
+│       ├── install/            # Public installer API: Steam discovery, DLL install, JSON config
+│       ├── resources/          # Bundled isiMotor_RawUDP.dll shipped with the pip package
 │       └── client.py           # High-level client facade
-└── isimotor-rawudp-manager/    # 📊 Manager, Telemetry Diagnostics & Installer (Textual TUI / Briefcase)
+└── isimotor-rawudp-manager/    # 📊 Manager & Telemetry Diagnostics (Textual TUI / Briefcase)
     ├── pyproject.toml          # Package and Briefcase configuration
     ├── README.md
     └── isimotor_rawudp_manager/
-        ├── ui/                 # Textual modern UI views & widgets
+        ├── ui/                 # Textual modern UI views & widgets (consumes isimotor_rawudp_client.install)
         ├── engine/             # Realtime statistics & telemetry engine
-        ├── extractors/         # SOLID data extractors & table renderers
-        └── installer.py        # Automated Steam discovery & DLL installer
+        └── extractors/         # SOLID data extractors & table renderers
 ```
 
 ---
@@ -146,6 +147,29 @@ make install
 # Uninstall / remove plugin:
 make uninstall
 ```
+
+### Option C — `isimotor-rawudp-client` Installer API / CLI
+Steam discovery, DLL install/uninstall and JSON configuration are a public API of the **`isimotor-rawudp-client`** pip package (which also bundles the compiled DLL) — no need to clone the repository:
+
+```bash
+pip install "git+https://github.com/marcgardent/isiMotor-RawUDP-Plugin.git#subdirectory=isimotor-rawudp-client"
+
+isi-install --status      # List detected games and installation status
+isi-install               # Install the DLL + configure JSON on all detected games
+isi-install --uninstall   # Remove the DLL from all detected games
+```
+
+Or programmatically:
+
+```python
+from isimotor_rawudp_client.install import detect_game_installations, copy_and_install_dll
+
+games = detect_game_installations()
+success, message, installed_paths = copy_and_install_dll()
+```
+
+> 📖 See [`isimotor-rawudp-client/README.md`](isimotor-rawudp-client/README.md#-installer-api-isimotor_rawudp_clientinstall) for the full Installer API reference.
+
 ---
 
 ## ⚙️ Configuration (`CustomPluginVariables.JSON`)
