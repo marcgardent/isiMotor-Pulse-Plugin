@@ -54,7 +54,7 @@ class TelemetryEngine:
 
     def __init__(self, host: str = "127.0.0.1", port: int = 5000):
         self.host = host
-        self.port = port
+        self.port = port  # Base port; ZmqSubscriber connects one SUB per packet type on port + packet_type.
         self.start_time = time.time()
         self.total_packets = 0
         self.total_bytes = 0
@@ -88,7 +88,7 @@ class TelemetryEngine:
         self.latest_hw_control: HWControlCommand | None = None
         self.latest_weather_control: WeatherControlCommand | None = None
         self.inbound_target_host: str = "127.0.0.1"
-        self.inbound_target_port: int = 5001
+        self.inbound_target_port: int = 5101
         self.last_inbound_cmd_sent: str = "None"
         self.last_inbound_cmd_time: float = 0.0
         self._inbound_seq: int = 0

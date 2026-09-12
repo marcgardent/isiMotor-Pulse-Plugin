@@ -182,9 +182,9 @@ The plugin uses the standard isiMotor plugin configuration system via `UserData/
     " Enabled": 1,
     "EnableLogging": "Disabled",
     "TcpHost": "127.0.0.1",
-    "TcpPort": "5000",
+    "TcpBasePort": "5000",
     "InboundControl": "Enabled",
-    "InboundTcpPort": "5001",
+    "InboundTcpPort": "5101",
     "PlayerTelemetryRate": "unlimited",
     "OpponentTelemetryRate": "off",
     "CompactScoringRate": "10Hz",
@@ -199,6 +199,23 @@ The plugin uses the standard isiMotor plugin configuration system via `UserData/
 }
 ```
 
+### 🔌 One TCP Port per Packet Type
+
+Each outbound packet type is published on its **own** ZeroMQ PUB socket, bound on `TcpBasePort + packetType`, so a consumer can subscribe to only the stream(s) it needs (e.g. a HUD subscribing to `ForceFeedback` @ 400Hz without also receiving full telemetry). Ports are hardcoded arithmetically for now, pending a future service registry that will allocate them dynamically:
+
+| Type | Packet | Port (`TcpBasePort + type`) |
+|---|---|---|
+| 1 | `TelemInfo` | 5001 |
+| 2 | `CompactScoring` | 5002 |
+| 3 | `SystemEvent` | 5003 |
+| 4 | `FullScoringSession` | 5004 |
+| 7 | `WeatherControl` | 5007 |
+| 8 | `ExtendedState` | 5008 |
+| 9 | `ForceFeedback` | 5009 |
+| 10 | `Graphics` | 5010 |
+
+The inbound commands channel (hardware controls, weather overrides) stays grouped on a single port, `InboundTcpPort` (default `5101`).
+
 ### 🔄 Live Hot-Reload
 
 The plugin automatically detects changes to `CustomPluginVariables.JSON` while the simulator is running — **no restart required**. An event-based Win32 file watcher (`FindFirstChangeNotification`) monitors the config directory with zero polling overhead.
@@ -206,7 +223,7 @@ The plugin automatically detects changes to `CustomPluginVariables.JSON` while t
 **Hot-reloadable parameters** (apply instantly):
 - All streaming rates (`PlayerTelemetryRate`, `OpponentTelemetryRate`, `CompactScoringRate`, `FullScoringRate`, `WeatherRate`, `ExtendedStateRate`, `ForceFeedbackRate`, `GraphicsRate`)
 - `EnableLogging`, `SystemEvents`, `UnsubscribedBuffersMask`
-- `TcpHost` and `TcpPort` (telemetry PUB endpoint rebound in-place, no reconnect needed by clients already connected once they retry)
+- `TcpHost` and `TcpBasePort` (every per-type telemetry PUB endpoint rebound in-place, no reconnect needed by clients already connected once they retry)
 
 **Restart required**:
 - `InboundTcpPort` — changing the inbound listening port requires a simulator restart (a log warning is emitted).

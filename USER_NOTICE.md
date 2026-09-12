@@ -56,11 +56,11 @@ The Manager features a top navigation bar with 4 dedicated views:
 4. **Configuring Streaming Options**:
    - Adjust options directly in the configuration editor:
      - **TCP Host**: Telemetry PUB bind address (`127.0.0.1` for local overlays, `0.0.0.0` or your LAN IP to accept dashboard tablets on the network).
-     - **TCP Port**: Outgoing ZeroMQ telemetry port (default `5000`).
+     - **TCP Base Port**: Base port for outgoing ZeroMQ telemetry (default `5000`). Each packet type is published on its own port, `base + packet type` (e.g. TelemInfo on `5001`, CompactScoring on `5002`, ... Graphics on `5010`) — ports are hardcoded arithmetically for now, pending a future service registry.
      - **Channel Refresh Rates**: Customize individual refresh frequencies for Player Telemetry (`unlimited` / `100Hz`), Opponents Telemetry (`off` / `20Hz`), Compact Scoring (`10Hz`), Full Scoring (`5Hz`), Weather (`1Hz`), and Force Feedback (`unlimited` / `400Hz`).
-     - **Inbound TCP Port**: Inbound command listening port (default `5001`).
+     - **Inbound TCP Port**: Inbound command listening port, grouped for all command types (default `5101`).
    - Click **`[ 💾 Save ]`** to apply changes across all detected games simultaneously.
-   - **🔄 Live hot-reload**: The plugin detects file changes in real-time using an event-based Win32 file watcher (zero polling). Most parameters — streaming rates, `TcpHost`, `TcpPort`, `EnableLogging`, `SystemEvents`, `UnsubscribedBuffersMask` — apply instantly without restarting the simulator. Only `InboundTcpPort` requires a restart.
+   - **🔄 Live hot-reload**: The plugin detects file changes in real-time using an event-based Win32 file watcher (zero polling). Most parameters — streaming rates, `TcpHost`, `TcpBasePort`, `EnableLogging`, `SystemEvents`, `UnsubscribedBuffersMask` — apply instantly without restarting the simulator. Only `InboundTcpPort` requires a restart.
 5. **Uninstalling**:
    - Click **`[ 🗑️ Uninstall ]`** to safely remove the plugin DLL from detected installations.
 
@@ -108,23 +108,23 @@ The Commands tab lets you test and trigger inbound ZeroMQ command actions direct
 
 ## 🌐 6. Network Setup & Routing
 
-The plugin transports telemetry and inbound commands over **ZeroMQ PUB/SUB, on TCP only**. The plugin always **binds** its telemetry PUB socket (and its inbound commands SUB socket); every consumer — dashboards, overlays, the Manager itself — **connects** to it as a client. Any number of consumers can connect to the same PUB endpoint simultaneously, so there is no separate multicast/broadcast configuration to manage.
+The plugin transports telemetry and inbound commands over **ZeroMQ PUB/SUB, on TCP only**. The plugin always **binds** its telemetry PUB sockets — one per packet type, on `TcpBasePort + packetType` (see the table in the README/this document's config section) — and its inbound commands SUB socket; every consumer — dashboards, overlays, the Manager itself — **connects** to them as a client. Any number of consumers can connect to the same PUB endpoint simultaneously, so there is no separate multicast/broadcast configuration to manage.
 
 ### Scenario A — Local Dashboard / SimHub / Overlay (Same PC)
 - **TCP Host**: `127.0.0.1`
-- **TCP Port**: `5000`
-- **Setup**: Zero configuration required. Telemetry is delivered locally with sub-microsecond latency.
+- **TCP Base Port**: `5000`
+- **Setup**: Zero configuration required. Telemetry is delivered locally with sub-microsecond latency; connect to whichever per-type port(s) your app needs (e.g. `5001` for TelemInfo).
 
 ### Scenario B — Wi-Fi Tablet or Dedicated Dashboard Device on LAN
 - **TCP Host**: `0.0.0.0` (bind on all interfaces so LAN clients can connect) or your PC's LAN IP.
-- **TCP Port**: `5000`
-- **Client side**: point the dashboard/overlay's ZeroMQ SUB socket at `tcp://<simPC-LAN-IP>:5000`.
+- **TCP Base Port**: `5000`
+- **Client side**: point the dashboard/overlay's ZeroMQ SUB socket at `tcp://<simPC-LAN-IP>:<base+type>` (e.g. `:5001` for TelemInfo).
 
 ### Scenario C — Multiple Devices Simultaneously
 - **TCP Host**: `0.0.0.0`
-- **TCP Port**: `5000`
-- **Benefit**: Every additional consumer just opens its own SUB connection to the same PUB endpoint — no multicast group or broadcast address to configure.
-- **Firewall**: Ensure TCP port `5000` Outbound and TCP port `5001` Inbound are permitted in Windows Firewall.
+- **TCP Base Port**: `5000`
+- **Benefit**: Every additional consumer just opens its own SUB connection to the port(s) it needs — no multicast group or broadcast address to configure.
+- **Firewall**: Ensure TCP ports `5001`–`5010` Outbound and TCP port `5101` Inbound are permitted in Windows Firewall.
 
 ---
 
@@ -133,7 +133,7 @@ The plugin transports telemetry and inbound commands over **ZeroMQ PUB/SUB, on T
 ### Telemetry is not received in the Manager or external dashboards
 1. Ensure the simulation is running and an active session is loaded.
 2. In the Manager **`[ 📦 Install ]`** tab, confirm that the plugin is installed and click **`[ 📦 Copy DLL ]`** to ensure `Settings.JSON` and `CustomPluginVariables.JSON` are properly configured.
-3. Verify that the **Target Port** configured in the Manager matches your dashboard listening port (default `5000`).
+3. Verify that the **TCP Base Port** configured in the Manager matches your dashboard's connection port(s) (default base `5000`, e.g. `5001` for TelemInfo).
 
 ### Steam Deck & Linux Proton Compatibility
 - The plugin DLL runs natively inside the game process without any extra Wine libraries, daemons, or `WINEDLLOVERRIDES` settings required.

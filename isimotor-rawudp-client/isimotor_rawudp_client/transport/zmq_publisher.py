@@ -20,7 +20,7 @@ class ZmqPublisher:
     Handles encoding and transmission of inbound simulation commands to the game plugin.
     """
 
-    def __init__(self, default_host: str = "127.0.0.1", default_port: int = 5001) -> None:
+    def __init__(self, default_host: str = "127.0.0.1", default_port: int = 5101) -> None:
         self.default_host = default_host
         self.default_port = default_port
         self._lock = threading.Lock()

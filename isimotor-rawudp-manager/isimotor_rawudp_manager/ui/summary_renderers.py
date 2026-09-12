@@ -45,9 +45,9 @@ def render_home_config_summary(overview: dict[str, Any]) -> str:
     """Renders formatted Rich markup for the Home Configuration summary card."""
     vars_dict = overview.get("active_variables", {})
     target_ip = vars_dict.get("TcpHost", "127.0.0.1")
-    target_port = vars_dict.get("TcpPort", "5000")
+    target_port = vars_dict.get("TcpBasePort", "5000")
     inbound_ctrl = vars_dict.get("InboundControl", "Enabled")
-    inbound_port = vars_dict.get("InboundTcpPort", "5001")
+    inbound_port = vars_dict.get("InboundTcpPort", "5101")
     player_telem = vars_dict.get("PlayerTelemetryRate", vars_dict.get("TelemetryRate", "unlimited"))
     opponent_telem = vars_dict.get("OpponentTelemetryRate", "off")
     scoring_rate = vars_dict.get("FullScoringRate", "5Hz")

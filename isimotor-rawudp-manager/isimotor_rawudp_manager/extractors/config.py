@@ -135,10 +135,10 @@ def extract_config_rows(overview: dict[str, Any]) -> list[TableRow]:
     )
     rows.append(
         (
-            "config.TcpPort",
-            active_vars.get("TcpPort", "5000"),
-            f"[bold yellow]{active_vars.get('TcpPort', '5000')}[/]",
-            "Telemetry PUB bind port (Default: 5000)",
+            "config.TcpBasePort",
+            active_vars.get("TcpBasePort", "5000"),
+            f"[bold yellow]{active_vars.get('TcpBasePort', '5000')}[/]",
+            "Telemetry PUB base port; one PUB socket per packet type is bound on base+type (e.g. TelemInfo=base+1). Default base: 5000",
         )
     )
     rows.append(
@@ -152,9 +152,9 @@ def extract_config_rows(overview: dict[str, Any]) -> list[TableRow]:
     rows.append(
         (
             "config.InboundTcpPort",
-            active_vars.get("InboundTcpPort", "5001"),
-            f"[bold yellow]{active_vars.get('InboundTcpPort', '5001')}[/]",
-            "Inbound commands SUB bind port for remote commands (ZeroMQ, Default: 5001)",
+            active_vars.get("InboundTcpPort", "5101"),
+            f"[bold yellow]{active_vars.get('InboundTcpPort', '5101')}[/]",
+            "Inbound commands SUB bind port for remote commands (ZeroMQ, Default: 5101)",
         )
     )
     rows.append(

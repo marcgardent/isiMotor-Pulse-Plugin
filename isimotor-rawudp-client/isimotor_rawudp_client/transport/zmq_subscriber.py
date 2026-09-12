@@ -1,10 +1,15 @@
 """
 Non-blocking ZeroMQ SUB receiver thread and socket transport.
 
-The isiMotor plugin publishes telemetry as a ZeroMQ PUB socket bound on a
-TCP endpoint; this class connects to it as a SUB socket subscribed to all
-topics, mirroring the previous UDP receive semantics (single flat byte
-stream, no application-level topic filtering).
+The isiMotor plugin publishes each outbound packet type on its own ZeroMQ PUB
+socket, bound on its own TCP port (base_port + packet_type) so that a
+consumer can subscribe to only the stream(s) it needs. Ports are hardcoded
+arithmetically for now, pending a future service registry that will allocate
+them dynamically. This class opens one SUB socket per known packet type,
+connected to the plugin, and fans all of them into a single callback
+(mirroring the previous single-socket receive semantics: the packet type is
+already encoded in the RawUdpHeader of the payload, so downstream decoding is
+unaffected by which port a given message arrived on).
 """
 
 import threading
@@ -15,25 +20,32 @@ import zmq
 
 DataReceivedCallback = Callable[[bytes, float], None]
 
+# Outbound packet types actually emitted by the plugin (see
+# isimotor-rawudp-plugin/src/main.cpp's kOutboundPacketTypes), each bound on
+# its own port (base_port + packet_type).
+OUTBOUND_PACKET_TYPES: tuple[int, ...] = (1, 2, 3, 4, 7, 8, 9, 10)
+
 
 class ZmqSubscriber:
     """
     Low-latency non-blocking ZeroMQ SUB receiver managing background thread and socket lifecycle.
+
+    Opens one SUB socket per outbound packet type, each connected to
+    ``tcp://{host}:{base_port + packet_type}``.
     """
 
     def __init__(self, host: str = "127.0.0.1", port: int = 5000) -> None:
         self.host = host
-        self.port = port
+        self.port = port  # Base port; per-type endpoints are base_port + packet_type.
         self._context: zmq.Context | None = None
-        self._socket: zmq.Socket | None = None
+        self._sockets: list[zmq.Socket] = []
         self._poller: zmq.Poller | None = None
         self._thread: threading.Thread | None = None
         self._running = False
         self._on_data_received: DataReceivedCallback | None = None
 
-    @property
-    def endpoint(self) -> str:
-        return f"tcp://{self.host}:{self.port}"
+    def endpoint_for(self, packet_type: int) -> str:
+        return f"tcp://{self.host}:{self.port + packet_type}"
 
     @property
     def is_running(self) -> bool:
@@ -48,31 +60,34 @@ class ZmqSubscriber:
         self._running = True
 
         self._context = zmq.Context()
-        self._socket = self._context.socket(zmq.SUB)
-        self._socket.setsockopt(zmq.SUBSCRIBE, b"")
-        self._socket.setsockopt(zmq.LINGER, 0)
-        self._socket.connect(self.endpoint)
-
         self._poller = zmq.Poller()
-        self._poller.register(self._socket, zmq.POLLIN)
+        self._sockets = []
+
+        for packet_type in OUTBOUND_PACKET_TYPES:
+            sock = self._context.socket(zmq.SUB)
+            sock.setsockopt(zmq.SUBSCRIBE, b"")
+            sock.setsockopt(zmq.LINGER, 0)
+            sock.connect(self.endpoint_for(packet_type))
+            self._poller.register(sock, zmq.POLLIN)
+            self._sockets.append(sock)
 
         self._thread = threading.Thread(target=self._listen_loop, daemon=True, name="IsiMotorZmqSubscriber")
         self._thread.start()
 
     def stop(self) -> None:
-        """Stops the receiver thread and closes the socket."""
+        """Stops the receiver thread and closes all sockets."""
         self._running = False
 
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1.0)
             self._thread = None
 
-        if self._socket:
+        for sock in self._sockets:
             try:
-                self._socket.close()
+                sock.close()
             except Exception:
                 pass
-            self._socket = None
+        self._sockets = []
 
         if self._context:
             try:
@@ -84,18 +99,20 @@ class ZmqSubscriber:
         self._poller = None
 
     def _listen_loop(self) -> None:
-        """Internal low-latency poll and receive loop."""
+        """Internal low-latency poll and receive loop, fanning in from every connected socket."""
         while self._running:
-            if not self._socket or not self._poller:
+            if not self._sockets or not self._poller:
                 time.sleep(0.005)
                 continue
 
             try:
                 events = dict(self._poller.poll(timeout=10))
-                if self._socket in events:
+                for sock in self._sockets:
+                    if sock not in events:
+                        continue
                     while self._running:
                         try:
-                            data = self._socket.recv(flags=zmq.NOBLOCK)
+                            data = sock.recv(flags=zmq.NOBLOCK)
                             now = time.time()
                             if self._on_data_received:
                                 self._on_data_received(data, now)

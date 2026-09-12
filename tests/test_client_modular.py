@@ -189,7 +189,7 @@ class TestModularArchitecture(unittest.TestCase):
 
     def test_client_facade_composition(self):
         """Tests IsiMotorClient facade high-level composition and getters."""
-        client = IsiMotorClient(host="127.0.0.1", port=5999)
+        client = IsiMotorClient(host="127.0.0.1", base_port=5999)
 
         received_packets = []
         client.on_telemetry = lambda t: received_packets.append(t)

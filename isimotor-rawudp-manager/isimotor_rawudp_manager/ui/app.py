@@ -169,7 +169,7 @@ class IsiMotorBenchmarkApp(App):
         # Install / Config Form widgets
         self.cfg_target_ip = Input(placeholder="127.0.0.1", id="cfg-target-ip", classes="cfg-input-text")
         self.cfg_target_port = Input(placeholder="5000", id="cfg-target-port", classes="cfg-input-text")
-        self.cfg_inbound_port = Input(placeholder="5001", id="cfg-inbound-port", classes="cfg-input-text")
+        self.cfg_inbound_port = Input(placeholder="5101", id="cfg-inbound-port", classes="cfg-input-text")
         self.cfg_unsub_mask = Input(placeholder="0", id="cfg-unsub-mask", classes="cfg-input-text")
 
         self.sel_plugin_enabled = Select(
@@ -848,8 +848,8 @@ class IsiMotorBenchmarkApp(App):
 
         # Endpoints
         self.cfg_target_ip.value = str(vars_dict.get("TcpHost", "127.0.0.1"))
-        self.cfg_target_port.value = str(vars_dict.get("TcpPort", "5000"))
-        self.cfg_inbound_port.value = str(vars_dict.get("InboundTcpPort", "5001"))
+        self.cfg_target_port.value = str(vars_dict.get("TcpBasePort", "5000"))
+        self.cfg_inbound_port.value = str(vars_dict.get("InboundTcpPort", "5101"))
         self.cfg_unsub_mask.value = str(vars_dict.get("UnsubscribedBuffersMask", "0"))
 
         # Activations
@@ -935,9 +935,9 @@ class IsiMotorBenchmarkApp(App):
             " Enabled": enabled_int,
             "EnableLogging": logging_str,
             "TcpHost": self.cfg_target_ip.value.strip() or "127.0.0.1",
-            "TcpPort": self.cfg_target_port.value.strip() or "5000",
+            "TcpBasePort": self.cfg_target_port.value.strip() or "5000",
             "InboundControl": inbound_str,
-            "InboundTcpPort": self.cfg_inbound_port.value.strip() or "5001",
+            "InboundTcpPort": self.cfg_inbound_port.value.strip() or "5101",
             "PlayerTelemetryRate": format_mode_and_hz_to_rate(
                 str(self.sel_rate_telem.value), self.input_rate_telem.value, "100"
             ),

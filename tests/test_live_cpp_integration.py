@@ -32,7 +32,7 @@ class TestLiveCppIntegration(unittest.TestCase):
         Tests live ZeroMQ stream from native C++ isi_mock_host @ 100Hz using IsiMotorClient.
         Receives and validates telemetry, compact scoring, full scoring grid, and system events.
         """
-        client = IsiMotorClient(host="127.0.0.1", port=TEST_PORT)
+        client = IsiMotorClient(host="127.0.0.1", base_port=TEST_PORT)
 
         telem_list = []
         compact_scoring_list = []
@@ -181,9 +181,9 @@ class TestLiveCppIntegration(unittest.TestCase):
         - Injecting dynamic weather overrides (ambient_temp, raining)
         """
         port = 5090
-        inbound_port = 5091
+        inbound_port = port + 101
 
-        client = IsiMotorClient(host="127.0.0.1", port=port, inbound_host="127.0.0.1", inbound_port=inbound_port)
+        client = IsiMotorClient(host="127.0.0.1", base_port=port, inbound_host="127.0.0.1", inbound_port=inbound_port)
         weather_updates = []
 
         client.on_weather = lambda w: weather_updates.append(w)

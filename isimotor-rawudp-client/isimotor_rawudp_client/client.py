@@ -34,9 +34,15 @@ class IsiMotorClient:
     """
     Ultra-low latency ZeroMQ client for isiMotor / LMU telemetry and scoring.
 
+    Each outbound packet type is published by the plugin on its own TCP port
+    (base_port + packet_type; e.g. base_port=5000 puts TelemInfo on 5001,
+    CompactScoring on 5002, ...) so that consumers can subscribe to only the
+    stream(s) they need. Ports are hardcoded arithmetically for now, pending
+    a future service registry that will allocate them dynamically.
+
     Usage examples:
     1. Callback-based:
-        client = IsiMotorClient(port=5000)
+        client = IsiMotorClient(base_port=5000)
         client.on_telemetry = lambda t: print(f"RPM: {t.engine_rpm}, Speed: {t.speed_kmh:.1f}")
         client.on_full_scoring = lambda s: print(f"Leader: {s.leaderboard[0].driver_name}")
         client.on_track_rules = lambda r: print(f"FCY: {r.is_caution_active}, SC: {r.is_safety_car_active}")
@@ -50,7 +56,7 @@ class IsiMotorClient:
         client.stop()
 
     2. Context Manager / Polling:
-        with IsiMotorClient(port=5000) as client:
+        with IsiMotorClient(base_port=5000) as client:
             while True:
                 telem = client.get_latest_telemetry()
                 rules = client.get_latest_track_rules()
@@ -63,20 +69,21 @@ class IsiMotorClient:
     def __init__(
         self,
         host: str = "127.0.0.1",
-        port: int = 5000,
+        base_port: int = 5000,
         inbound_host: str = "127.0.0.1",
-        inbound_port: int = 5001,
+        inbound_port: int = 5101,
         reassembly_timeout: float = 1.0,
     ) -> None:
         self.host = host
-        self.port = port
+        self.base_port = base_port
         self.inbound_host = inbound_host
         self.inbound_port = inbound_port
 
         # Subsystems (Single Responsibility Principle)
-        # The plugin binds the telemetry PUB socket, so the client connects as SUB;
-        # the plugin binds the inbound commands SUB socket, so the client connects as PUB.
-        self._receiver = ZmqSubscriber(host=self.host, port=self.port)
+        # The plugin binds one telemetry PUB socket per packet type (base_port + packet
+        # type), so the client connects one SUB per type; the plugin binds a single
+        # grouped inbound commands SUB socket, so the client connects as PUB.
+        self._receiver = ZmqSubscriber(host=self.host, port=self.base_port)
         self._sender = ZmqPublisher(default_host=self.inbound_host, default_port=self.inbound_port)
         self._decoder_registry = PacketDecoderRegistry()
         self._reassembler = ChunkReassembler(registry=self._decoder_registry, timeout_seconds=reassembly_timeout)
