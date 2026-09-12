@@ -27,6 +27,7 @@ classifiers = [
 ]
 dependencies = [
     "isimotor-rawudp-types",
+    "pyzmq>=25.0",
 ]
 
 [project.scripts]

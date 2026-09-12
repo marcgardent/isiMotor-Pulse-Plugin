@@ -1,8 +1,8 @@
 """
-UDP network transport layer (receiver and sender).
+ZeroMQ network transport layer (PUB/SUB, TCP only).
 """
 
-from .udp_receiver import DataReceivedCallback, UdpReceiver
-from .udp_sender import UdpSender
+from .zmq_publisher import ZmqPublisher
+from .zmq_subscriber import DataReceivedCallback, ZmqSubscriber
 
-__all__ = ["DataReceivedCallback", "UdpReceiver", "UdpSender"]
+__all__ = ["DataReceivedCallback", "ZmqPublisher", "ZmqSubscriber"]

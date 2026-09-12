@@ -1,14 +1,21 @@
 """
-Outbound UDP command transmitter for hardware controls, pit menu actions, and weather overrides.
+Outbound ZeroMQ command transmitter for hardware controls, pit menu actions, and weather overrides.
+
+The isiMotor plugin subscribes to inbound commands as a ZeroMQ SUB socket
+bound on a TCP endpoint; this class connects to it as a PUB socket and
+publishes commands to it. The PUB socket is created once and reused across
+calls (unlike the previous per-call UDP socket).
 """
 
-import socket
 import threading
+import time
+
+import zmq
 
 from ..decoder.commands import encode_hw_control, encode_weather_control
 
 
-class UdpSender:
+class ZmqPublisher:
     """
     Handles encoding and transmission of inbound simulation commands to the game plugin.
     """
@@ -18,11 +25,54 @@ class UdpSender:
         self.default_port = default_port
         self._lock = threading.Lock()
         self._sequence_number = 0
+        self._context: zmq.Context | None = None
+        self._socket: zmq.Socket | None = None
+        self._connected_endpoint: str | None = None
 
     def _next_sequence(self) -> int:
         with self._lock:
             self._sequence_number += 1
             return self._sequence_number
+
+    def _ensure_connected(self, host: str, port: int) -> None:
+        """Lazily creates the PUB socket and (re)connects it if the target endpoint changed."""
+        endpoint = f"tcp://{host}:{port}"
+        if self._socket is not None and self._connected_endpoint == endpoint:
+            return
+
+        with self._lock:
+            if self._context is None:
+                self._context = zmq.Context()
+            if self._socket is not None:
+                try:
+                    self._socket.close()
+                except Exception:
+                    pass
+            self._socket = self._context.socket(zmq.PUB)
+            self._socket.setsockopt(zmq.LINGER, 0)
+            self._socket.connect(endpoint)
+            self._connected_endpoint = endpoint
+            # Mitigates the ZeroMQ PUB/SUB "slow joiner" syndrome: give the
+            # subscriber a brief moment to complete its connection handshake
+            # before the very first message is published on a fresh socket.
+            time.sleep(0.1)
+
+    def close(self) -> None:
+        """Closes the underlying PUB socket and context, if any."""
+        if self._socket:
+            try:
+                self._socket.close()
+            except Exception:
+                pass
+            self._socket = None
+            self._connected_endpoint = None
+
+        if self._context:
+            try:
+                self._context.term()
+            except Exception:
+                pass
+            self._context = None
 
     def send_hw_control(
         self,
@@ -38,7 +88,7 @@ class UdpSender:
         :param control_name: Control name (e.g. "TCIncrease", "ABSDecrease").
         :param control_value: 1.0 = press/activate, 0.0 = release, or analog value.
         :param duration_ms: Pulse duration in milliseconds (default: 50ms).
-        :param host: Destination IP (defaults to self.default_host).
+        :param host: Destination host (defaults to self.default_host).
         :param port: Destination inbound port (defaults to self.default_port).
         """
         dest_host = host or self.default_host
@@ -79,7 +129,7 @@ class UdpSender:
         :param wind_direction: Wind direction in radians.
         :param min_path_wetness: Minimum path wetness (0.0 to 1.0).
         :param max_path_wetness: Maximum off-line wetness (0.0 to 1.0).
-        :param host: Destination IP (defaults to self.default_host).
+        :param host: Destination host (defaults to self.default_host).
         :param port: Destination inbound port (defaults to self.default_port).
         """
         dest_host = host or self.default_host
@@ -102,12 +152,11 @@ class UdpSender:
         return self._transmit(packet, dest_host, dest_port)
 
     def _transmit(self, packet: bytes, host: str, port: int) -> bool:
-        """Sends raw UDP packet bytes to target destination."""
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        """Publishes a command packet to the target plugin endpoint."""
         try:
-            sock.sendto(packet, (host, port))
+            self._ensure_connected(host, port)
+            assert self._socket is not None
+            self._socket.send(packet, flags=zmq.NOBLOCK)
             return True
         except Exception:
             return False
-        finally:
-            sock.close()

@@ -1,5 +1,5 @@
 """
-High-level UDP Client for receiving isiMotor telemetry, scoring, track rules, pit menu, and weather packets.
+High-level ZeroMQ Client for receiving isiMotor telemetry, scoring, track rules, pit menu, and weather packets.
 
 Architectural Design:
 - SOLID & SRP: Single-responsibility decoupled sub-components (Transport, Codec, Reassembly, StateStore, EventDispatcher).
@@ -27,12 +27,12 @@ from .decoder.packet_decoder import AnyPacket, PacketDecoderRegistry
 from .dispatcher import EventDispatcher, PacketCallback
 from .reassembly import ChunkReassembler
 from .state import StateStore
-from .transport import UdpReceiver, UdpSender
+from .transport import ZmqPublisher, ZmqSubscriber
 
 
 class IsiMotorClient:
     """
-    Ultra-low latency UDP client for isiMotor / LMU telemetry and scoring.
+    Ultra-low latency ZeroMQ client for isiMotor / LMU telemetry and scoring.
 
     Usage examples:
     1. Callback-based:
@@ -62,7 +62,7 @@ class IsiMotorClient:
 
     def __init__(
         self,
-        host: str = "0.0.0.0",
+        host: str = "127.0.0.1",
         port: int = 5000,
         inbound_host: str = "127.0.0.1",
         inbound_port: int = 5001,
@@ -74,8 +74,10 @@ class IsiMotorClient:
         self.inbound_port = inbound_port
 
         # Subsystems (Single Responsibility Principle)
-        self._receiver = UdpReceiver(host=self.host, port=self.port)
-        self._sender = UdpSender(default_host=self.inbound_host, default_port=self.inbound_port)
+        # The plugin binds the telemetry PUB socket, so the client connects as SUB;
+        # the plugin binds the inbound commands SUB socket, so the client connects as PUB.
+        self._receiver = ZmqSubscriber(host=self.host, port=self.port)
+        self._sender = ZmqPublisher(default_host=self.inbound_host, default_port=self.inbound_port)
         self._decoder_registry = PacketDecoderRegistry()
         self._reassembler = ChunkReassembler(registry=self._decoder_registry, timeout_seconds=reassembly_timeout)
         self._state = StateStore()
@@ -93,17 +95,18 @@ class IsiMotorClient:
     # ── Lifecycle Orchestration (SLAP) ─────────────────────────────────────────
 
     def start(self) -> "IsiMotorClient":
-        """Starts the background UDP receiver thread."""
+        """Starts the background ZeroMQ SUB receiver thread."""
         self._receiver.start(self._on_datagram_received)
         return self
 
     def stop(self) -> None:
-        """Stops the background UDP receiver thread and releases network sockets."""
+        """Stops the background ZeroMQ SUB receiver thread and releases network sockets."""
         self._receiver.stop()
+        self._sender.close()
 
     @property
     def is_running(self) -> bool:
-        """True if the UDP background listener thread is active."""
+        """True if the ZeroMQ background listener thread is active."""
         return self._receiver.is_running
 
     @property
