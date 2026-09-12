@@ -6,10 +6,11 @@ socket, bound on its own TCP port (base_port + packet_type) so that a
 consumer can subscribe to only the stream(s) it needs. Ports are hardcoded
 arithmetically for now, pending a future service registry that will allocate
 them dynamically. This class opens one SUB socket per known packet type,
-connected to the plugin, and fans all of them into a single callback
-(mirroring the previous single-socket receive semantics: the packet type is
-already encoded in the RawUdpHeader of the payload, so downstream decoding is
-unaffected by which port a given message arrived on).
+connected to the plugin, and fans all of them into a single callback. Since
+several packet types are pure FlatBuffers with no outer header (the message
+boundary IS the FlatBuffer), the callback is told which packet type a given
+message came from via the socket it arrived on, rather than by inspecting
+the payload.
 """
 
 import threading
@@ -18,7 +19,7 @@ from collections.abc import Callable
 
 import zmq
 
-DataReceivedCallback = Callable[[bytes, float], None]
+DataReceivedCallback = Callable[[int, bytes, float], None]
 
 # Outbound packet types actually emitted by the plugin (see
 # isimotor-rawudp-plugin/src/main.cpp's kOutboundPacketTypes), each bound on
@@ -38,7 +39,7 @@ class ZmqSubscriber:
         self.host = host
         self.port = port  # Base port; per-type endpoints are base_port + packet_type.
         self._context: zmq.Context | None = None
-        self._sockets: list[zmq.Socket] = []
+        self._sockets: list[tuple[int, zmq.Socket]] = []
         self._poller: zmq.Poller | None = None
         self._thread: threading.Thread | None = None
         self._running = False
@@ -69,7 +70,7 @@ class ZmqSubscriber:
             sock.setsockopt(zmq.LINGER, 0)
             sock.connect(self.endpoint_for(packet_type))
             self._poller.register(sock, zmq.POLLIN)
-            self._sockets.append(sock)
+            self._sockets.append((packet_type, sock))
 
         self._thread = threading.Thread(target=self._listen_loop, daemon=True, name="IsiMotorZmqSubscriber")
         self._thread.start()
@@ -82,7 +83,7 @@ class ZmqSubscriber:
             self._thread.join(timeout=1.0)
             self._thread = None
 
-        for sock in self._sockets:
+        for _packet_type, sock in self._sockets:
             try:
                 sock.close()
             except Exception:
@@ -107,7 +108,7 @@ class ZmqSubscriber:
 
             try:
                 events = dict(self._poller.poll(timeout=10))
-                for sock in self._sockets:
+                for packet_type, sock in self._sockets:
                     if sock not in events:
                         continue
                     while self._running:
@@ -115,7 +116,7 @@ class ZmqSubscriber:
                             data = sock.recv(flags=zmq.NOBLOCK)
                             now = time.time()
                             if self._on_data_received:
-                                self._on_data_received(data, now)
+                                self._on_data_received(packet_type, data, now)
                         except zmq.Again:
                             break
             except zmq.ZMQError:

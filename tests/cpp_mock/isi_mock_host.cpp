@@ -22,6 +22,11 @@
 
 #include <zmq.hpp>
 
+#include "flatbuffers/flatbuffers.h"
+#include "system_event_generated.h"
+#include "force_feedback_generated.h"
+#include "inbound_command_generated.h"
+
 // Windows / isiMotor compatibility macros
 #define __cdecl
 #define __declspec(x)
@@ -67,10 +72,7 @@ struct CompactScoringPacket {
     double bestLapTime;      // Player personal best lap time
 };
 
-struct SystemEventPacket {
-    uint8_t eventType;       // 1 = EnterRealtime, 2 = ExitRealtime, 3 = StartSession, 4 = EndSession
-    uint8_t pad;
-};
+// SystemEvent (Type 3) is now a FlatBuffer (schemas/system_event.fbs) - see build_golden_event_fbs().
 
 struct FullScoringSessionPacket {
     char          trackName[64];       // Track/circuit name
@@ -204,9 +206,7 @@ struct ExtendedStatePacket {
     float         currentPitSpeedLimit;      // Pit speed limit m/s
 };
 
-struct ForceFeedbackPacket {
-    double forceValue;                      // Steering shaft torque value
-};
+// ForceFeedback (Type 9) is now a FlatBuffer (schemas/force_feedback.fbs) - see build_golden_ffb_fbs().
 
 struct GraphicsPacket {
     TelemVect3 camPos;                      // Camera 3D world position
@@ -218,23 +218,9 @@ struct GraphicsPacket {
     int32_t    cameraType;                  // Camera viewpoint type
 };
 
-struct HWControlCommandPacket {
-    char          controlName[32];       // Control name (e.g. "PitMenuUp", "PitMenuSelect", "TCIncrease")
-    double        controlValue;          // 1.0 = press/on, 0.0 = release/off, or analog value
-    uint16_t      durationMs;            // Pulse duration in ms (e.g. 50ms)
-    uint8_t       pad[2];                // Explicit 4-byte struct padding
-};
-
-struct WeatherControlCommandPacket {
-    double        ambientTemp;           // Air temp in °C
-    double        trackTemp;             // Track surface temp in °C
-    double        darkCloud;             // 0.0 to 1.0
-    double        raining;               // 0.0 to 1.0
-    double        windSpeed;             // Wind speed in m/s
-    double        windDirection;         // Wind direction in radians
-    double        minPathWetness;        // 0.0 to 1.0
-    double        maxPathWetness;        // 0.0 to 1.0
-};
+// HWControl/WeatherControl (Types 100/101) are now a single InboundCommand
+// FlatBuffer with a CommandPayload union (schemas/inbound_command.fbs) - see
+// build_golden_hw_control_fbs() / build_golden_weather_control_fbs().
 
 #pragma pack(pop)
 
@@ -601,9 +587,15 @@ void populate_golden_extended(ExtendedStatePacket &ext) {
     ext.currentPitSpeedLimit = 16.6667f; // 60 km/h
 }
 
-void populate_golden_ffb(ForceFeedbackPacket &ffb) {
-    std::memset(&ffb, 0, sizeof(ffb));
-    ffb.forceValue = 0.685;
+// ForceFeedback (Type 9) is a FlatBuffer now; the "golden" value lives here
+// as a plain double, encoded on demand by build_golden_ffb_fbs().
+static const double kGoldenForceValue = 0.685;
+
+std::vector<uint8_t> build_golden_ffb_fbs() {
+    flatbuffers::FlatBufferBuilder builder;
+    auto root = isimotor::fbs::CreateForceFeedback(builder, kGoldenForceValue);
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 }
 
 void populate_golden_graphics(GraphicsPacket &gfx) {
@@ -619,30 +611,31 @@ void populate_golden_graphics(GraphicsPacket &gfx) {
     gfx.cameraType = 1; // Cockpit
 }
 
-void populate_golden_event(SystemEventPacket &ev, uint8_t type = 1) {
-    std::memset(&ev, 0, sizeof(ev));
-    ev.eventType = type;
-    ev.pad = 0;
+// SystemEvent (Type 3) is a FlatBuffer now; encoded on demand.
+std::vector<uint8_t> build_golden_event_fbs(uint8_t type = 1) {
+    flatbuffers::FlatBufferBuilder builder;
+    auto root = isimotor::fbs::CreateSystemEvent(builder, type);
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 }
 
-void populate_golden_hw_control(HWControlCommandPacket &hw) {
-    std::memset(&hw, 0, sizeof(hw));
-    std::strncpy(hw.controlName, "PitMenuNext", sizeof(hw.controlName) - 1);
-    hw.controlValue = 1.0;
-    hw.durationMs = 50;
-    hw.pad[0] = 0; hw.pad[1] = 0;
+// HWControl/WeatherControl (Types 100/101) are both wrapped in a single
+// InboundCommand FlatBuffer union now; encoded on demand.
+std::vector<uint8_t> build_golden_hw_control_fbs() {
+    flatbuffers::FlatBufferBuilder builder;
+    auto name = builder.CreateString("PitMenuNext");
+    auto hw = isimotor::fbs::CreateHWControl(builder, name, 1.0, 50);
+    auto root = isimotor::fbs::CreateInboundCommand(builder, isimotor::fbs::CommandPayload_HWControl, hw.Union());
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 }
 
-void populate_golden_weather_control(WeatherControlCommandPacket &w) {
-    std::memset(&w, 0, sizeof(w));
-    w.ambientTemp = 24.5;
-    w.trackTemp = 29.8;
-    w.darkCloud = 0.75;
-    w.raining = 0.45;
-    w.windSpeed = 4.2;
-    w.windDirection = 1.5708;
-    w.minPathWetness = 0.2;
-    w.maxPathWetness = 0.8;
+std::vector<uint8_t> build_golden_weather_control_fbs() {
+    flatbuffers::FlatBufferBuilder builder;
+    auto wc = isimotor::fbs::CreateWeatherControl(builder, 24.5, 29.8, 0.75, 0.45, 4.2, 1.5708, 0.2, 0.8);
+    auto root = isimotor::fbs::CreateInboundCommand(builder, isimotor::fbs::CommandPayload_WeatherControl, wc.Union());
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 }
 
 // ── JSON & Binary Dumper ──────────────────────────────────────────────────────
@@ -882,18 +875,16 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
     fj_ext << "}\n";
     fj_ext.close();
 
-    // 8. Force Feedback (FR-06)
-    ForceFeedbackPacket ffb;
-    populate_golden_ffb(ffb);
+    // 8. Force Feedback (FR-06) - FlatBuffer (schemas/force_feedback.fbs)
+    std::vector<uint8_t> ffb_buf = build_golden_ffb_fbs();
     std::ofstream fb_ffb(bin_ffb_path, std::ios::binary);
-    fb_ffb.write(reinterpret_cast<const char*>(&ffb), sizeof(ffb));
+    fb_ffb.write(reinterpret_cast<const char*>(ffb_buf.data()), static_cast<std::streamsize>(ffb_buf.size()));
     fb_ffb.close();
 
     std::ofstream fj_ffb(json_ffb_path);
     fj_ffb << std::setprecision(6) << std::fixed;
     fj_ffb << "{\n";
-    fj_ffb << "  \"struct_size\": " << sizeof(ffb) << ",\n";
-    fj_ffb << "  \"force_value\": " << ffb.forceValue << "\n";
+    fj_ffb << "  \"force_value\": " << kGoldenForceValue << "\n";
     fj_ffb << "}\n";
     fj_ffb.close();
 
@@ -915,61 +906,55 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
     fj_gfx << "}\n";
     fj_gfx.close();
 
-    // 10. System Event
-    SystemEventPacket ev;
-    populate_golden_event(ev, 1);
+    // 10. System Event - FlatBuffer (schemas/system_event.fbs)
+    std::vector<uint8_t> ev_buf = build_golden_event_fbs(1);
     std::ofstream fb_e(bin_event_path, std::ios::binary);
-    fb_e.write(reinterpret_cast<const char*>(&ev), sizeof(ev));
+    fb_e.write(reinterpret_cast<const char*>(ev_buf.data()), static_cast<std::streamsize>(ev_buf.size()));
     fb_e.close();
 
     std::ofstream fj_e(json_event_path);
     fj_e << "{\n";
-    fj_e << "  \"struct_size\": " << sizeof(ev) << ",\n";
-    fj_e << "  \"event_id\": " << static_cast<int>(ev.eventType) << ",\n";
+    fj_e << "  \"event_id\": 1,\n";
     fj_e << "  \"name\": \"EnterRealtime\"\n";
     fj_e << "}\n";
     fj_e.close();
 
-    // 11. Hardware Control Inbound (FR-07, Type 100)
-    HWControlCommandPacket hw;
-    populate_golden_hw_control(hw);
+    // 11. Hardware Control Inbound (FR-07, Type 100) - FlatBuffer (schemas/inbound_command.fbs)
+    std::vector<uint8_t> hw_buf = build_golden_hw_control_fbs();
     std::string bin_hw_path = bin_event_path.substr(0, bin_event_path.find_last_of('/')) + "/hw_control_golden.bin";
     std::string json_hw_path = json_event_path.substr(0, json_event_path.find_last_of('/')) + "/hw_control_golden.json";
     std::ofstream fb_hw(bin_hw_path, std::ios::binary);
-    fb_hw.write(reinterpret_cast<const char*>(&hw), sizeof(hw));
+    fb_hw.write(reinterpret_cast<const char*>(hw_buf.data()), static_cast<std::streamsize>(hw_buf.size()));
     fb_hw.close();
 
     std::ofstream fj_hw(json_hw_path);
     fj_hw << std::setprecision(6) << std::fixed;
     fj_hw << "{\n";
-    fj_hw << "  \"struct_size\": " << sizeof(hw) << ",\n";
-    fj_hw << "  \"control_name\": \"" << hw.controlName << "\",\n";
-    fj_hw << "  \"control_value\": " << hw.controlValue << ",\n";
-    fj_hw << "  \"duration_ms\": " << hw.durationMs << "\n";
+    fj_hw << "  \"control_name\": \"PitMenuNext\",\n";
+    fj_hw << "  \"control_value\": 1.0,\n";
+    fj_hw << "  \"duration_ms\": 50\n";
     fj_hw << "}\n";
     fj_hw.close();
 
-    // 12. Weather Control Inbound (FR-07, Type 101)
-    WeatherControlCommandPacket wc;
-    populate_golden_weather_control(wc);
+    // 12. Weather Control Inbound (FR-07, Type 101) - FlatBuffer (schemas/inbound_command.fbs)
+    std::vector<uint8_t> wc_buf = build_golden_weather_control_fbs();
     std::string bin_wc_path = bin_event_path.substr(0, bin_event_path.find_last_of('/')) + "/weather_control_golden.bin";
     std::string json_wc_path = json_event_path.substr(0, json_event_path.find_last_of('/')) + "/weather_control_golden.json";
     std::ofstream fb_wc(bin_wc_path, std::ios::binary);
-    fb_wc.write(reinterpret_cast<const char*>(&wc), sizeof(wc));
+    fb_wc.write(reinterpret_cast<const char*>(wc_buf.data()), static_cast<std::streamsize>(wc_buf.size()));
     fb_wc.close();
 
     std::ofstream fj_wc(json_wc_path);
     fj_wc << std::setprecision(6) << std::fixed;
     fj_wc << "{\n";
-    fj_wc << "  \"struct_size\": " << sizeof(wc) << ",\n";
-    fj_wc << "  \"ambient_temp\": " << wc.ambientTemp << ",\n";
-    fj_wc << "  \"track_temp\": " << wc.trackTemp << ",\n";
-    fj_wc << "  \"dark_cloud\": " << wc.darkCloud << ",\n";
-    fj_wc << "  \"raining\": " << wc.raining << ",\n";
-    fj_wc << "  \"wind_speed\": " << wc.windSpeed << ",\n";
-    fj_wc << "  \"wind_direction\": " << wc.windDirection << ",\n";
-    fj_wc << "  \"min_path_wetness\": " << wc.minPathWetness << ",\n";
-    fj_wc << "  \"max_path_wetness\": " << wc.maxPathWetness << "\n";
+    fj_wc << "  \"ambient_temp\": 24.5,\n";
+    fj_wc << "  \"track_temp\": 29.8,\n";
+    fj_wc << "  \"dark_cloud\": 0.75,\n";
+    fj_wc << "  \"raining\": 0.45,\n";
+    fj_wc << "  \"wind_speed\": 4.2,\n";
+    fj_wc << "  \"wind_direction\": 1.5708,\n";
+    fj_wc << "  \"min_path_wetness\": 0.2,\n";
+    fj_wc << "  \"max_path_wetness\": 0.8\n";
     fj_wc << "}\n";
     fj_wc.close();
 }
@@ -1097,16 +1082,11 @@ void run_live_udp_server(int base_port, int hz, int duration_sec) {
     ExtendedStatePacket ext_state;
     populate_golden_extended(ext_state);
 
-    ForceFeedbackPacket ffb;
-    populate_golden_ffb(ffb);
-
     GraphicsPacket gfx;
     populate_golden_graphics(gfx);
 
-    SystemEventPacket ev;
-    populate_golden_event(ev, 1);
+    flatbuffers::FlatBufferBuilder ffbBuilder;  // Reused (Clear()'d) for ForceFeedback, sent up to 400Hz.
 
-    unsigned int event_seq = 0;
     unsigned int telem_seq = 0;
     unsigned int scoring_seq = 0;
     unsigned int full_scoring_seq = 0;
@@ -1114,11 +1094,18 @@ void run_live_udp_server(int base_port, int hz, int duration_sec) {
     unsigned int pit_seq = 0;
     unsigned int weather_seq = 0;
     unsigned int ext_seq = 0;
-    unsigned int ffb_seq = 0;
     unsigned int gfx_seq = 0;
 
-    // Send initial system event (Type 3)
-    send_sliced_udp_mock(pubSockets[3], 3, 0, &ev, sizeof(ev), 0.0, event_seq);
+    // Send initial system event (Type 3) - FlatBuffer, no header/chunking.
+    {
+        flatbuffers::FlatBufferBuilder builder;
+        auto root = isimotor::fbs::CreateSystemEvent(builder, 1);
+        builder.Finish(root);
+        try {
+            pubSockets[3].send(zmq::buffer(builder.GetBufferPointer(), builder.GetSize()), zmq::send_flags::dontwait);
+        } catch (const zmq::error_t&) {
+        }
+    }
 
     int total_frames = hz * duration_sec;
     int scoring_divider = std::max(1, hz / 5);    // 5Hz scoring
@@ -1150,30 +1137,29 @@ void run_live_udp_server(int base_port, int hz, int duration_sec) {
                 }
                 if (!result.has_value()) break;
 
-                int bytes = static_cast<int>(in_msg.size());
-                if (bytes < static_cast<int>(sizeof(RawUdpHeader))) continue;
+                // No header/framing: the message IS an isimotor::fbs::InboundCommand
+                // FlatBuffer; its CommandPayload union tells HWControl from WeatherControl.
+                flatbuffers::Verifier verifier(static_cast<const uint8_t*>(in_msg.data()), in_msg.size());
+                if (!isimotor::fbs::VerifyInboundCommandBuffer(verifier)) continue;
+                const isimotor::fbs::InboundCommand* in_cmd = isimotor::fbs::GetInboundCommand(in_msg.data());
 
-                const RawUdpHeader* in_hdr = reinterpret_cast<const RawUdpHeader*>(in_msg.data());
-                if (std::memcmp(in_hdr->magic, "SIMP", 4) != 0) continue;
-
-                const char* in_payload = reinterpret_cast<const char*>(in_msg.data()) + sizeof(RawUdpHeader);
-                size_t in_size = static_cast<size_t>(bytes - sizeof(RawUdpHeader));
-
-                if (in_hdr->packetType == 100 && in_size >= sizeof(HWControlCommandPacket)) {
-                    const HWControlCommandPacket* cmd = reinterpret_cast<const HWControlCommandPacket*>(in_payload);
-                    std::cout << "[C++ Mock Host] Received HW Control Command: " << cmd->controlName
-                              << " (val=" << cmd->controlValue << ", dur=" << cmd->durationMs << "ms)" << std::endl;
-                    if (std::strcmp(cmd->controlName, "PitMenuDown") == 0) {
+                if (in_cmd->payload_type() == isimotor::fbs::CommandPayload_HWControl) {
+                    const isimotor::fbs::HWControl* cmd = in_cmd->payload_as_HWControl();
+                    if (!cmd || !cmd->control_name()) continue;
+                    std::cout << "[C++ Mock Host] Received HW Control Command: " << cmd->control_name()->c_str()
+                              << " (val=" << cmd->control_value() << ", dur=" << cmd->duration_ms() << "ms)" << std::endl;
+                    if (std::strcmp(cmd->control_name()->c_str(), "PitMenuDown") == 0) {
                         pit_menu.choiceIndex = (pit_menu.choiceIndex + 1) % pit_menu.numChoices;
                     }
-                } else if (in_hdr->packetType == 101 && in_size >= sizeof(WeatherControlCommandPacket)) {
-                    const WeatherControlCommandPacket* cmd = reinterpret_cast<const WeatherControlCommandPacket*>(in_payload);
-                    std::cout << "[C++ Mock Host] Received Weather Control Command: Temp=" << cmd->ambientTemp
-                              << "C, Rain=" << cmd->raining << std::endl;
-                    weather.ambientTempK = cmd->ambientTemp + 273.15;
-                    weather.raining[1][1] = cmd->raining;
-                    weather.cloudiness = cmd->darkCloud;
-                    weather.windMaxSpeed = cmd->windSpeed;
+                } else if (in_cmd->payload_type() == isimotor::fbs::CommandPayload_WeatherControl) {
+                    const isimotor::fbs::WeatherControl* cmd = in_cmd->payload_as_WeatherControl();
+                    if (!cmd) continue;
+                    std::cout << "[C++ Mock Host] Received Weather Control Command: Temp=" << cmd->ambient_temp()
+                              << "C, Rain=" << cmd->raining() << std::endl;
+                    weather.ambientTempK = cmd->ambient_temp() + 273.15;
+                    weather.raining[1][1] = cmd->raining();
+                    weather.cloudiness = cmd->dark_cloud();
+                    weather.windMaxSpeed = cmd->wind_speed();
                     send_sliced_udp_mock(pubSockets[7], 7, 0, &weather, sizeof(weather), telem.mElapsedTime, weather_seq);
                 }
             }
@@ -1185,9 +1171,17 @@ void run_live_udp_server(int base_port, int hz, int duration_sec) {
         // 2. Send PitMenu (Type 6 @ 100Hz)
         send_sliced_udp_mock(pubSockets[6], 6, 0, &pit_menu, sizeof(pit_menu), 0.0, pit_seq);
 
-        // 3. Send Force Feedback (Type 9 @ high frequency up to 400Hz)
-        ffb.forceValue = 0.65 + 0.3 * std::sin(sim_time * 25.0);
-        send_sliced_udp_mock(pubSockets[9], 9, 0, &ffb, sizeof(ffb), 0.0, ffb_seq);
+        // 3. Send Force Feedback (Type 9 @ high frequency up to 400Hz) - FlatBuffer, no header/chunking.
+        {
+            double forceValue = 0.65 + 0.3 * std::sin(sim_time * 25.0);
+            ffbBuilder.Clear();
+            auto root = isimotor::fbs::CreateForceFeedback(ffbBuilder, forceValue);
+            ffbBuilder.Finish(root);
+            try {
+                pubSockets[9].send(zmq::buffer(ffbBuilder.GetBufferPointer(), ffbBuilder.GetSize()), zmq::send_flags::dontwait);
+            } catch (const zmq::error_t&) {
+            }
+        }
 
         // 4. Send Graphics (Type 10 @ 60Hz)
         if (frame % gfx_divider == 0) {
@@ -1258,11 +1252,8 @@ int main(int argc, char** argv) {
         std::cout << "PitMenuPacket: " << sizeof(PitMenuPacket) << " bytes" << std::endl;
         std::cout << "WeatherPacket: " << sizeof(WeatherPacket) << " bytes" << std::endl;
         std::cout << "ExtendedStatePacket: " << sizeof(ExtendedStatePacket) << " bytes" << std::endl;
-        std::cout << "ForceFeedbackPacket: " << sizeof(ForceFeedbackPacket) << " bytes" << std::endl;
         std::cout << "GraphicsPacket: " << sizeof(GraphicsPacket) << " bytes" << std::endl;
-        std::cout << "SystemEventPacket: " << sizeof(SystemEventPacket) << " bytes" << std::endl;
-        std::cout << "HWControlCommandPacket: " << sizeof(HWControlCommandPacket) << " bytes" << std::endl;
-        std::cout << "WeatherControlCommandPacket: " << sizeof(WeatherControlCommandPacket) << " bytes" << std::endl;
+        std::cout << "ForceFeedback/SystemEvent/HWControl/WeatherControl: FlatBuffers (schemas/*.fbs), variable size" << std::endl;
         return 0;
     }
 

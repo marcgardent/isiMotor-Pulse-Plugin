@@ -91,20 +91,16 @@ class TelemetryEngine:
         self.inbound_target_port: int = 5101
         self.last_inbound_cmd_sent: str = "None"
         self.last_inbound_cmd_time: float = 0.0
-        self._inbound_seq: int = 0
         self.reassembly_buffers: dict[tuple, dict] = {}
         self.last_cleanup_time: float = 0.0
-        self._pending: list[bytes] = []
+        self._pending: list[tuple[int, bytes]] = []
 
     def send_hw_control(self, control_name: str, control_value: float = 1.0, duration_ms: int = 50) -> bool:
         """Publishes an inbound Type 100 control packet."""
-        self._inbound_seq += 1
         pkt = encode_hw_control(
             control_name=control_name,
             control_value=control_value,
             duration_ms=duration_ms,
-            with_header=True,
-            sequence_number=self._inbound_seq,
         )
         ok = self._publisher.send_raw(pkt, self.inbound_target_host, self.inbound_target_port)
         if ok:
@@ -116,7 +112,6 @@ class TelemetryEngine:
 
     def send_weather_override(self, ambient_temp: float = 20.0, raining: float = 0.0) -> bool:
         """Publishes an inbound Type 101 weather control packet."""
-        self._inbound_seq += 1
         pkt = encode_weather_control(
             ambient_temp=ambient_temp,
             track_temp=ambient_temp + 5.0,
@@ -126,8 +121,6 @@ class TelemetryEngine:
             wind_direction=0.0,
             min_path_wetness=raining * 0.8,
             max_path_wetness=raining,
-            with_header=True,
-            sequence_number=self._inbound_seq,
         )
         ok = self._publisher.send_raw(pkt, self.inbound_target_host, self.inbound_target_port)
         if ok:
@@ -141,7 +134,7 @@ class TelemetryEngine:
         """Starts the background ZeroMQ SUB receiver (connects to the plugin's telemetry PUB)."""
         self._pending = []
         self._subscriber = ZmqSubscriber(host=self.host, port=self.port)
-        self._subscriber.start(lambda data, _timestamp: self._pending.append(data))
+        self._subscriber.start(lambda packet_type, data, _timestamp: self._pending.append((packet_type, data)))
         self.running = True
 
     def stop(self) -> None:
@@ -158,10 +151,10 @@ class TelemetryEngine:
             return
 
         pending, self._pending = self._pending, []
-        for data in pending:
-            self._process_packet(data)
+        for packet_type, data in pending:
+            self._process_packet(packet_type, data)
 
-    def _process_packet(self, data: bytes, addr: tuple[str, int] | float | None = None) -> None:
+    def _process_packet(self, packet_type: int, data: bytes) -> None:
         """Decodes an incoming binary packet and dispatches to models and stats."""
         now = time.time()
         size = len(data)
@@ -177,8 +170,22 @@ class TelemetryEngine:
 
         pkt_type = PKT_FOREIGN
 
-        # 1. Standardized 24-byte Header
-        if data.startswith(b"SIMP") and size >= HEADER_SIZE and data[4] == 1:
+        # SystemEvent (3) and ForceFeedback (9) are header-less FlatBuffers,
+        # each on its own port: the packet type is known from the socket the
+        # message arrived on, so decode them directly (no SIMP header at all).
+        if packet_type == 3:
+            pkt_type = PKT_SYSTEM_EVENT
+            ev = decode_system_event(data)
+            if ev:
+                self.latest_event = ev
+                self.latest_event_time = now
+        elif packet_type == 9:
+            pkt_type = PKT_FORCE_FEEDBACK
+            ffb = decode_force_feedback(data)
+            if ffb:
+                self.latest_force_feedback = ffb
+        # 1. Standardized 24-byte Header (remaining legacy packet types)
+        elif data.startswith(b"SIMP") and size >= HEADER_SIZE and data[4] == 1:
             hdr = decode_header(data)
             if hdr:
                 payload = data[HEADER_SIZE : HEADER_SIZE + hdr.payload_size]
@@ -209,12 +216,6 @@ class TelemetryEngine:
                     scoring = decode_compact_scoring(payload)
                     if scoring:
                         self.latest_scoring = scoring
-                elif hdr.packet_type == 3:
-                    pkt_type = PKT_SYSTEM_EVENT
-                    ev = decode_system_event(payload)
-                    if ev:
-                        self.latest_event = ev
-                        self.latest_event_time = now
                 elif hdr.packet_type == 4:
                     pkt_type = PKT_FULL_SCORING
                     if hdr.total_chunks == 1:
@@ -249,11 +250,6 @@ class TelemetryEngine:
                     ext = decode_extended_state(payload)
                     if ext:
                         self.latest_extended_state = ext
-                elif hdr.packet_type == 9:
-                    pkt_type = PKT_FORCE_FEEDBACK
-                    ffb = decode_force_feedback(payload)
-                    if ffb:
-                        self.latest_force_feedback = ffb
                 elif hdr.packet_type == 10:
                     pkt_type = PKT_GRAPHICS
                     gfx = decode_graphics(payload)

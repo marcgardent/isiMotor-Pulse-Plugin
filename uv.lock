@@ -308,6 +308,14 @@ wheels = [
 ]
 
 [[package]]
+name = "flatbuffers"
+version = "25.12.19"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl", hash = "sha256:7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4", size = 26661, upload-time = "2025-12-19T23:16:13.622Z" },
+]
+
+[[package]]
 name = "isimotor-rawudp-client"
 version = "0.6.2"
 source = { editable = "isimotor-rawudp-client" }
@@ -328,6 +336,7 @@ name = "isimotor-rawudp-manager"
 version = "0.6.2"
 source = { editable = "isimotor-rawudp-manager" }
 dependencies = [
+    { name = "flatbuffers" },
     { name = "isimotor-rawudp-client" },
     { name = "isimotor-rawudp-types" },
     { name = "pyzmq", version = "27.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
@@ -341,6 +350,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "flatbuffers", specifier = ">=23.5.26" },
     { name = "isimotor-rawudp-client", editable = "isimotor-rawudp-client" },
     { name = "isimotor-rawudp-types", editable = "isimotor-rawudp-types" },
     { name = "pyzmq", specifier = ">=25.0" },
@@ -352,6 +362,12 @@ requires-dist = [
 name = "isimotor-rawudp-types"
 version = "0.6.2"
 source = { editable = "isimotor-rawudp-types" }
+dependencies = [
+    { name = "flatbuffers" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "flatbuffers", specifier = ">=23.5.26" }]
 
 [[package]]
 name = "isimotor-rawudp-workspace"

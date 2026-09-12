@@ -25,7 +25,9 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Games/Entertainment :: Simulation",
 ]
-dependencies = []
+dependencies = [
+    "flatbuffers>=23.5.26",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -1,0 +1,11 @@
+// isiMotor RawUDP - ForceFeedback (outbound, packet type 9, up to 400Hz).
+// Published on its own ZeroMQ PUB port (TcpBasePort + 9); the message on
+// that port IS this FlatBuffer, with no outer framing/header.
+namespace isimotor.fbs;
+
+table ForceFeedback {
+  // Steering shaft torque value.
+  force_value: double;
+}
+
+root_type ForceFeedback;

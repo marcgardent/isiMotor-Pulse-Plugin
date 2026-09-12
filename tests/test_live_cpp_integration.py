@@ -144,8 +144,10 @@ class TestLiveCppIntegration(unittest.TestCase):
         sub = ZmqSubscriber(host="127.0.0.1", port=port)
         received_count = 0
 
-        def _on_data(data: bytes, _timestamp: float) -> None:
+        def _on_data(packet_type: int, data: bytes, _timestamp: float) -> None:
             nonlocal received_count
+            if packet_type != 1:
+                return
             hdr = decode_header(data)
             if hdr and hdr.packet_type == 1 and hdr.chunk_index == 0:
                 received_count += 1

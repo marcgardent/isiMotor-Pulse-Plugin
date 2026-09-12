@@ -26,6 +26,7 @@ exclude = [
     "bin",
     "isimotor-rawudp-plugin",
     "tests/cpp_mock",
+    "isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated",
     "__pycache__",
     "*.egg-info",
     "*.dist-info",
@@ -72,8 +73,11 @@ warn_unused_configs = true
 warn_unused_ignores = true
 check_untyped_defs = true
 ignore_missing_imports = true
-show_error_codes = true
-explicit_package_bases = true
+exclude = "isimotor_rawudp_types/fbs_generated/"
+
+[[tool.mypy.overrides]]
+module = "isimotor_rawudp_types.fbs_generated.*"
+ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = "isimotor_rawudp_client.*"

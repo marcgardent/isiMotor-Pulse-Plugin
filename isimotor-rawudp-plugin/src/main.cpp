@@ -61,6 +61,11 @@ typedef union _LARGE_INTEGER {
 
 #include <zmq.hpp>
 
+#include "flatbuffers/flatbuffers.h"
+#include "system_event_generated.h"
+#include "force_feedback_generated.h"
+#include "inbound_command_generated.h"
+
 #include "InternalsPlugin.hpp"
 
 #define PLUGIN_NAME "isiMotor_RawUDP.dll"
@@ -149,14 +154,7 @@ struct CompactScoringPacket {
     double bestLapTime;      // Player personal best lap time
 };
 
-/**
- * System Event Packet Payload (SIMP Type 3, 2 bytes)
- * Triggered on state transitions.
- */
-struct SystemEventPacket {
-    unsigned char eventType; // 1 = EnterRealtime, 2 = ExitRealtime, 3 = StartSession, 4 = EndSession
-    unsigned char pad;
-};
+// SystemEvent (Type 3) is now a FlatBuffer (schemas/system_event.fbs, isimotor::fbs::SystemEvent) - see SendSystemEvent().
 
 /**
  * Full Scoring Session Header (SIMP Type 4 Header)
@@ -310,13 +308,7 @@ struct ExtendedStatePacket {
     float         currentPitSpeedLimit;     // Pit speed limit m/s
 };
 
-/**
- * Force Feedback Packet (SIMP Type 9, 8 bytes)
- * Ultra-high frequency steering shaft force feedback torque.
- */
-struct ForceFeedbackPacket {
-    double forceValue;                     // Steering shaft torque value
-};
+// ForceFeedback (Type 9) is now a FlatBuffer (schemas/force_feedback.fbs, isimotor::fbs::ForceFeedback) - see ForceFeedback() override below.
 
 /**
  * Graphics & Camera Packet (SIMP Type 10, 128 bytes)
@@ -332,31 +324,9 @@ struct GraphicsPacket {
     long       cameraType;                 // Camera viewpoint type
 };
 
-/**
- * Hardware & Pit Menu Control Command (SIMP Type 100, 44 bytes padded)
- * Inbound UDP command to trigger car/cockpit/pit menu inputs.
- */
-struct HWControlCommandPacket {
-    char          controlName[32];       // Control name (e.g. "PitMenuUp", "PitMenuSelect", "TCIncrease")
-    double        controlValue;          // 1.0 = press/on, 0.0 = release/off, or analog value
-    unsigned short durationMs;           // Pulse duration in ms (e.g. 50ms)
-    unsigned char pad[2];                // Explicit 4-byte struct padding
-};
-
-/**
- * Dynamic Weather Control Injection (SIMP Type 101, 64 bytes)
- * Inbound UDP command to inject ambient weather into live session.
- */
-struct WeatherControlCommandPacket {
-    double        ambientTemp;           // Air temp in °C
-    double        trackTemp;             // Track surface temp in °C
-    double        darkCloud;             // 0.0 to 1.0
-    double        raining;               // 0.0 to 1.0
-    double        windSpeed;             // Wind speed in m/s
-    double        windDirection;         // Wind direction in radians
-    double        minPathWetness;        // 0.0 to 1.0
-    double        maxPathWetness;        // 0.0 to 1.0
-};
+// Inbound commands (HWControl, Type 100; WeatherControl, Type 101) are now a
+// single isimotor::fbs::InboundCommand FlatBuffer with a CommandPayload union
+// (schemas/inbound_command.fbs) - see PollInboundCommands().
 
 #pragma pack(pop)
 
@@ -626,6 +596,13 @@ private:
     unsigned int sequenceCounters[256];
     bool initialized;
 
+    // FlatBuffers builders reused across calls (Clear()'d each time) to avoid
+    // repeated heap allocation for the packet types migrated off the legacy
+    // RawUdpHeader + chunking format (no framing needed: with TCP/ZeroMQ the
+    // message boundary IS the FlatBuffer, so no chunking is needed either).
+    flatbuffers::FlatBufferBuilder fbSystemEventBuilder;
+    flatbuffers::FlatBufferBuilder fbForceFeedbackBuilder;
+
     // Hot-reload: file watcher and resolved config path
 #ifdef _WIN32
     ConfigFileWatcher configWatcher;
@@ -642,10 +619,22 @@ private:
     static const int MAX_ACTIVE_HW_CONTROLS = 32;
     ActiveHWControl activeControls[MAX_ACTIVE_HW_CONTROLS];
 
-    // Inbound Dynamic Weather Override (FR-07)
+    // Inbound Dynamic Weather Override (FR-07). Decoupled from the wire
+    // format (isimotor::fbs::WeatherControl) so this internal state layout
+    // doesn't need to track the schema field-for-field.
+    struct WeatherOverrideData {
+        double ambientTemp;
+        double trackTemp;
+        double darkCloud;
+        double raining;
+        double windSpeed;
+        double windDirection;
+        double minPathWetness;
+        double maxPathWetness;
+    };
     struct WeatherOverrideState {
         bool active;
-        WeatherControlCommandPacket data;
+        WeatherOverrideData data;
     };
     WeatherOverrideState weatherOverride;
 
@@ -943,12 +932,23 @@ public:
         }
     }
 
+    // Sends a FlatBuffer message on a per-type PUB socket, no header/chunking:
+    // over TCP/ZeroMQ the message boundary already IS the FlatBuffer.
+    void SendFlatBuffer(unsigned char packetType, flatbuffers::FlatBufferBuilder& builder) {
+        if (!initialized || packetType > kMaxPacketType || !pubBound[packetType]) return;
+        try {
+            pubSockets[packetType].send(zmq::buffer(builder.GetBufferPointer(), builder.GetSize()), zmq::send_flags::dontwait);
+        } catch (const zmq::error_t&) {
+            // Best-effort: drop the message (e.g. HWM reached, no subscriber connected yet).
+        }
+    }
+
     void SendSystemEvent(unsigned char eventType) {
         if (!initialized || !config.enableSystemEvents || !pubBound[3]) return;
-        SystemEventPacket pkt{};
-        pkt.eventType = eventType;
-        pkt.pad = 0;
-        SendSlicedPayload(3, static_cast<unsigned short>(eventType), &pkt, sizeof(pkt), 0.0);
+        fbSystemEventBuilder.Clear();
+        auto root = isimotor::fbs::CreateSystemEvent(fbSystemEventBuilder, eventType);
+        fbSystemEventBuilder.Finish(root);
+        SendFlatBuffer(3, fbSystemEventBuilder);
     }
 
     void ApplyHWControl(const char* name, double value, unsigned short durationMs) {
@@ -994,26 +994,32 @@ public:
                 break;  // EAGAIN: no more pending messages.
             }
 
-            int bytes = static_cast<int>(msg.size());
-            if (bytes < static_cast<int>(sizeof(RawUdpHeader))) {
+            // No header/framing: the message IS an isimotor::fbs::InboundCommand
+            // FlatBuffer; its CommandPayload union tells HWControl from WeatherControl.
+            flatbuffers::Verifier verifier(static_cast<const uint8_t*>(msg.data()), msg.size());
+            if (!isimotor::fbs::VerifyInboundCommandBuffer(verifier)) {
                 continue;
             }
+            const isimotor::fbs::InboundCommand* cmd = isimotor::fbs::GetInboundCommand(msg.data());
 
-            const RawUdpHeader* hdr = reinterpret_cast<const RawUdpHeader*>(msg.data());
-            if (std::memcmp(hdr->magic, "SIMP", 4) != 0 || hdr->protocolVersion != 1) {
-                continue;
-            }
-
-            const char* payload = reinterpret_cast<const char*>(msg.data()) + sizeof(RawUdpHeader);
-            size_t payloadSize = static_cast<size_t>(bytes - sizeof(RawUdpHeader));
-
-            if (hdr->packetType == 100 && payloadSize >= sizeof(HWControlCommandPacket)) {
-                const HWControlCommandPacket* cmd = reinterpret_cast<const HWControlCommandPacket*>(payload);
-                ApplyHWControl(cmd->controlName, cmd->controlValue, cmd->durationMs);
-            } else if (hdr->packetType == 101 && payloadSize >= sizeof(WeatherControlCommandPacket)) {
-                const WeatherControlCommandPacket* cmd = reinterpret_cast<const WeatherControlCommandPacket*>(payload);
-                weatherOverride.data = *cmd;
-                weatherOverride.active = true;
+            if (cmd->payload_type() == isimotor::fbs::CommandPayload_HWControl) {
+                const isimotor::fbs::HWControl* hw = cmd->payload_as_HWControl();
+                if (hw && hw->control_name()) {
+                    ApplyHWControl(hw->control_name()->c_str(), hw->control_value(), hw->duration_ms());
+                }
+            } else if (cmd->payload_type() == isimotor::fbs::CommandPayload_WeatherControl) {
+                const isimotor::fbs::WeatherControl* wc = cmd->payload_as_WeatherControl();
+                if (wc) {
+                    weatherOverride.data.ambientTemp = wc->ambient_temp();
+                    weatherOverride.data.trackTemp = wc->track_temp();
+                    weatherOverride.data.darkCloud = wc->dark_cloud();
+                    weatherOverride.data.raining = wc->raining();
+                    weatherOverride.data.windSpeed = wc->wind_speed();
+                    weatherOverride.data.windDirection = wc->wind_direction();
+                    weatherOverride.data.minPathWetness = wc->min_path_wetness();
+                    weatherOverride.data.maxPathWetness = wc->max_path_wetness();
+                    weatherOverride.active = true;
+                }
             }
         }
     }
@@ -1496,10 +1502,10 @@ public:
         if (config.unsubscribedBuffersMask & UNSUB_FORCE_FEEDBACK) return false;
         if (!forceFeedbackLimiter.ShouldSend()) return false;
 
-        ForceFeedbackPacket pkt{};
-        pkt.forceValue = forceValue;
-
-        SendSlicedPayload(9, 0, &pkt, sizeof(pkt), 0.0);
+        fbForceFeedbackBuilder.Clear();
+        auto root = isimotor::fbs::CreateForceFeedback(fbForceFeedbackBuilder, forceValue);
+        fbForceFeedbackBuilder.Finish(root);
+        SendFlatBuffer(9, fbForceFeedbackBuilder);
         return false; // Return false so game's native FFB calculation is not overridden
     }
 

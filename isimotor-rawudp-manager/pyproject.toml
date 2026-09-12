@@ -15,6 +15,7 @@ dependencies = [
     "textual>=0.50.0",
     "rich>=13.0.0",
     "pyzmq>=25.0",
+    "flatbuffers>=23.5.26",
     "isimotor-rawudp-client",
     "isimotor-rawudp-types",
 ]
@@ -60,6 +61,7 @@ requires = [
     "textual>=0.50.0",
     "rich>=13.0.0",
     "pyzmq>=25.0",
+    "flatbuffers>=23.5.26",
 ]
 
 [tool.briefcase.app.isimotor-rawudp-manager.windows]
@@ -67,6 +69,7 @@ requires = [
     "textual>=0.50.0",
     "rich>=13.0.0",
     "pyzmq>=25.0",
+    "flatbuffers>=23.5.26",
 ]
 
 [tool.briefcase.app.isimotor-rawudp-manager.linux]
@@ -74,4 +77,5 @@ requires = [
     "textual>=0.50.0",
     "rich>=13.0.0",
     "pyzmq>=25.0",
+    "flatbuffers>=23.5.26",
 ]

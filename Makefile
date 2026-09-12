@@ -1,4 +1,4 @@
-.PHONY: help all build cross test benchmark install uninstall status info clean lint format format-check typecheck check version bump verify-version check-version french-drift drift
+.PHONY: help all build cross test benchmark install uninstall status info clean lint format format-check typecheck check version bump verify-version check-version french-drift drift generate-schemas
 
 BUILD_DIR = build
 BIN_DIR   = bin
@@ -39,6 +39,7 @@ help:
 	@echo "  make check-version  [VERSION=x.y.z] - Alias for 'make verify-version'"
 	@echo "  make french-drift   - Scan codebase for French language drift keywords"
 	@echo "  make drift          - Alias for 'make french-drift'"
+	@echo "  make generate-schemas - Regenerate C++/Python code from schemas/*.fbs (requires flatc)"
 	@echo "  make clean          - Remove build and bin directories"
 	@echo "=================================================================="
 
@@ -180,6 +181,30 @@ french-drift:
 	@$(PYTHON) scripts/french_drift.py
 
 drift: french-drift
+
+# Regenerates the checked-in FlatBuffers bindings from schemas/*.fbs.
+# Requires `flatc` (the FlatBuffers schema compiler, NOT a build-time
+# dependency otherwise — see isimotor-rawudp-plugin/CMakeLists.txt and
+# tests/cpp_mock/Makefile, which only vendor the header-only runtime):
+#   • Ubuntu / Debian : sudo apt install flatbuffers-compiler
+#   • Or download a prebuilt binary from the flatbuffers GitHub releases page.
+generate-schemas:
+	@which flatc >/dev/null 2>&1 || ( \
+		echo "" && \
+		echo "❌ Error: flatc (FlatBuffers compiler) not found." && \
+		echo "   Install it, e.g.: sudo apt install flatbuffers-compiler" && \
+		echo "   or download a prebuilt binary from https://github.com/google/flatbuffers/releases" && \
+		echo "" && \
+		exit 1 \
+	)
+	@echo "==> Generating C++ bindings into isimotor-rawudp-plugin/include/generated/..."
+	@flatc --cpp --gen-object-api -o isimotor-rawudp-plugin/include/generated schemas/*.fbs
+	@echo "==> Generating Python bindings into isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated/..."
+	@rm -rf isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated/isimotor
+	@flatc --python -o isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated schemas/*.fbs
+	@touch isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated/__init__.py
+	@touch isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated/isimotor/__init__.py
+	@echo "==> Schema generation complete. Review the diff before committing."
 
 clean:
 	@echo "==> Cleaning build artifacts..."

@@ -247,22 +247,24 @@ The plugin is a ZeroMQ **PUB/SUB** endpoint over **TCP only**: the plugin always
 
 ## 📡 Wire Protocol Specification (ZeroMQ Payload Format)
 
-All packets (Types 1–10 and Inbound Types 100–101) share the standard 24-byte header `RawUdpHeader` (`SIMP` magic, protocol version 1, sequence numbering, session elapsed time, and chunk reassembly metadata):
+Migration in progress: Types 1–2, 4–8, 10 still share the legacy 24-byte `RawUdpHeader` (`SIMP` magic, protocol version 1, sequence numbering, session elapsed time, and chunk reassembly metadata) around a fixed-layout C struct payload. Types 3, 9, 100 and 101 have been migrated to **FlatBuffers** (`schemas/*.fbs`): since each is delivered on its own ZeroMQ port (or, for the grouped inbound channel, disambiguated by a FlatBuffers union), there is no header and no chunking — the ZeroMQ message boundary IS the FlatBuffer. The remaining types will migrate the same way over time.
 
-| Packet Type | Name | Payload Size | Rate | Description |
+| Packet Type | Name | Wire Format | Rate | Description |
 |---|---|---|---|---|
-| **Type 1** | `TelemInfoV01` | 1888 bytes | 60–100Hz | 4-wheel dynamics, tire temps/pressures/wear, engine RPM, inputs, hybrid SoC. |
-| **Type 2** | `CompactScoring` | 168 bytes | 1–5Hz | Player sector timing (S1/S2/Lap), sector indices, session time. |
-| **Type 3** | `SystemEvent` | 6 bytes | Event-driven | Session start/end, realtime cockpit enter/exit events. |
-| **Type 4** | `FullScoringSession` | Sliced (868+ B) | 5Hz | Up to 128 vehicles on grid, classes, driver names, gaps, pit states. |
-| **Type 5** | `TrackRulesSession` | Sliced (332+ B) | 3Hz | FCY, yellow flag zones, Safety Car position/speed, frozen order. |
-| **Type 6** | `PitMenu` | 76 bytes | 100Hz | Interactive pit menu category, current choice, total choices. |
-| **Type 7** | `WeatherControl` | 108 bytes | 1Hz | 3x3 rain matrix, cloudiness, ambient temp Kelvin/Celsius, wind vector. |
-| **Type 8** | `ExtendedState` | 68 bytes | 5Hz | 22 driving aids (`PhysicsOptions`), max/accumulated impact damage, pit limiter. |
-| **Type 9** | `ForceFeedback` | 8 bytes | 400Hz | Ultra-high-rate steering column shaft torque value & percentage. |
-| **Type 10** | `Graphics` | 128 bytes | 60Hz | 3D camera position, 3x3 orientation matrix, ambient RGB lighting, camera view. |
-| **Type 100** | `HWControlCommand` | 44 bytes | Inbound (On demand) | Hardware button emulation & pit menu navigation (`PitMenuUp/Down/Select`, `TCIncrease`). |
-| **Type 101** | `WeatherControlCommand`| 64 bytes | Inbound (On demand) | Dynamic ambient temperature, rain intensity, wind, and path wetness injection. |
+| **Type 1** | `TelemInfoV01` | Legacy struct, 1888 bytes | 60–100Hz | 4-wheel dynamics, tire temps/pressures/wear, engine RPM, inputs, hybrid SoC. |
+| **Type 2** | `CompactScoring` | Legacy struct, 168 bytes | 1–5Hz | Player sector timing (S1/S2/Lap), sector indices, session time. |
+| **Type 3** | `SystemEvent` | FlatBuffer (`system_event.fbs`) | Event-driven | Session start/end, realtime cockpit enter/exit events. |
+| **Type 4** | `FullScoringSession` | Legacy struct, sliced (868+ B) | 5Hz | Up to 128 vehicles on grid, classes, driver names, gaps, pit states. |
+| **Type 5** | `TrackRulesSession` | Legacy struct, sliced (332+ B) | 3Hz | FCY, yellow flag zones, Safety Car position/speed, frozen order. |
+| **Type 6** | `PitMenu` | Legacy struct, 76 bytes | 100Hz | Interactive pit menu category, current choice, total choices. |
+| **Type 7** | `WeatherControl` | Legacy struct, 108 bytes | 1Hz | 3x3 rain matrix, cloudiness, ambient temp Kelvin/Celsius, wind vector. |
+| **Type 8** | `ExtendedState` | Legacy struct, 68 bytes | 5Hz | 22 driving aids (`PhysicsOptions`), max/accumulated impact damage, pit limiter. |
+| **Type 9** | `ForceFeedback` | FlatBuffer (`force_feedback.fbs`) | 400Hz | Ultra-high-rate steering column shaft torque value & percentage. |
+| **Type 10** | `Graphics` | Legacy struct, 128 bytes | 60Hz | 3D camera position, 3x3 orientation matrix, ambient RGB lighting, camera view. |
+| **Type 100** | `HWControlCommand` | FlatBuffer (`inbound_command.fbs`, `HWControl` union member) | Inbound (On demand) | Hardware button emulation & pit menu navigation (`PitMenuUp/Down/Select`, `TCIncrease`). |
+| **Type 101** | `WeatherControlCommand`| FlatBuffer (`inbound_command.fbs`, `WeatherControl` union member) | Inbound (On demand) | Dynamic ambient temperature, rain intensity, wind, and path wetness injection. |
+
+Schemas live in [`schemas/`](schemas); regenerate the checked-in C++/Python bindings after editing one with `make generate-schemas` (requires the `flatc` compiler).
 
 ---
 

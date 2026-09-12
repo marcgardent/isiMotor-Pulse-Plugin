@@ -23,18 +23,11 @@ from ..constants import (
     HEADER_SIZE,
     PKT_TYPE_COMPACT_SCORING,
     PKT_TYPE_EXTENDED_STATE,
-    PKT_TYPE_FORCE_FEEDBACK,
     PKT_TYPE_FULL_SCORING,
     PKT_TYPE_GRAPHICS,
-    PKT_TYPE_HW_CONTROL,
-    PKT_TYPE_SYSTEM_EVENT,
     PKT_TYPE_TELEMETRY,
     PKT_TYPE_WEATHER,
-    PKT_TYPE_WEATHER_CONTROL,
 )
-from .commands import decode_hw_control, decode_weather_control
-from .events import decode_system_event
-from .feedback import decode_force_feedback
 from .graphics import decode_graphics
 from .header import decode_header
 from .physics import decode_extended_state
@@ -69,16 +62,16 @@ class PacketDecoderRegistry:
         self._register_defaults()
 
     def _register_defaults(self) -> None:
+        # Packet types 3 (SystemEvent), 9 (ForceFeedback), 100 (HWControl) and
+        # 101 (WeatherControl) are FlatBuffers with no RawUdpHeader/chunking
+        # (see decoder/fbs_codec.py); they are dispatched directly by their
+        # packet type/socket, not through this header-based registry.
         self.register(PKT_TYPE_TELEMETRY, decode_telemetry)
         self.register(PKT_TYPE_COMPACT_SCORING, decode_compact_scoring)
-        self.register(PKT_TYPE_SYSTEM_EVENT, decode_system_event)
         self.register(PKT_TYPE_FULL_SCORING, decode_full_scoring)
         self.register(PKT_TYPE_WEATHER, decode_weather)
         self.register(PKT_TYPE_EXTENDED_STATE, decode_extended_state)
-        self.register(PKT_TYPE_FORCE_FEEDBACK, decode_force_feedback)
         self.register(PKT_TYPE_GRAPHICS, decode_graphics)
-        self.register(PKT_TYPE_HW_CONTROL, decode_hw_control)
-        self.register(PKT_TYPE_WEATHER_CONTROL, decode_weather_control)
 
     def register(self, packet_type: int, decoder: DecoderFunc) -> None:
         """Registers or overrides a payload decoder for a given packet type."""

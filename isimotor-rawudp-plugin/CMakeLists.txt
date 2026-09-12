@@ -66,6 +66,25 @@ endif()
 
 FetchContent_MakeAvailable(libzmq cppzmq)
 
+# --- FlatBuffers (message payload serialization) ---
+# Header-only C++ runtime; the flatc compiler is NOT needed at build time,
+# since the *_generated.h headers in include/generated/ are already checked
+# into the repo (regenerate them with `make generate-schemas` after editing
+# a .fbs file under schemas/).
+set(FLATBUFFERS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(FLATBUFFERS_BUILD_FLATC OFF CACHE BOOL "" FORCE)
+set(FLATBUFFERS_BUILD_FLATHASH OFF CACHE BOOL "" FORCE)
+set(FLATBUFFERS_BUILD_FLATLIB ON CACHE BOOL "" FORCE)
+set(FLATBUFFERS_INSTALL OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+    flatbuffers
+    GIT_REPOSITORY https://github.com/google/flatbuffers.git
+    GIT_TAG        v23.5.26
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(flatbuffers)
+
 # --- Source Files ---
 set(SOURCES
     src/main.cpp
@@ -76,8 +95,8 @@ set(SOURCES
 # --- Shared Library (DLL) ---
 add_library(isiMotor_RawUDP SHARED ${SOURCES})
 
-target_include_directories(isiMotor_RawUDP PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(isiMotor_RawUDP PRIVATE libzmq-static cppzmq)
+target_include_directories(isiMotor_RawUDP PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/include/generated)
+target_link_libraries(isiMotor_RawUDP PRIVATE libzmq-static cppzmq flatbuffers)
 
 if(WIN32)
     target_link_libraries(isiMotor_RawUDP PRIVATE ws2_32 iphlpapi rpcrt4)

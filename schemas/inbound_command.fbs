@@ -1,0 +1,33 @@
+// isiMotor RawUDP - inbound commands (hardware controls, weather overrides).
+// Sent grouped on a single ZeroMQ PUB->SUB port (InboundTcpPort): since the
+// port carries more than one command kind, the root table wraps a union so
+// the receiver can tell them apart without any extra framing/header.
+namespace isimotor.fbs;
+
+table HWControl {
+  // Control name (e.g. "PitMenuUp", "PitMenuSelect", "TCIncrease").
+  control_name: string;
+  // 1.0 = press/on, 0.0 = release/off, or an analog value.
+  control_value: double = 1.0;
+  // Pulse duration in milliseconds (e.g. 50ms).
+  duration_ms: uint16 = 50;
+}
+
+table WeatherControl {
+  ambient_temp: double;      // Air temp in °C.
+  track_temp: double;        // Track surface temp in °C.
+  dark_cloud: double;        // 0.0 to 1.0.
+  raining: double;           // 0.0 to 1.0.
+  wind_speed: double;        // Wind speed in m/s.
+  wind_direction: double;    // Wind direction in radians.
+  min_path_wetness: double;  // 0.0 to 1.0.
+  max_path_wetness: double;  // 0.0 to 1.0.
+}
+
+union CommandPayload { HWControl, WeatherControl }
+
+table InboundCommand {
+  payload: CommandPayload;
+}
+
+root_type InboundCommand;

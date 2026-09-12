@@ -23,11 +23,21 @@ from isimotor_rawudp_types import (
     WeatherControlCommand,
 )
 
+from .decoder.events import decode_system_event
+from .decoder.feedback import decode_force_feedback
 from .decoder.packet_decoder import AnyPacket, PacketDecoderRegistry
 from .dispatcher import EventDispatcher, PacketCallback
 from .reassembly import ChunkReassembler
 from .state import StateStore
 from .transport import ZmqPublisher, ZmqSubscriber
+
+# Packet types published as header-less FlatBuffers, dispatched directly by
+# packet type/socket rather than through the header-based decoder registry
+# (see decoder/fbs_codec.py).
+_FBS_DECODERS: dict[int, Callable[[bytes], AnyPacket | None]] = {
+    3: decode_system_event,
+    9: decode_force_feedback,
+}
 
 
 class IsiMotorClient:
@@ -123,20 +133,23 @@ class IsiMotorClient:
 
     # ── Internal Ingestion Pipeline (SLAP) ─────────────────────────────────────
 
-    def _on_datagram_received(self, data: bytes, timestamp: float) -> None:
+    def _on_datagram_received(self, packet_type: int, data: bytes, timestamp: float) -> None:
         """
         Coordinates datagram processing at a single level of abstraction:
-        1. Decode or reassemble multipart chunks into a domain packet
+        1. Decode a FlatBuffer directly, or reassemble/decode a legacy chunked frame
         2. Store latest packet into thread-safe state cache
         3. Dispatch event to registered callbacks
         """
-        packet = self._decode_or_reassemble(data, timestamp)
+        packet = self._decode_or_reassemble(packet_type, data, timestamp)
         if packet is not None:
             self._state.update(packet, timestamp)
             self._dispatcher.dispatch(packet)
 
-    def _decode_or_reassemble(self, data: bytes, timestamp: float) -> AnyPacket | None:
-        """Parses chunked multipart frames or decodes single datagrams."""
+    def _decode_or_reassemble(self, packet_type: int, data: bytes, timestamp: float) -> AnyPacket | None:
+        """Decodes header-less FlatBuffer types directly; reassembles/decodes legacy chunked frames otherwise."""
+        fbs_decoder = _FBS_DECODERS.get(packet_type)
+        if fbs_decoder is not None:
+            return fbs_decoder(data)
         return self._reassembler.process(data, timestamp)
 
     # ── State Accessors (Thread-Safe) ──────────────────────────────────────────

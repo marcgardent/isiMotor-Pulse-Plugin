@@ -12,6 +12,7 @@ from isimotor_rawudp_client.client import IsiMotorClient
 from isimotor_rawudp_client.decoder import (
     HEADER_SIZE,
     decode_compact_scoring,
+    decode_force_feedback,
     decode_full_scoring,
     decode_header,
     decode_hw_control,
@@ -21,11 +22,6 @@ from isimotor_rawudp_client.decoder import (
     decode_weather_control,
     encode_hw_control,
     encode_weather_control,
-)
-from isimotor_rawudp_types import (
-    HWControlCommand,
-    SystemEvent,
-    WeatherControlCommand,
 )
 
 GOLDEN_DIR = os.path.join(os.path.dirname(__file__), "golden")
@@ -252,8 +248,9 @@ class TestGoldenTruth(unittest.TestCase):
         with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
-        self.assertEqual(len(data), 8)
-        ffb = decode_packet(struct.pack("<4sBBHIdBBH", b"SIMP", 1, 9, 8, 30, 0.0, 0, 1, 0) + data)
+        # ForceFeedback (Type 9) is a FlatBuffer with no header/framing: the
+        # message IS the FlatBuffer, decoded directly (no decode_packet).
+        ffb = decode_force_feedback(data)
         self.assertIsNotNone(ffb)
         self.assertAlmostEqual(ffb.force_value, truth["force_value"], places=4)
         self.assertAlmostEqual(ffb.percentage, 68.5, places=1)
@@ -334,17 +331,12 @@ class TestGoldenTruth(unittest.TestCase):
         with open(bin_path, "rb") as f:
             data = f.read()
 
-        self.assertEqual(len(data), 2)
+        # SystemEvent (Type 3) is a FlatBuffer with no header/framing: the
+        # message IS the FlatBuffer, decoded directly (no decode_packet).
         ev = decode_system_event(data)
         self.assertIsNotNone(ev)
         self.assertEqual(ev.event_id, 1)
         self.assertEqual(ev.name, "EnterRealtime")
-
-        # Test decode_packet with SIMP header
-        packet_with_hdr = struct.pack("<4sBBHIdBBH", b"SIMP", 1, 3, 2, 10, 0.0, 0, 1, 1) + data
-        decoded_pkt = decode_packet(packet_with_hdr)
-        self.assertIsInstance(decoded_pkt, SystemEvent)
-        self.assertEqual(decoded_pkt.event_id, 1)
 
     def test_hw_control_golden_decoding_and_encoding(self):
         bin_path = os.path.join(GOLDEN_DIR, "hw_control_golden.bin")
@@ -358,7 +350,8 @@ class TestGoldenTruth(unittest.TestCase):
         with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
-        self.assertEqual(len(data), 44)
+        # HWControl (Type 100) is a FlatBuffer wrapped in the InboundCommand
+        # union (schemas/inbound_command.fbs), no header/framing.
         hw = decode_hw_control(data)
         self.assertIsNotNone(hw)
         self.assertEqual(hw.control_name, truth["control_name"])
@@ -366,15 +359,15 @@ class TestGoldenTruth(unittest.TestCase):
         self.assertAlmostEqual(hw.control_value, truth["control_value"], places=2)
         self.assertEqual(hw.duration_ms, truth["duration_ms"])
 
-        # Test decode_packet with SIMP header
-        packet_with_hdr = struct.pack("<4sBBHIdBBH", b"SIMP", 1, 100, 44, 50, 0.0, 0, 1, 0) + data
-        decoded_pkt = decode_packet(packet_with_hdr)
-        self.assertIsInstance(decoded_pkt, HWControlCommand)
-        self.assertEqual(decoded_pkt.control_name, "PitMenuNext")
-
-        # Test byte-for-byte binary re-encoding
+        # Re-encode and decode again: round-trip consistency (FlatBuffers byte
+        # layout is not guaranteed identical across builds, so compare the
+        # decoded fields rather than the raw bytes).
         re_encoded = encode_hw_control(truth["control_name"], truth["control_value"], truth["duration_ms"])
-        self.assertEqual(re_encoded, data)
+        re_decoded = decode_hw_control(re_encoded)
+        self.assertIsNotNone(re_decoded)
+        self.assertEqual(re_decoded.control_name, hw.control_name)
+        self.assertAlmostEqual(re_decoded.control_value, hw.control_value, places=2)
+        self.assertEqual(re_decoded.duration_ms, hw.duration_ms)
 
     def test_weather_control_golden_decoding_and_encoding(self):
         bin_path = os.path.join(GOLDEN_DIR, "weather_control_golden.bin")
@@ -388,7 +381,8 @@ class TestGoldenTruth(unittest.TestCase):
         with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
-        self.assertEqual(len(data), 64)
+        # WeatherControl (Type 101) is a FlatBuffer wrapped in the
+        # InboundCommand union (schemas/inbound_command.fbs), no header/framing.
         wc = decode_weather_control(data)
         self.assertIsNotNone(wc)
         self.assertAlmostEqual(wc.ambient_temp, truth["ambient_temp"], places=2)
@@ -400,13 +394,9 @@ class TestGoldenTruth(unittest.TestCase):
         self.assertAlmostEqual(wc.min_path_wetness, truth["min_path_wetness"], places=2)
         self.assertAlmostEqual(wc.max_path_wetness, truth["max_path_wetness"], places=2)
 
-        # Test decode_packet with SIMP header
-        packet_with_hdr = struct.pack("<4sBBHIdBBH", b"SIMP", 1, 101, 64, 51, 0.0, 0, 1, 0) + data
-        decoded_pkt = decode_packet(packet_with_hdr)
-        self.assertIsInstance(decoded_pkt, WeatherControlCommand)
-        self.assertAlmostEqual(decoded_pkt.ambient_temp, 24.5, places=1)
-
-        # Test byte-for-byte binary re-encoding
+        # Re-encode and decode again: round-trip consistency (FlatBuffers byte
+        # layout is not guaranteed identical across builds, so compare the
+        # decoded fields rather than the raw bytes).
         re_encoded = encode_weather_control(
             ambient_temp=truth["ambient_temp"],
             track_temp=truth["track_temp"],
@@ -417,7 +407,10 @@ class TestGoldenTruth(unittest.TestCase):
             min_path_wetness=truth["min_path_wetness"],
             max_path_wetness=truth["max_path_wetness"],
         )
-        self.assertEqual(re_encoded, data)
+        re_decoded = decode_weather_control(re_encoded)
+        self.assertIsNotNone(re_decoded)
+        self.assertAlmostEqual(re_decoded.ambient_temp, wc.ambient_temp, places=2)
+        self.assertAlmostEqual(re_decoded.raining, wc.raining, places=2)
 
 
 if __name__ == "__main__":

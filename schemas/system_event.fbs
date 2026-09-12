@@ -1,0 +1,11 @@
+// isiMotor RawUDP - SystemEvent (outbound, packet type 3).
+// Published on its own ZeroMQ PUB port (TcpBasePort + 3); the message on
+// that port IS this FlatBuffer, with no outer framing/header.
+namespace isimotor.fbs;
+
+table SystemEvent {
+  // 1 = EnterRealtime, 2 = ExitRealtime, 3 = StartSession, 4 = EndSession
+  event_type: ubyte;
+}
+
+root_type SystemEvent;

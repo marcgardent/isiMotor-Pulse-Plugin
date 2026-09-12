@@ -1,49 +1,35 @@
 """
 Inbound hardware control and weather override encoders and decoders.
-"""
 
-import struct
+Wire format: a single FlatBuffers InboundCommand message (schemas/
+inbound_command.fbs) with a CommandPayload union distinguishing HWControl
+from WeatherControl - both kinds share the same grouped inbound ZeroMQ port,
+so the union (rather than a header byte) is what tells them apart. No
+chunking/framing: the ZMQ message boundary IS the FlatBuffer.
+"""
 
 from isimotor_rawudp_types import HWControlCommand, WeatherControlCommand
 
-from ..constants import (
-    HW_CONTROL_COMMAND_SIZE,
-    HW_CONTROL_COMMAND_STRUCT,
-    WEATHER_CONTROL_COMMAND_SIZE,
-    WEATHER_CONTROL_COMMAND_STRUCT,
+from .fbs_codec import (
+    decode_hw_control_fbs,
+    decode_weather_control_fbs,
+    encode_hw_control_fbs,
+    encode_weather_control_fbs,
 )
-from .base import _decode_string
-from .header import encode_header
 
 
-def encode_hw_control(
-    control_name: str,
-    control_value: float = 1.0,
-    duration_ms: int = 50,
-    with_header: bool = False,
-    sequence_number: int = 0,
-) -> bytes:
-    """
-    Encodes a 44-byte HWControlCommandPacket, optionally prepended with the 24-byte SIMP header (Type 100).
-    """
-    raw_name = control_name.encode("utf-8")[:32].ljust(32, b"\x00")
-    payload = struct.pack(HW_CONTROL_COMMAND_STRUCT, raw_name, float(control_value), int(duration_ms))
-    if with_header:
-        hdr = encode_header(100, len(payload), sequence_number=sequence_number)
-        return hdr + payload
-    return payload
+def encode_hw_control(control_name: str, control_value: float = 1.0, duration_ms: int = 50) -> bytes:
+    """Encodes an InboundCommand FlatBuffer wrapping a HWControl payload (packet type 100)."""
+    return encode_hw_control_fbs(control_name, control_value, duration_ms)
 
 
 def decode_hw_control(data: bytes, offset: int = 0) -> HWControlCommand | None:
-    """Decodes a 44-byte HWControlCommand packet (Type 100)."""
-    if len(data) - offset < HW_CONTROL_COMMAND_SIZE:
+    """Decodes an InboundCommand FlatBuffer's HWControl payload (packet type 100)."""
+    decoded = decode_hw_control_fbs(data[offset:] if offset else data)
+    if decoded is None:
         return None
-    raw_name, val, dur = struct.unpack_from(HW_CONTROL_COMMAND_STRUCT, data, offset)
-    return HWControlCommand(
-        control_name=_decode_string(raw_name),
-        control_value=val,
-        duration_ms=dur,
-    )
+    control_name, control_value, duration_ms = decoded
+    return HWControlCommand(control_name=control_name, control_value=control_value, duration_ms=duration_ms)
 
 
 def encode_weather_control(
@@ -55,41 +41,35 @@ def encode_weather_control(
     wind_direction: float = 0.0,
     min_path_wetness: float = 0.0,
     max_path_wetness: float = 0.0,
-    with_header: bool = False,
-    sequence_number: int = 0,
 ) -> bytes:
-    """
-    Encodes a 64-byte WeatherControlCommandPacket, optionally prepended with the 24-byte SIMP header (Type 101).
-    """
-    payload = struct.pack(
-        WEATHER_CONTROL_COMMAND_STRUCT,
-        float(ambient_temp),
-        float(track_temp),
-        float(dark_cloud),
-        float(raining),
-        float(wind_speed),
-        float(wind_direction),
-        float(min_path_wetness),
-        float(max_path_wetness),
+    """Encodes an InboundCommand FlatBuffer wrapping a WeatherControl payload (packet type 101)."""
+    return encode_weather_control_fbs(
+        ambient_temp=ambient_temp,
+        track_temp=track_temp,
+        dark_cloud=dark_cloud,
+        raining=raining,
+        wind_speed=wind_speed,
+        wind_direction=wind_direction,
+        min_path_wetness=min_path_wetness,
+        max_path_wetness=max_path_wetness,
     )
-    if with_header:
-        hdr = encode_header(101, len(payload), sequence_number=sequence_number)
-        return hdr + payload
-    return payload
 
 
 def decode_weather_control(data: bytes, offset: int = 0) -> WeatherControlCommand | None:
-    """Decodes a 64-byte WeatherControlCommand packet (Type 101)."""
-    if len(data) - offset < WEATHER_CONTROL_COMMAND_SIZE:
+    """Decodes an InboundCommand FlatBuffer's WeatherControl payload (packet type 101)."""
+    decoded = decode_weather_control_fbs(data[offset:] if offset else data)
+    if decoded is None:
         return None
-    unpacked = struct.unpack_from(WEATHER_CONTROL_COMMAND_STRUCT, data, offset)
+    ambient_temp, track_temp, dark_cloud, raining, wind_speed, wind_direction, min_path_wetness, max_path_wetness = (
+        decoded
+    )
     return WeatherControlCommand(
-        ambient_temp=unpacked[0],
-        track_temp=unpacked[1],
-        dark_cloud=unpacked[2],
-        raining=unpacked[3],
-        wind_speed=unpacked[4],
-        wind_direction=unpacked[5],
-        min_path_wetness=unpacked[6],
-        max_path_wetness=unpacked[7],
+        ambient_temp=ambient_temp,
+        track_temp=track_temp,
+        dark_cloud=dark_cloud,
+        raining=raining,
+        wind_speed=wind_speed,
+        wind_direction=wind_direction,
+        min_path_wetness=min_path_wetness,
+        max_path_wetness=max_path_wetness,
     )

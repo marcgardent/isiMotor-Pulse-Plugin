@@ -1,11 +1,10 @@
 {
-  "struct_size": 64,
-  "ambient_temp": 24.500000,
-  "track_temp": 29.800000,
-  "dark_cloud": 0.750000,
-  "raining": 0.450000,
-  "wind_speed": 4.200000,
-  "wind_direction": 1.570800,
-  "min_path_wetness": 0.200000,
-  "max_path_wetness": 0.800000
+  "ambient_temp": 24.5,
+  "track_temp": 29.8,
+  "dark_cloud": 0.75,
+  "raining": 0.45,
+  "wind_speed": 4.2,
+  "wind_direction": 1.5708,
+  "min_path_wetness": 0.2,
+  "max_path_wetness": 0.8
 }

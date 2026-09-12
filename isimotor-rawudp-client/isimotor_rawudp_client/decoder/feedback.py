@@ -1,18 +1,18 @@
 """
 Steering shaft force feedback packet decoder.
-"""
 
-import struct
+Wire format: FlatBuffers (schemas/force_feedback.fbs), one message per packet
+type 9 (its own ZeroMQ port), no header/framing.
+"""
 
 from isimotor_rawudp_types import ForceFeedback
 
-from ..constants import FORCE_FEEDBACK_SIZE, FORCE_FEEDBACK_STRUCT
+from .fbs_codec import decode_force_feedback_fbs
 
 
 def decode_force_feedback(data: bytes, offset: int = 0) -> ForceFeedback | None:
-    """Decodes an 8-byte ForceFeedback packet (Type 9)."""
-    if len(data) - offset < FORCE_FEEDBACK_SIZE:
+    """Decodes a ForceFeedback FlatBuffer payload (packet type 9)."""
+    force_val = decode_force_feedback_fbs(data[offset:] if offset else data)
+    if force_val is None:
         return None
-
-    force_val = struct.unpack_from(FORCE_FEEDBACK_STRUCT, data, offset)[0]
     return ForceFeedback(force_value=force_val)

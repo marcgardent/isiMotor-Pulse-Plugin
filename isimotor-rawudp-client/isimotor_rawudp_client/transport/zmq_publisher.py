@@ -24,15 +24,9 @@ class ZmqPublisher:
         self.default_host = default_host
         self.default_port = default_port
         self._lock = threading.Lock()
-        self._sequence_number = 0
         self._context: zmq.Context | None = None
         self._socket: zmq.Socket | None = None
         self._connected_endpoint: str | None = None
-
-    def _next_sequence(self) -> int:
-        with self._lock:
-            self._sequence_number += 1
-            return self._sequence_number
 
     def _ensure_connected(self, host: str, port: int) -> None:
         """Lazily creates the PUB socket and (re)connects it if the target endpoint changed."""
@@ -93,14 +87,11 @@ class ZmqPublisher:
         """
         dest_host = host or self.default_host
         dest_port = port or self.default_port
-        seq = self._next_sequence()
 
         packet = encode_hw_control(
             control_name=control_name,
             control_value=control_value,
             duration_ms=duration_ms,
-            with_header=True,
-            sequence_number=seq,
         )
 
         return self._transmit(packet, dest_host, dest_port)
@@ -134,7 +125,6 @@ class ZmqPublisher:
         """
         dest_host = host or self.default_host
         dest_port = port or self.default_port
-        seq = self._next_sequence()
 
         packet = encode_weather_control(
             ambient_temp=ambient_temp,
@@ -145,8 +135,6 @@ class ZmqPublisher:
             wind_direction=wind_direction,
             min_path_wetness=min_path_wetness,
             max_path_wetness=max_path_wetness,
-            with_header=True,
-            sequence_number=seq,
         )
 
         return self._transmit(packet, dest_host, dest_port)
