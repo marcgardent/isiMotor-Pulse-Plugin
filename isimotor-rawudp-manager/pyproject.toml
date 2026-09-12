@@ -57,6 +57,16 @@ sources = [
     "../isimotor-rawudp-types/isimotor_rawudp_types",
 ]
 test_sources = []
+# isimotor-rawudp-client/isimotor-rawudp-types are uv workspace members: they
+# appear as plain names in [project].dependencies above (needed for `uv
+# sync`/[tool.uv.sources] to link them), and Briefcase's dev/build commands
+# merge those PEP 621 dependencies into `requires` unconditionally, then
+# `pip install` them - which fails since they're not published to PyPI.
+# `make briefcase-wheels` builds them into local wheels; pointing pip at that
+# directory via --find-links lets it satisfy those two names without a
+# network index. `sources` above is what actually puts the two packages on
+# sys.path at runtime; this wheel only needs to make `pip install` succeed.
+requirement_installer_args = ["--find-links", ".briefcase-wheels"]
 requires = [
     "textual>=0.50.0",
     "rich>=13.0.0",

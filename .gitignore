@@ -22,6 +22,7 @@ __pycache__/
 dist/
 .venv/
 .briefcase/
+.briefcase-wheels/
 logs/
 .pytest_cache/
 .coverage

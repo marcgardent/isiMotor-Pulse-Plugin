@@ -1,4 +1,4 @@
-.PHONY: help all build cross test benchmark install uninstall status info clean lint format format-check typecheck check version bump verify-version check-version french-drift drift generate-schemas
+.PHONY: help all build cross test benchmark install uninstall status info clean lint format format-check typecheck check version bump verify-version check-version french-drift drift generate-schemas briefcase-wheels
 
 BUILD_DIR = build
 BIN_DIR   = bin
@@ -113,15 +113,21 @@ sync-resources:
 		echo "  ✓ Copied isiMotor_RawUDP.dll to client resources"; \
 	fi
 
-package: sync-resources
+briefcase-wheels:
+	@echo "==> Building local wheels for Briefcase (isimotor-rawudp-client/types aren't on PyPI)..."
+	@rm -rf isimotor-rawudp-manager/.briefcase-wheels
+	@$(UV) build --package isimotor-rawudp-types --wheel -o isimotor-rawudp-manager/.briefcase-wheels --clear
+	@$(UV) build --package isimotor-rawudp-client --wheel -o isimotor-rawudp-manager/.briefcase-wheels
+
+package: sync-resources briefcase-wheels
 	@echo "==> Packaging isiMotor-RawUDP-Manager with Briefcase..."
 	@cd isimotor-rawudp-manager && $(UV) run --with briefcase briefcase package --no-input
 
-briefcase-dev:
+briefcase-dev: briefcase-wheels
 	@echo "==> Running isiMotor-RawUDP-Manager in Briefcase dev mode..."
 	@cd isimotor-rawudp-manager && $(UV) run --with briefcase briefcase dev
 
-briefcase-build: sync-resources
+briefcase-build: sync-resources briefcase-wheels
 	@echo "==> Building isiMotor-RawUDP-Manager with Briefcase..."
 	@cd isimotor-rawudp-manager && $(UV) run --with briefcase briefcase build --no-input
 
