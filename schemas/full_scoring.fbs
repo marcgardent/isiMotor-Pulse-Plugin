@@ -1,0 +1,108 @@
+// isiMotor RawUDP - FullScoringSession (outbound, packet type 4, ~5Hz).
+// Published on its own ZeroMQ PUB port (TcpBasePort + 4); the message on
+// that port IS this FlatBuffer, with no outer framing/header/chunking (a
+// ZeroMQ message is not limited by UDP's MTU, so the old chunk-slicing
+// across the session header + up to 128 vehicles is no longer needed).
+include "graphics.fbs";  // reuses isimotor.fbs.Vec3 (x, y, z doubles)
+
+namespace isimotor.fbs;
+
+table LmuScoringSession {
+  track_grip_level: ubyte;
+  track_limits_steps_per_point: ubyte;
+  track_limits_steps_per_penalty: ubyte;
+  time_of_day_seconds: float;
+}
+
+table LmuVehicleScoring {
+  fuel_fraction: float;      // 0.0-1.0 (already normalized, unlike the old packed-byte wire format)
+  track_limits_steps: ubyte;
+}
+
+table VehicleScoring {
+  id: int32;
+  driver_name: string;
+  vehicle_name: string;
+  total_laps: int16;
+  sector: int8;
+  finish_status: int8;
+  vehicle_lap_dist: double;
+  path_lateral: double;
+  track_edge: double;
+  best_sector1: double;
+  best_sector2: double;
+  best_lap_time: double;
+  last_sector1: double;
+  last_sector2: double;
+  last_lap_time: double;
+  cur_sector1: double;
+  cur_sector2: double;
+  num_pitstops: int16;
+  num_penalties: int16;
+  is_player: bool;
+  control: int8;
+  in_pits: bool;
+  place: ubyte;
+  vehicle_class: string;
+  time_behind_next: double;
+  laps_behind_next: int32;
+  time_behind_leader: double;
+  laps_behind_leader: int32;
+  lap_start_et: double;
+  pos: Vec3;
+  local_vel: Vec3;
+  local_accel: Vec3;
+  ori_0: Vec3;
+  ori_1: Vec3;
+  ori_2: Vec3;
+  local_rot: Vec3;
+  local_rot_accel: Vec3;
+  headlights: ubyte;
+  pit_state: ubyte;
+  server_scored: ubyte;
+  individual_phase: ubyte;
+  qualification: int32;
+  time_into_lap: double;
+  estimated_lap_time: double;
+  pit_group: string;
+  flag: ubyte;
+  under_yellow: bool;
+  count_lap_flag: ubyte;
+  in_garage_stall: bool;
+  pit_lap_dist: float;
+  best_lap_sector1: float;
+  best_lap_sector2: float;
+  lmu: LmuVehicleScoring;
+}
+
+table FullScoringSession {
+  track_name: string;
+  session: int32;
+  current_et: double;
+  end_et: double;
+  max_laps: int32;
+  total_lap_dist: double;
+  num_vehicles: int32;
+  game_phase: ubyte;
+  yellow_flag_state: int8;
+  sector_flag_0: int8;
+  sector_flag_1: int8;
+  sector_flag_2: int8;
+  start_light: ubyte;
+  num_red_lights: ubyte;
+  in_realtime: bool;
+  player_name: string;
+  plr_file_name: string;
+  dark_cloud: double;
+  raining: double;
+  ambient_temp: double;
+  track_temp: double;
+  wind: Vec3;
+  min_path_wetness: double;
+  max_path_wetness: double;
+  avg_path_wetness: double;
+  lmu: LmuScoringSession;
+  vehicles: [VehicleScoring];
+}
+
+root_type FullScoringSession;

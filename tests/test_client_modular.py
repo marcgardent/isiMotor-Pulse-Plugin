@@ -11,7 +11,6 @@ from isimotor_rawudp_client import (
     CompactScoring,
     ExtendedState,
     ForceFeedback,
-    FullScoringSession,
     IsiMotorClient,
     PhysicsOptions,
     SystemEvent,
@@ -19,16 +18,12 @@ from isimotor_rawudp_client import (
     TelemVect3,
     TelemWheel,
 )
-from isimotor_rawudp_client.constants import (
-    PKT_TYPE_FULL_SCORING,
-)
 from isimotor_rawudp_client.decoder import (
     PacketDecoderRegistry,
     decode_packet,
     encode_header,
 )
 from isimotor_rawudp_client.dispatcher import EventDispatcher
-from isimotor_rawudp_client.reassembly import ChunkReassembler
 from isimotor_rawudp_client.state import StateStore
 
 
@@ -157,35 +152,6 @@ class TestModularArchitecture(unittest.TestCase):
         res = decode_packet(data, registry=registry)
         self.assertIsInstance(res, CustomPacket)
         self.assertEqual(res.val, 12345)
-
-    def test_chunk_reassembler_lifecycle_and_timeout(self):
-        """Tests ChunkReassembler with sequential chunks and timeout eviction."""
-        reassembler = ChunkReassembler(timeout_seconds=0.1, cleanup_interval_seconds=0.0)
-
-        # Create dummy 2-chunk packet (Full Scoring payload)
-        # 284 bytes session header
-        dummy_session = b"\x00" * 284
-        chunk0 = dummy_session[:150]
-        chunk1 = dummy_session[150:]
-
-        hdr0 = encode_header(PKT_TYPE_FULL_SCORING, len(chunk0), sequence_number=1, chunk_index=0, total_chunks=2)
-        hdr1 = encode_header(PKT_TYPE_FULL_SCORING, len(chunk1), sequence_number=1, chunk_index=1, total_chunks=2)
-
-        # Incomplete chunk
-        res0 = reassembler.process(hdr0 + chunk0, now=10.0)
-        self.assertIsNone(res0)
-
-        # Complete chunk
-        res1 = reassembler.process(hdr1 + chunk1, now=10.05)
-        self.assertIsInstance(res1, FullScoringSession)
-
-        # Stale chunk timeout
-        reassembler.process(hdr0 + chunk0, now=20.0)
-        self.assertEqual(len(reassembler._buffers), 1)
-
-        # Advance time past timeout
-        reassembler.cleanup_stale(now=20.2)
-        self.assertEqual(len(reassembler._buffers), 0)
 
     def test_client_facade_composition(self):
         """Tests IsiMotorClient facade high-level composition and getters."""

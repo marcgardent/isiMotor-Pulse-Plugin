@@ -247,14 +247,14 @@ The plugin is a ZeroMQ **PUB/SUB** endpoint over **TCP only**: the plugin always
 
 ## 📡 Wire Protocol Specification (ZeroMQ Payload Format)
 
-Migration in progress: Types 1 and 4 still share the legacy 24-byte `RawUdpHeader` (`SIMP` magic, protocol version 1, sequence numbering, session elapsed time, and chunk reassembly metadata) around a fixed-layout C struct payload, since they can be sliced across multiple ZMQ messages. Every other type has been migrated to **FlatBuffers** (`schemas/*.fbs`): since each is delivered on its own ZeroMQ port (or, for the grouped inbound channel, disambiguated by a FlatBuffers union), there is no header and no chunking — the ZeroMQ message boundary IS the FlatBuffer. Types 1 and 4 (the largest, with nested arrays and LMU extensions) will migrate the same way in a future pass.
+Every outbound packet type is a **FlatBuffer** (`schemas/*.fbs`): since each is delivered on its own ZeroMQ port (or, for the grouped inbound channel, disambiguated by a FlatBuffers union), there is no header and no chunking — the ZeroMQ message boundary IS the FlatBuffer. The full fork off the legacy `RawUdpHeader`/chunk-slicing wire format is complete; Types 1 and 4 (the largest, with nested arrays and LMU extensions) were the last to migrate.
 
 | Packet Type | Name | Wire Format | Rate | Description |
 |---|---|---|---|---|
-| **Type 1** | `TelemInfoV01` | Legacy struct, 1888 bytes | 60–100Hz | 4-wheel dynamics, tire temps/pressures/wear, engine RPM, inputs, hybrid SoC. |
+| **Type 1** | `TelemInfo` | FlatBuffer (`telemetry.fbs`) | 60–100Hz | 4-wheel dynamics, tire temps/pressures/wear, engine RPM, inputs, hybrid SoC. |
 | **Type 2** | `CompactScoring` | FlatBuffer (`compact_scoring.fbs`) | 1–5Hz | Player sector timing (S1/S2/Lap), sector indices, session time. |
 | **Type 3** | `SystemEvent` | FlatBuffer (`system_event.fbs`) | Event-driven | Session start/end, realtime cockpit enter/exit events. |
-| **Type 4** | `FullScoringSession` | Legacy struct, sliced (868+ B) | 5Hz | Up to 128 vehicles on grid, classes, driver names, gaps, pit states. |
+| **Type 4** | `FullScoringSession` | FlatBuffer (`full_scoring.fbs`) | 5Hz | Up to 128 vehicles on grid, classes, driver names, gaps, pit states. |
 | **Type 5** | `TrackRulesSession` | Legacy struct, sliced (332+ B) | 3Hz | FCY, yellow flag zones, Safety Car position/speed, frozen order. |
 | **Type 6** | `PitMenu` | Legacy struct, 76 bytes | 100Hz | Interactive pit menu category, current choice, total choices. |
 | **Type 7** | `WeatherControl` | FlatBuffer (`weather.fbs`) | 1Hz | 3x3 rain matrix, cloudiness, ambient temp Kelvin/Celsius, wind vector. |

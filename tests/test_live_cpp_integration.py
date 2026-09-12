@@ -10,7 +10,6 @@ import time
 import unittest
 
 from isimotor_rawudp_client.client import IsiMotorClient
-from isimotor_rawudp_client.decoder.header import decode_header
 from isimotor_rawudp_client.transport import ZmqSubscriber
 
 MOCK_BIN = os.path.join(os.path.dirname(__file__), "cpp_mock", "isi_mock_host")
@@ -144,12 +143,12 @@ class TestLiveCppIntegration(unittest.TestCase):
         sub = ZmqSubscriber(host="127.0.0.1", port=port)
         received_count = 0
 
-        def _on_data(packet_type: int, data: bytes, _timestamp: float) -> None:
+        def _on_data(packet_type: int, _data: bytes, _timestamp: float) -> None:
             nonlocal received_count
-            if packet_type != 1:
-                return
-            hdr = decode_header(data)
-            if hdr and hdr.packet_type == 1 and hdr.chunk_index == 0:
+            # TelemInfo (Type 1) is a header-less FlatBuffer, one message per
+            # frame (no header/chunking): the packet type is already known
+            # from the socket it arrived on.
+            if packet_type == 1:
                 received_count += 1
 
         sub.start(_on_data)

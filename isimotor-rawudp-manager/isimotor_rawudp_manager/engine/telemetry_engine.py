@@ -5,14 +5,11 @@ Non-blocking ZeroMQ SUB receiver, chunk reassembly and packet ingestion engine.
 import time
 
 from isimotor_rawudp_client.decoder import (
-    HEADER_SIZE,
-    TELEMINFO_SIZE,
     decode_compact_scoring,
     decode_extended_state,
     decode_force_feedback,
     decode_full_scoring,
     decode_graphics,
-    decode_header,
     decode_system_event,
     decode_telemetry,
     decode_weather,
@@ -91,8 +88,6 @@ class TelemetryEngine:
         self.inbound_target_port: int = 5101
         self.last_inbound_cmd_sent: str = "None"
         self.last_inbound_cmd_time: float = 0.0
-        self.reassembly_buffers: dict[tuple, dict] = {}
-        self.last_cleanup_time: float = 0.0
         self._pending: list[tuple[int, bytes]] = []
 
     def send_hw_control(self, control_name: str, control_value: float = 1.0, duration_ms: int = 50) -> bool:
@@ -161,23 +156,28 @@ class TelemetryEngine:
         self.total_packets += 1
         self.total_bytes += size
 
-        # Cleanup stale multipart frame fragments
-        if now - self.last_cleanup_time > 1.0:
-            self.last_cleanup_time = now
-            stale = [k for k, v in self.reassembly_buffers.items() if now - v.get("timestamp", 0) > 1.0]
-            for k in stale:
-                del self.reassembly_buffers[k]
-
         pkt_type = PKT_FOREIGN
 
-        # Types 2, 3, 7, 8, 9, 10 are header-less FlatBuffers, each on its own
-        # port: the packet type is known from the socket the message arrived
-        # on, so decode them directly (no SIMP header at all).
-        if packet_type == 2:
+        # Every outbound type (1, 2, 3, 4, 7, 8, 9, 10) is a header-less
+        # FlatBuffer, each on its own port: the packet type is known from the
+        # socket the message arrived on, so decode it directly (no SIMP
+        # header, no chunk reassembly).
+        if packet_type == 1:
+            pkt_type = PKT_RAW_TELEMETRY
+            telem = decode_telemetry(data)
+            if telem:
+                self.latest_telemetry = telem
+        elif packet_type == 2:
             pkt_type = PKT_COMPACT_SCORING
             scoring = decode_compact_scoring(data)
             if scoring:
                 self.latest_scoring = scoring
+        elif packet_type == 4:
+            pkt_type = PKT_FULL_SCORING
+            fs = decode_full_scoring(data)
+            if fs:
+                self.latest_full_scoring = fs
+                self.stats[PKT_FULL_SCORING].record_logical(now)
         elif packet_type == 3:
             pkt_type = PKT_SYSTEM_EVENT
             ev = decode_system_event(data)
@@ -204,66 +204,10 @@ class TelemetryEngine:
             gfx = decode_graphics(data)
             if gfx:
                 self.latest_graphics = gfx
-        # 1. Standardized 24-byte Header (remaining legacy packet types: 1, 4)
-        elif data.startswith(b"SIMP") and size >= HEADER_SIZE and data[4] == 1:
-            hdr = decode_header(data)
-            if hdr:
-                payload = data[HEADER_SIZE : HEADER_SIZE + hdr.payload_size]
-                if hdr.packet_type == 1:
-                    pkt_type = PKT_RAW_TELEMETRY
-                    if hdr.total_chunks == 1:
-                        telem = decode_telemetry(payload)
-                        if telem:
-                            self.latest_telemetry = telem
-                    else:
-                        key = (hdr.packet_type, hdr.sequence_number)
-                        if key not in self.reassembly_buffers:
-                            self.reassembly_buffers[key] = {
-                                "total_chunks": hdr.total_chunks,
-                                "chunks": {},
-                                "timestamp": now,
-                            }
-                        buf = self.reassembly_buffers[key]
-                        buf["chunks"][hdr.chunk_index] = payload
-                        if len(buf["chunks"]) == buf["total_chunks"]:
-                            ordered = [buf["chunks"][i] for i in range(buf["total_chunks"]) if i in buf["chunks"]]
-                            del self.reassembly_buffers[key]
-                            telem = decode_telemetry(b"".join(ordered))
-                            if telem:
-                                self.latest_telemetry = telem
-                elif hdr.packet_type == 4:
-                    pkt_type = PKT_FULL_SCORING
-                    if hdr.total_chunks == 1:
-                        fs = decode_full_scoring(payload)
-                        if fs:
-                            self.latest_full_scoring = fs
-                            self.stats[PKT_FULL_SCORING].record_logical(now)
-                    else:
-                        key = (hdr.packet_type, hdr.sequence_number)
-                        if key not in self.reassembly_buffers:
-                            self.reassembly_buffers[key] = {
-                                "total_chunks": hdr.total_chunks,
-                                "chunks": {},
-                                "timestamp": now,
-                            }
-                        buf = self.reassembly_buffers[key]
-                        buf["chunks"][hdr.chunk_index] = payload
-                        if len(buf["chunks"]) == buf["total_chunks"]:
-                            ordered = [buf["chunks"][i] for i in range(buf["total_chunks"]) if i in buf["chunks"]]
-                            del self.reassembly_buffers[key]
-                            fs = decode_full_scoring(b"".join(ordered))
-                            if fs:
-                                self.latest_full_scoring = fs
-                                self.stats[PKT_FULL_SCORING].record_logical(now)
-                elif hdr.packet_type == 100:
-                    pkt_type = PKT_HW_CONTROL
-                elif hdr.packet_type == 101:
-                    pkt_type = PKT_WEATHER_CONTROL
-        elif size == TELEMINFO_SIZE or size == 1904 or size == 2024:
-            telem = decode_telemetry(data)
-            if telem:
-                pkt_type = PKT_RAW_TELEMETRY
-                self.latest_telemetry = telem
+        elif packet_type == 100:
+            pkt_type = PKT_HW_CONTROL
+        elif packet_type == 101:
+            pkt_type = PKT_WEATHER_CONTROL
 
         self.stats[pkt_type].record(size, now)
 

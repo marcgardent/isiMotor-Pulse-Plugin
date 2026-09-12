@@ -8,15 +8,18 @@
  * 
  * Features:
  * - ZeroMQ PUB/SUB transport over TCP (libzmq/cppzmq), no JSON/Boost dependency.
- * - Zero dynamic memory allocations in high-frequency telemetry and scoring update loops.
- * - Standardized 24-byte header with monotonic sequence numbering and chunk slicing.
- * - Direct binary memory dump of TelemInfoV01 (1888 bytes) published over ZeroMQ.
- * - Multi-vehicle full scoring stream (up to 128 vehicles, ScoringInfoV01 + VehicleScoringInfoV01).
- * - Track rules, flags, and Safety Car / FCY stream (TrackRulesV01, Type 5).
- * - Pit Menu navigation & strategy stream (PitMenuV01, Type 6 @ 100Hz).
+ * - Each outbound packet type is FlatBuffers-encoded (schemas/*.fbs) and published on
+ *   its own TCP port (TcpBasePort + packet type); no header, no chunking - the ZeroMQ
+ *   message boundary already delimits one message.
+ * - Zero dynamic memory allocations in high-frequency telemetry and scoring update loops
+ *   (FlatBufferBuilders are member-owned and reused via Clear() rather than reallocated).
+ * - TelemInfoV01 (1888 bytes) telemetry stream, including all 4 wheels and the LMU
+ *   telemetry/wheel extensions.
+ * - Multi-vehicle full scoring stream (up to 128 vehicles, ScoringInfoV01 + VehicleScoringInfoV01,
+ *   including the LMU scoring extensions).
  * - Weather & ambient conditions stream (WeatherControlInfoV01, Type 7 @ 1Hz).
- * - Compact binary scoring packet (SIMP Type 2, 168 bytes) for ultra-low overhead HUDs.
- * - System event state notifications (SIMP Type 3, 6 bytes).
+ * - Compact binary scoring packet (Type 2) for ultra-low overhead HUDs.
+ * - System event state notifications (Type 3).
  * - UnsubscribedBuffersMask support matching rF2SharedMemoryMapPlugin.
  * - Standard isiMotor configuration via CustomPluginVariables.JSON (InternalsPluginV07).
  * - Live hot-reload of configuration (event-based Win32 file watcher, zero polling).
@@ -69,6 +72,8 @@ typedef union _LARGE_INTEGER {
 #include "weather_generated.h"
 #include "extended_state_generated.h"
 #include "graphics_generated.h"
+#include "telemetry_generated.h"
+#include "full_scoring_generated.h"
 
 #include "InternalsPlugin.hpp"
 
@@ -118,54 +123,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
 #pragma pack(push, 4)
 
-/**
- * Standardized 24-byte UDP Packet Header (SIMP Protocol)
- */
-struct RawUdpHeader {
-    char          magic[4];          // "SIMP"
-    unsigned char protocolVersion;   // 1
-    unsigned char packetType;        // 1=Telem, 2=CompactScoring, 3=Event, 4=FullScoring, 5=Rules, 6=PitMenu, 7=Weather
-    unsigned short payloadSize;      // Payload bytes following header
-    unsigned int  sequenceNumber;    // Monotonic per-stream sequence counter
-    double        sessionET;         // Current session elapsed time in seconds
-    unsigned char chunkIndex;        // 0-based chunk index
-    unsigned char totalChunks;       // Total chunk count for this frame
-    unsigned short subTypeOrId;      // Context ID (e.g., active vehicle count or slot ID)
-};
-
 // CompactScoring (Type 2) is now a FlatBuffer (schemas/compact_scoring.fbs) - see UpdateScoring().
 
 // SystemEvent (Type 3) is now a FlatBuffer (schemas/system_event.fbs, isimotor::fbs::SystemEvent) - see SendSystemEvent().
 
-/**
- * Full Scoring Session Header (SIMP Type 4 Header)
- * 284 bytes describing track, weather overview, session phase, and active car count.
- */
-struct FullScoringSessionPacket {
-    char          trackName[64];       // Track/circuit name
-    long          session;             // 0=testday, 1-4=practice, 5-8=qual, 9=warmup, 10-13=race
-    double        currentET;           // Current session elapsed time in seconds
-    double        endET;               // Ending session elapsed time
-    long          maxLaps;             // Maximum laps for session
-    double        lapDist;             // Track lap distance in meters
-    long          numVehicles;         // Number of active vehicles in grid (0..128)
-    unsigned char gamePhase;           // 0=Garage..5=GreenFlag, 6=FCY..8=SessionOver
-    signed char   yellowFlagState;     // -1=Invalid, 0=None, 1=Pending, 2=PitClosed, 3=PitLeadLap, 4=PitOpen, 5=LastLap, 6=Resume
-    signed char   sectorFlag[3];       // Local yellow flags in S3, S1, S2
-    unsigned char startLight;          // Start light frame
-    unsigned char numRedLights;        // Red lights in start sequence
-    bool          inRealtime;          // 1 if in realtime driving mode
-    char          playerName[32];      // Player name
-    char          plrFileName[64];     // Player profile filename
-    double        darkCloud;           // Cloud darkness (0.0 - 1.0)
-    double        raining;             // Rain intensity (0.0 - 1.0)
-    double        ambientTemp;         // Air temperature (°C)
-    double        trackTemp;           // Track temperature (°C)
-    TelemVect3    wind;                // Wind velocity vector (x, y, z)
-    double        minPathWetness;      // Track minimum wetness (0.0 - 1.0)
-    double        maxPathWetness;      // Track maximum wetness (0.0 - 1.0)
-    double        avgPathWetness;      // Track average wetness (0.0 - 1.0)
-};
+// FullScoringSession (Type 4, header + vehicle array) is now a FlatBuffer
+// (schemas/full_scoring.fbs) - see UpdateScoring(). With ZeroMQ/TCP the
+// message boundary already delimits it, so the old header+chunking across
+// the session header and up to 128 vehicle records is gone too.
 
 /**
  * Track Rules Participant (SIMP Type 5 Participant, 140 bytes)
@@ -479,11 +444,6 @@ public:
 };
 #endif // _WIN32
 
-// Static working buffers (zero dynamic allocations)
-static const size_t MAX_UDP_CHUNK_SIZE = 1200;
-static char s_scoringBuffer[sizeof(FullScoringSessionPacket) + 128 * sizeof(VehicleScoringInfoV01)];
-static char s_chunkPacketBuffer[sizeof(RawUdpHeader) + MAX_UDP_CHUNK_SIZE];
-
 // Outbound packet types actually emitted by this plugin, each on its own bound
 // TCP port (tcpBasePort + packetType) so consumers can subscribe to only the
 // stream(s) they need. Ports are hardcoded arithmetically for now, pending a
@@ -507,7 +467,6 @@ private:
     RateLimiter extendedStateLimiter;
     RateLimiter forceFeedbackLimiter;
     RateLimiter graphicsLimiter;
-    unsigned int sequenceCounters[256];
     bool initialized;
 
     // FlatBuffers builders reused across calls (Clear()'d each time) to avoid
@@ -520,6 +479,8 @@ private:
     flatbuffers::FlatBufferBuilder fbWeatherBuilder;
     flatbuffers::FlatBufferBuilder fbExtendedStateBuilder;
     flatbuffers::FlatBufferBuilder fbGraphicsBuilder;
+    flatbuffers::FlatBufferBuilder fbTelemetryBuilder;
+    flatbuffers::FlatBufferBuilder fbFullScoringBuilder;
 
     // Hot-reload: file watcher and resolved config path
 #ifdef _WIN32
@@ -813,43 +774,6 @@ private:
     }
 
 public:
-    void SendSlicedPayload(unsigned char packetType, unsigned short subTypeOrId, const void* payload, size_t totalPayloadSize, double sessionET) {
-        if (!initialized || totalPayloadSize == 0) return;
-        if (packetType > kMaxPacketType || !pubBound[packetType]) return;
-
-        unsigned int seq = ++sequenceCounters[packetType];
-        const char* src = reinterpret_cast<const char*>(payload);
-        size_t offset = 0;
-        unsigned char totalChunks = static_cast<unsigned char>((totalPayloadSize + MAX_UDP_CHUNK_SIZE - 1) / MAX_UDP_CHUNK_SIZE);
-        if (totalChunks == 0) totalChunks = 1;
-        unsigned char chunkIdx = 0;
-
-        while (offset < totalPayloadSize) {
-            size_t chunkSize = (totalPayloadSize - offset > MAX_UDP_CHUNK_SIZE) ? MAX_UDP_CHUNK_SIZE : (totalPayloadSize - offset);
-
-            RawUdpHeader* hdr = reinterpret_cast<RawUdpHeader*>(s_chunkPacketBuffer);
-            hdr->magic[0] = 'S'; hdr->magic[1] = 'I'; hdr->magic[2] = 'M'; hdr->magic[3] = 'P';
-            hdr->protocolVersion = 1;
-            hdr->packetType = packetType;
-            hdr->payloadSize = static_cast<unsigned short>(chunkSize);
-            hdr->sequenceNumber = seq;
-            hdr->sessionET = sessionET;
-            hdr->chunkIndex = chunkIdx++;
-            hdr->totalChunks = totalChunks;
-            hdr->subTypeOrId = subTypeOrId;
-
-            std::memcpy(s_chunkPacketBuffer + sizeof(RawUdpHeader), src + offset, chunkSize);
-
-            try {
-                pubSockets[packetType].send(zmq::buffer(s_chunkPacketBuffer, sizeof(RawUdpHeader) + chunkSize), zmq::send_flags::dontwait);
-            } catch (const zmq::error_t&) {
-                // Best-effort: drop the message (e.g. HWM reached, no subscriber connected yet).
-            }
-
-            offset += chunkSize;
-        }
-    }
-
     // Sends a FlatBuffer message on a per-type PUB socket, no header/chunking:
     // over TCP/ZeroMQ the message boundary already IS the FlatBuffer.
     void SendFlatBuffer(unsigned char packetType, flatbuffers::FlatBufferBuilder& builder) {
@@ -949,7 +873,6 @@ public:
             pubBound[i] = false;
         }
         std::memset(&config, 0, sizeof(config));
-        std::memset(sequenceCounters, 0, sizeof(sequenceCounters));
         std::memset(activeControls, 0, sizeof(activeControls));
         std::memset(&weatherOverride, 0, sizeof(weatherOverride));
         std::memset(resolvedConfigPath, 0, sizeof(resolvedConfigPath));
@@ -1113,6 +1036,26 @@ public:
         return 0;
     }
 
+    // Encodes one TelemWheelV01 (with its embedded LMU wheel extension) into the builder.
+    static flatbuffers::Offset<isimotor::fbs::TelemWheel> EncodeWheelFbs(
+            flatbuffers::FlatBufferBuilder &b, const TelemWheelV01 &w) {
+        auto lmu = isimotor::fbs::CreateLmuWheel(b, w.mLMUExtension.mCompoundType, w.mLMUExtension.mBrakeWear);
+        auto terrainName = b.CreateString(w.mTerrainName, strnlen(w.mTerrainName, sizeof(w.mTerrainName)));
+        double temperature[3] = {w.mTemperature[0], w.mTemperature[1], w.mTemperature[2]};
+        auto temperatureOffset = b.CreateVector<double>(temperature, 3);
+        double innerLayerTemp[3] = {
+            w.mTireInnerLayerTemperature[0], w.mTireInnerLayerTemperature[1], w.mTireInnerLayerTemperature[2]};
+        auto innerLayerTempOffset = b.CreateVector<double>(innerLayerTemp, 3);
+
+        return isimotor::fbs::CreateTelemWheel(
+            b, w.mSuspensionDeflection, w.mRideHeight, w.mSuspForce, w.mBrakeTemp, w.mBrakePressure,
+            w.mRotation, w.mLateralPatchVel, w.mLongitudinalPatchVel, w.mLateralGroundVel, w.mLongitudinalGroundVel,
+            w.mCamber, w.mLateralForce, w.mLongitudinalForce, w.mTireLoad, w.mGripFract, w.mPressure,
+            temperatureOffset, w.mWear, terrainName, w.mSurfaceType, w.mFlat, w.mDetached,
+            w.mStaticUndeflectedRadius, w.mVerticalTireDeflection, w.mWheelYLocation, w.mToe,
+            w.mTireCarcassTemperature, innerLayerTempOffset, lmu);
+    }
+
     // High frequency callback (~60-100Hz): Direct memory dump (zero-copy, zero-allocation)
     void UpdateTelemetry(const TelemInfoV01 &info) override {
         if (!initialized) return;
@@ -1143,14 +1086,112 @@ public:
             if (!opponentTelemetryLimiters[slot].ShouldSend()) return;
         }
 
-        SendSlicedPayload(1, static_cast<unsigned short>(info.mID >= 0 ? info.mID : 0),
-                          &info, sizeof(TelemInfoV01), info.mElapsedTime);
+        if (!pubBound[1]) return;
+
+        flatbuffers::FlatBufferBuilder &b = fbTelemetryBuilder;
+        b.Clear();
+
+        // Wheels (front-left, front-right, rear-left, rear-right), each with its LMU extension.
+        flatbuffers::Offset<isimotor::fbs::TelemWheel> wheelOffsets[4];
+        for (int i = 0; i < 4; ++i) {
+            wheelOffsets[i] = EncodeWheelFbs(b, info.mWheel[i]);
+        }
+        auto wheelsVec = b.CreateVector(wheelOffsets, 4);
+
+        // LMU telemetry extension (mapped within mExpansion/mLMUExtension union).
+        const LMUExtendedTelemetry &lmuSrc = info.mLMUExtension;
+        auto ecu = isimotor::fbs::CreateEcuRaw(
+            b, lmuSrc.mTC, lmuSrc.mTCMax, lmuSrc.mTCCut, lmuSrc.mTCCutMax, lmuSrc.mTCSlip, lmuSrc.mTCSlipMax,
+            lmuSrc.mABS, lmuSrc.mABSMax, lmuSrc.mTCActive, lmuSrc.mABSActive, lmuSrc.mMotorMap, lmuSrc.mMotorMapMax,
+            lmuSrc.mMigration, lmuSrc.mMigrationMax, lmuSrc.mFrontAntiSway, lmuSrc.mFrontAntiSwayMax,
+            lmuSrc.mRearAntiSway, lmuSrc.mRearAntiSwayMax, lmuSrc.mWiperState, lmuSrc.mLiftAndCoastProgress);
+        auto vehicleModel = b.CreateString(lmuSrc.mVehicleModel, strnlen(lmuSrc.mVehicleModel, sizeof(lmuSrc.mVehicleModel)));
+        auto lmu = isimotor::fbs::CreateLmuTelemetry(
+            b, ecu, lmuSrc.mVirtualEnergy, lmuSrc.mRegen, lmuSrc.mTrackLimitsSteps, vehicleModel);
+
+        auto vehicleName = b.CreateString(info.mVehicleName, strnlen(info.mVehicleName, sizeof(info.mVehicleName)));
+        auto trackName = b.CreateString(info.mTrackName, strnlen(info.mTrackName, sizeof(info.mTrackName)));
+        auto frontCompoundName = b.CreateString(
+            info.mFrontTireCompoundName, strnlen(info.mFrontTireCompoundName, sizeof(info.mFrontTireCompoundName)));
+        auto rearCompoundName = b.CreateString(
+            info.mRearTireCompoundName, strnlen(info.mRearTireCompoundName, sizeof(info.mRearTireCompoundName)));
+
+        uint8_t dentSeverity[8];
+        for (int i = 0; i < 8; ++i) dentSeverity[i] = info.mDentSeverity[i];
+        auto dentSeverityOffset = b.CreateVector<uint8_t>(dentSeverity, 8);
+
+        float p2g[3] = {
+            info.mPhysicsToGraphicsOffset[0], info.mPhysicsToGraphicsOffset[1], info.mPhysicsToGraphicsOffset[2]};
+        auto p2gOffset = b.CreateVector<float>(p2g, 3);
+
+        isimotor::fbs::Vec3 pos(info.mPos.x, info.mPos.y, info.mPos.z);
+        isimotor::fbs::Vec3 localVel(info.mLocalVel.x, info.mLocalVel.y, info.mLocalVel.z);
+        isimotor::fbs::Vec3 localAccel(info.mLocalAccel.x, info.mLocalAccel.y, info.mLocalAccel.z);
+        isimotor::fbs::Vec3 ori0(info.mOri[0].x, info.mOri[0].y, info.mOri[0].z);
+        isimotor::fbs::Vec3 ori1(info.mOri[1].x, info.mOri[1].y, info.mOri[1].z);
+        isimotor::fbs::Vec3 ori2(info.mOri[2].x, info.mOri[2].y, info.mOri[2].z);
+        isimotor::fbs::Vec3 localRot(info.mLocalRot.x, info.mLocalRot.y, info.mLocalRot.z);
+        isimotor::fbs::Vec3 localRotAccel(info.mLocalRotAccel.x, info.mLocalRotAccel.y, info.mLocalRotAccel.z);
+        isimotor::fbs::Vec3 lastImpactPos(info.mLastImpactPos.x, info.mLastImpactPos.y, info.mLastImpactPos.z);
+
+        auto root = isimotor::fbs::CreateTelemInfo(
+            b, info.mID, info.mDeltaTime, info.mElapsedTime, info.mLapNumber, info.mLapStartET,
+            vehicleName, trackName, &pos, &localVel, &localAccel, &ori0, &ori1, &ori2, &localRot, &localRotAccel,
+            info.mGear, info.mEngineRPM, info.mEngineWaterTemp, info.mEngineOilTemp, info.mClutchRPM,
+            info.mUnfilteredThrottle, info.mUnfilteredBrake, info.mUnfilteredSteering, info.mUnfilteredClutch,
+            info.mFilteredThrottle, info.mFilteredBrake, info.mFilteredSteering, info.mFilteredClutch,
+            info.mSteeringShaftTorque, info.mFront3rdDeflection, info.mRear3rdDeflection,
+            info.mFrontWingHeight, info.mFrontRideHeight, info.mRearRideHeight, info.mDrag,
+            info.mFrontDownforce, info.mRearDownforce, info.mFuel, info.mEngineMaxRPM,
+            info.mScheduledStops, info.mOverheating, info.mDetached, info.mHeadlights, dentSeverityOffset,
+            info.mLastImpactET, info.mLastImpactMagnitude, &lastImpactPos, info.mEngineTorque, info.mCurrentSector,
+            info.mSpeedLimiter, info.mMaxGears, info.mFrontTireCompoundIndex, info.mRearTireCompoundIndex,
+            info.mFuelCapacity, info.mFrontFlapActivated, info.mRearFlapActivated, info.mRearFlapLegalStatus,
+            info.mIgnitionStarter, frontCompoundName, rearCompoundName, info.mSpeedLimiterAvailable,
+            info.mAntiStallActivated, info.mVisualSteeringWheelRange, info.mRearBrakeBias, info.mTurboBoostPressure,
+            p2gOffset, info.mPhysicalSteeringWheelRange, info.mBatteryChargeFraction,
+            info.mElectricBoostMotorTorque, info.mElectricBoostMotorRPM, info.mElectricBoostMotorTemperature,
+            info.mElectricBoostWaterTemperature, info.mElectricBoostMotorState, lmu, wheelsVec);
+        b.Finish(root);
+        SendFlatBuffer(1, b);
     }
 
     // Subscribe to scoring updates (~1-5Hz)
     bool WantsScoringUpdates() override {
         if (config.unsubscribedBuffersMask & UNSUB_SCORING) return false;
         return compactScoringLimiter.IsEnabled() || fullScoringLimiter.IsEnabled();
+    }
+
+    // Encodes one VehicleScoringInfoV01 (with its embedded LMU vehicle scoring extension) into the builder.
+    static flatbuffers::Offset<isimotor::fbs::VehicleScoring> EncodeVehicleScoringFbs(
+            flatbuffers::FlatBufferBuilder &b, const VehicleScoringInfoV01 &v) {
+        auto driverName = b.CreateString(v.mDriverName, strnlen(v.mDriverName, sizeof(v.mDriverName)));
+        auto vehicleName = b.CreateString(v.mVehicleName, strnlen(v.mVehicleName, sizeof(v.mVehicleName)));
+        auto vehicleClass = b.CreateString(v.mVehicleClass, strnlen(v.mVehicleClass, sizeof(v.mVehicleClass)));
+        auto pitGroup = b.CreateString(v.mPitGroup, strnlen(v.mPitGroup, sizeof(v.mPitGroup)));
+
+        isimotor::fbs::Vec3 pos(v.mPos.x, v.mPos.y, v.mPos.z);
+        isimotor::fbs::Vec3 localVel(v.mLocalVel.x, v.mLocalVel.y, v.mLocalVel.z);
+        isimotor::fbs::Vec3 localAccel(v.mLocalAccel.x, v.mLocalAccel.y, v.mLocalAccel.z);
+        isimotor::fbs::Vec3 ori0(v.mOri[0].x, v.mOri[0].y, v.mOri[0].z);
+        isimotor::fbs::Vec3 ori1(v.mOri[1].x, v.mOri[1].y, v.mOri[1].z);
+        isimotor::fbs::Vec3 ori2(v.mOri[2].x, v.mOri[2].y, v.mOri[2].z);
+        isimotor::fbs::Vec3 localRot(v.mLocalRot.x, v.mLocalRot.y, v.mLocalRot.z);
+        isimotor::fbs::Vec3 localRotAccel(v.mLocalRotAccel.x, v.mLocalRotAccel.y, v.mLocalRotAccel.z);
+
+        auto lmu = isimotor::fbs::CreateLmuVehicleScoring(
+            b, v.mLMUExtension.mFuelFraction / 255.0f, v.mLMUExtension.mTrackLimitsSteps);
+
+        return isimotor::fbs::CreateVehicleScoring(
+            b, v.mID, driverName, vehicleName, v.mTotalLaps, v.mSector, v.mFinishStatus, v.mLapDist,
+            v.mPathLateral, v.mTrackEdge, v.mBestSector1, v.mBestSector2, v.mBestLapTime, v.mLastSector1,
+            v.mLastSector2, v.mLastLapTime, v.mCurSector1, v.mCurSector2, v.mNumPitstops, v.mNumPenalties,
+            v.mIsPlayer, v.mControl, v.mInPits, v.mPlace, vehicleClass, v.mTimeBehindNext, v.mLapsBehindNext,
+            v.mTimeBehindLeader, v.mLapsBehindLeader, v.mLapStartET, &pos, &localVel, &localAccel,
+            &ori0, &ori1, &ori2, &localRot, &localRotAccel, v.mHeadlights, v.mPitState, v.mServerScored,
+            v.mIndividualPhase, v.mQualification, v.mTimeIntoLap, v.mEstimatedLapTime, pitGroup, v.mFlag,
+            v.mUnderYellow, v.mCountLapFlag, v.mInGarageStall, v.mPitLapDist, v.mBestLapSector1,
+            v.mBestLapSector2, lmu);
     }
 
     void UpdateScoring(const ScoringInfoV01 &info) override {
@@ -1242,56 +1283,42 @@ public:
             SendFlatBuffer(2, fbCompactScoringBuilder);
         }
 
-        // 2. Full Multi-Car Scoring Stream (SIMP Type 4, Sliced)
-        if (fullScoringLimiter.IsEnabled() && fullScoringLimiter.ShouldSend()) {
-            FullScoringSessionPacket* sess = reinterpret_cast<FullScoringSessionPacket*>(s_scoringBuffer);
-            std::memset(sess, 0, sizeof(FullScoringSessionPacket));
-
-            std::strncpy(sess->trackName, info.mTrackName, sizeof(sess->trackName) - 1);
-            sess->trackName[sizeof(sess->trackName) - 1] = '\0';
-            sess->session = info.mSession;
-            sess->currentET = info.mCurrentET;
-            sess->endET = info.mEndET;
-            sess->maxLaps = info.mMaxLaps;
-            sess->lapDist = info.mLapDist;
-
+        // 2. Full Multi-Car Scoring Stream (Type 4)
+        if (fullScoringLimiter.IsEnabled() && fullScoringLimiter.ShouldSend() && pubBound[4]) {
             long numVehicles = 0;
             if (info.mVehicle != nullptr && info.mNumVehicles > 0) {
                 numVehicles = (info.mNumVehicles > 128) ? 128 : info.mNumVehicles;
             }
-            sess->numVehicles = numVehicles;
 
-            sess->gamePhase = info.mGamePhase;
-            sess->yellowFlagState = info.mYellowFlagState;
-            sess->sectorFlag[0] = info.mSectorFlag[0];
-            sess->sectorFlag[1] = info.mSectorFlag[1];
-            sess->sectorFlag[2] = info.mSectorFlag[2];
-            sess->startLight = info.mStartLight;
-            sess->numRedLights = info.mNumRedLights;
-            sess->inRealtime = info.mInRealtime;
+            flatbuffers::FlatBufferBuilder &b = fbFullScoringBuilder;
+            b.Clear();
 
-            std::strncpy(sess->playerName, info.mPlayerName, sizeof(sess->playerName) - 1);
-            sess->playerName[sizeof(sess->playerName) - 1] = '\0';
-            std::strncpy(sess->plrFileName, info.mPlrFileName, sizeof(sess->plrFileName) - 1);
-            sess->plrFileName[sizeof(sess->plrFileName) - 1] = '\0';
-
-            sess->darkCloud = info.mDarkCloud;
-            sess->raining = info.mRaining;
-            sess->ambientTemp = info.mAmbientTemp;
-            sess->trackTemp = info.mTrackTemp;
-            sess->wind = info.mWind;
-            sess->minPathWetness = info.mMinPathWetness;
-            sess->maxPathWetness = info.mMaxPathWetness;
-            sess->avgPathWetness = info.mAvgPathWetness;
-
-            // Copy vehicle records immediately following session header
-            if (numVehicles > 0 && info.mVehicle != nullptr) {
-                VehicleScoringInfoV01* vehDst = reinterpret_cast<VehicleScoringInfoV01*>(s_scoringBuffer + sizeof(FullScoringSessionPacket));
-                std::memcpy(vehDst, info.mVehicle, numVehicles * sizeof(VehicleScoringInfoV01));
+            flatbuffers::Offset<isimotor::fbs::VehicleScoring> vehicleOffsets[128];
+            for (long i = 0; i < numVehicles; ++i) {
+                vehicleOffsets[i] = EncodeVehicleScoringFbs(b, info.mVehicle[i]);
             }
+            auto vehiclesVec = b.CreateVector(vehicleOffsets, static_cast<size_t>(numVehicles));
 
-            size_t totalPayloadSize = sizeof(FullScoringSessionPacket) + (numVehicles * sizeof(VehicleScoringInfoV01));
-            SendSlicedPayload(4, static_cast<unsigned short>(numVehicles), s_scoringBuffer, totalPayloadSize, info.mCurrentET);
+            const LMUExtendedScoring &lmuSrc = info.mLMUExtension;
+            auto lmu = isimotor::fbs::CreateLmuScoringSession(
+                b, lmuSrc.mTrackGripLevel, lmuSrc.mTrackLimitsStepsPerPoint,
+                lmuSrc.mTrackLimitsStepsPerPenalty, lmuSrc.mTimeOfDay);
+
+            auto trackName = b.CreateString(info.mTrackName, strnlen(info.mTrackName, sizeof(info.mTrackName)));
+            auto playerName = b.CreateString(info.mPlayerName, strnlen(info.mPlayerName, sizeof(info.mPlayerName)));
+            auto plrFileName = b.CreateString(info.mPlrFileName, strnlen(info.mPlrFileName, sizeof(info.mPlrFileName)));
+
+            isimotor::fbs::Vec3 wind(info.mWind.x, info.mWind.y, info.mWind.z);
+
+            auto root = isimotor::fbs::CreateFullScoringSession(
+                b, trackName, info.mSession, info.mCurrentET, info.mEndET, info.mMaxLaps, info.mLapDist,
+                static_cast<int32_t>(numVehicles), info.mGamePhase, info.mYellowFlagState,
+                info.mSectorFlag[0], info.mSectorFlag[1], info.mSectorFlag[2], info.mStartLight,
+                info.mNumRedLights, info.mInRealtime, playerName, plrFileName, info.mDarkCloud, info.mRaining,
+                info.mAmbientTemp, info.mTrackTemp, &wind, info.mMinPathWetness, info.mMaxPathWetness,
+                info.mAvgPathWetness, lmu, vehiclesVec);
+            b.Finish(root);
+            SendFlatBuffer(4, b);
         }
     }
 

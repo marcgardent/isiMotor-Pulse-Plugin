@@ -4,6 +4,7 @@ Validates default values injection, game JSON structure, and settings preservati
 """
 
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -173,10 +174,12 @@ class TestInstallerAndConfig(unittest.TestCase):
 
         overview = get_configuration_overview()
         engine = TelemetryEngine()
-        # Verify raw telemetry packet processing does not raise NameError (TELEMINFO_SIZE)
-        from isimotor_rawudp_client.constants import TELEMINFO_SIZE
-
-        engine._process_packet(1, b"\x00" * TELEMINFO_SIZE)
+        # TelemInfo (Type 1) is a FlatBuffer now (no header/chunking): feed a
+        # real one (from the golden dataset) rather than a dummy zero buffer.
+        golden_path = os.path.join(os.path.dirname(__file__), "golden", "telemetry_golden.bin")
+        with open(golden_path, "rb") as f:
+            telem_bytes = f.read()
+        engine._process_packet(1, telem_bytes)
         self.assertIsNotNone(engine.latest_telemetry)
 
         install_text = render_home_install_summary(overview)

@@ -1,0 +1,156 @@
+// isiMotor RawUDP - TelemInfo (outbound, packet type 1, 60-100Hz+).
+// Published on its own ZeroMQ PUB port (TcpBasePort + 1); the message on
+// that port IS this FlatBuffer, with no outer framing/header/chunking (a
+// ZeroMQ message is not limited by UDP's MTU, so the old chunk-slicing is
+// no longer needed here either).
+include "graphics.fbs";  // reuses isimotor.fbs.Vec3 (x, y, z doubles)
+
+namespace isimotor.fbs;
+
+table EcuRaw {
+  tc: ubyte;
+  tc_max: ubyte;
+  tc_cut: ubyte;
+  tc_cut_max: ubyte;
+  tc_slip: ubyte;
+  tc_slip_max: ubyte;
+  abs_level: ubyte;
+  abs_max: ubyte;
+  tc_active: ubyte;
+  abs_active: ubyte;
+  motor_map: ubyte;
+  motor_map_max: ubyte;
+  brake_migration: ubyte;
+  brake_migration_max: ubyte;
+  front_arb: ubyte;
+  front_arb_max: ubyte;
+  rear_arb: ubyte;
+  rear_arb_max: ubyte;
+  wiper_state: ubyte;
+  lift_and_coast: ubyte;
+}
+
+table LmuTelemetry {
+  ecu: EcuRaw;
+  virtual_energy: double;
+  regen_kw: double;
+  track_limits_steps: ubyte;
+  vehicle_model: string;
+}
+
+table LmuWheel {
+  compound_type: ubyte;
+  brake_wear_meters: double;
+}
+
+table TelemWheel {
+  suspension_deflection: double;
+  ride_height: double;
+  susp_force: double;
+  brake_temp: double;
+  brake_pressure: double;
+  rotation: double;
+  lateral_patch_vel: double;
+  longitudinal_patch_vel: double;
+  lateral_ground_vel: double;
+  longitudinal_ground_vel: double;
+  camber: double;
+  lateral_force: double;
+  longitudinal_force: double;
+  tire_load: double;
+  grip_fraction: double;
+  pressure: double;
+  temperature: [double];  // left/center/right, 3 values
+  wear: double;
+  terrain_name: string;
+  surface_type: ubyte;
+  flat: bool;
+  detached: bool;
+  static_undeflected_radius: ubyte;
+  vertical_tire_deflection: double;
+  wheel_y_location: double;
+  toe: double;
+  tire_carcass_temperature: double;
+  tire_inner_layer_temperature: [double];  // 3 values
+  lmu: LmuWheel;
+}
+
+table TelemInfo {
+  slot_id: int32;
+  delta_time: double;
+  elapsed_time: double;
+  lap_number: int32;
+  lap_start_et: double;
+  vehicle_name: string;
+  track_name: string;
+  pos: Vec3;
+  local_vel: Vec3;
+  local_accel: Vec3;
+  ori_0: Vec3;
+  ori_1: Vec3;
+  ori_2: Vec3;
+  local_rot: Vec3;
+  local_rot_accel: Vec3;
+  gear: int32;
+  engine_rpm: double;
+  engine_water_temp: double;
+  engine_oil_temp: double;
+  clutch_rpm: double;
+  unfiltered_throttle: double;
+  unfiltered_brake: double;
+  unfiltered_steering: double;
+  unfiltered_clutch: double;
+  filtered_throttle: double;
+  filtered_brake: double;
+  filtered_steering: double;
+  filtered_clutch: double;
+  steering_shaft_torque: double;
+  front_3rd_deflection: double;
+  rear_3rd_deflection: double;
+  front_wing_height: double;
+  front_ride_height: double;
+  rear_ride_height: double;
+  drag: double;
+  front_downforce: double;
+  rear_downforce: double;
+  fuel: double;
+  engine_max_rpm: double;
+  scheduled_stops: ubyte;
+  overheating: bool;
+  detached: bool;
+  headlights: bool;
+  dent_severity: [ubyte];  // 8 values
+  last_impact_et: double;
+  last_impact_magnitude: double;
+  last_impact_pos: Vec3;
+  engine_torque: double;
+  current_sector: int32;
+  speed_limiter: ubyte;
+  max_gears: ubyte;
+  front_tire_compound_index: ubyte;
+  rear_tire_compound_index: ubyte;
+  fuel_capacity: double;
+  front_flap_activated: ubyte;
+  rear_flap_activated: ubyte;
+  rear_flap_legal_status: ubyte;
+  ignition_starter: ubyte;
+  front_tire_compound_name: string;
+  rear_tire_compound_name: string;
+  speed_limiter_available: ubyte;
+  anti_stall_activated: ubyte;
+  visual_steering_wheel_range: float;
+  rear_brake_bias: double;
+  turbo_boost_pressure: double;
+  physics_to_graphics_offset: [float];  // 3 values
+  physical_steering_wheel_range: float;
+  battery_charge_fraction: double;
+  electric_boost_motor_torque: double;
+  electric_boost_motor_rpm: double;
+  electric_boost_motor_temperature: double;
+  electric_boost_water_temperature: double;
+  electric_boost_motor_state: ubyte;
+  lmu: LmuTelemetry;
+  wheels: [TelemWheel];  // front-left, front-right, rear-left, rear-right (4)
+}
+
+root_type TelemInfo;

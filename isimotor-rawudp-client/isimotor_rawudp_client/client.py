@@ -28,19 +28,22 @@ from .decoder.feedback import decode_force_feedback
 from .decoder.graphics import decode_graphics
 from .decoder.packet_decoder import AnyPacket, PacketDecoderRegistry
 from .decoder.physics import decode_extended_state
-from .decoder.scoring import decode_compact_scoring
+from .decoder.scoring import decode_compact_scoring, decode_full_scoring
+from .decoder.telemetry import decode_telemetry
 from .decoder.weather import decode_weather
 from .dispatcher import EventDispatcher, PacketCallback
 from .reassembly import ChunkReassembler
 from .state import StateStore
 from .transport import ZmqPublisher, ZmqSubscriber
 
-# Packet types published as header-less FlatBuffers, dispatched directly by
-# packet type/socket rather than through the header-based decoder registry
-# (see decoder/fbs_codec.py).
+# All outbound packet types are published as header-less FlatBuffers,
+# dispatched directly by packet type/socket rather than through the
+# header-based decoder registry (see decoder/fbs_codec.py).
 _FBS_DECODERS: dict[int, Callable[[bytes], AnyPacket | None]] = {
+    1: decode_telemetry,
     2: decode_compact_scoring,
     3: decode_system_event,
+    4: decode_full_scoring,
     7: decode_weather,
     8: decode_extended_state,
     9: decode_force_feedback,

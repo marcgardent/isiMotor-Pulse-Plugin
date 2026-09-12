@@ -61,9 +61,8 @@ from .physics import decode_extended_state
 from .scoring import (
     decode_compact_scoring,
     decode_full_scoring,
-    decode_vehicle_scoring,
 )
-from .telemetry import decode_telemetry, decode_wheel
+from .telemetry import decode_telemetry
 from .weather import decode_weather
 
 __all__ = [
@@ -115,10 +114,8 @@ __all__ = [
     "decode_packet",
     "decode_system_event",
     "decode_telemetry",
-    "decode_vehicle_scoring",
     "decode_weather",
     "decode_weather_control",
-    "decode_wheel",
     "encode_header",
     "encode_hw_control",
     "encode_weather_control",

@@ -19,14 +19,8 @@ from isimotor_rawudp_types import (
     WeatherControlCommand,
 )
 
-from ..constants import (
-    HEADER_SIZE,
-    PKT_TYPE_FULL_SCORING,
-    PKT_TYPE_TELEMETRY,
-)
+from ..constants import HEADER_SIZE
 from .header import decode_header
-from .scoring import decode_full_scoring
-from .telemetry import decode_telemetry
 
 AnyPacket = Union[
     TelemInfo,
@@ -55,17 +49,16 @@ class PacketDecoderRegistry:
         self._register_defaults()
 
     def _register_defaults(self) -> None:
-        # Packet types 2 (CompactScoring), 3 (SystemEvent), 7 (WeatherControl),
-        # 8 (ExtendedState), 9 (ForceFeedback), 10 (Graphics), 100 (HWControl)
-        # and 101 (WeatherControlCommand) are FlatBuffers with no
-        # RawUdpHeader/chunking (see decoder/fbs_codec.py); they are
-        # dispatched directly by their packet type/socket (see client.py's
-        # _FBS_DECODERS), not through this header-based registry. Only Type 1
-        # (Telemetry) and Type 4 (FullScoringSession) remain on the legacy
-        # header + chunk-reassembly path, since they can be sliced across
-        # multiple ZMQ messages.
-        self.register(PKT_TYPE_TELEMETRY, decode_telemetry)
-        self.register(PKT_TYPE_FULL_SCORING, decode_full_scoring)
+        # Every outbound packet type (1 TelemInfo, 2 CompactScoring, 3
+        # SystemEvent, 4 FullScoringSession, 7 WeatherControl, 8 ExtendedState,
+        # 9 ForceFeedback, 10 Graphics) plus the inbound commands (100
+        # HWControl, 101 WeatherControlCommand) are FlatBuffers with no
+        # RawUdpHeader/chunking (see decoder/fbs_codec.py); they are all
+        # dispatched directly by packet type/socket (see client.py's
+        # _FBS_DECODERS), not through this header-based registry. Nothing is
+        # registered here by default; register() remains available for
+        # extension (OCP) or legacy-framed custom types.
+        pass
 
     def register(self, packet_type: int, decoder: DecoderFunc) -> None:
         """Registers or overrides a payload decoder for a given packet type."""

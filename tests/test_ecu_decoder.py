@@ -1,6 +1,12 @@
 """
 Unit Tests for LMU Electronic Aids & ECU Telemetry Decoder (SOLID, SRP, SLAP).
-Tests EcuState dataclass, binary decoding from mExpansion (offset 737), and integration in TelemInfo.
+Tests EcuState dataclass and binary decoding of the raw mExpansion(offset 737) bytes.
+
+End-to-end ECU-within-TelemInfo integration is covered by
+tests/test_golden_truth.py's telemetry test, which decodes a real TelemInfo
+FlatBuffer produced by the C++ mock host (TelemInfo (Type 1) is a FlatBuffer
+now, not a raw memcpy'd struct, so a synthetic byte buffer can no longer
+stand in for one here).
 """
 
 import struct
@@ -9,9 +15,7 @@ import unittest
 from isimotor_rawudp_client import (
     EcuState,
     decode_ecu_state,
-    decode_telemetry,
 )
-from isimotor_rawudp_client.constants import TELEMINFO_SIZE
 
 
 class TestEcuDecoder(unittest.TestCase):
@@ -77,31 +81,6 @@ class TestEcuDecoder(unittest.TestCase):
         self.assertEqual(ecu.motor_map, -1)
         self.assertFalse(ecu.has_tc)
         self.assertFalse(ecu.has_abs)
-
-    def test_full_telemetry_packet_ecu_integration(self):
-        """Validates that decode_telemetry correctly unpacks ECU state at offset 737."""
-        buffer = bytearray(TELEMINFO_SIZE)
-
-        # Populate slot ID at offset 0
-        struct.pack_into("<i", buffer, 0, 42)
-
-        # Populate ECU fields at offset 737:
-        # TC=4, TCMax=10, ABS=2, ABSMax=8, TCActive=1, ABSActive=0
-        ecu_bytes = struct.pack("<20B", 4, 10, 0, 0, 0, 0, 2, 8, 1, 0, 1, 3, 0, 0, 0, 0, 0, 0, 1, 255)
-        buffer[737 : 737 + len(ecu_bytes)] = ecu_bytes
-
-        telem = decode_telemetry(bytes(buffer))
-        self.assertIsNotNone(telem)
-        self.assertEqual(telem.slot_id, 42)
-        self.assertTrue(telem.ecu.tc_active)
-        self.assertFalse(telem.ecu.abs_active)
-        self.assertEqual(telem.ecu.tc_level, 4)
-        self.assertEqual(telem.ecu.tc_max, 10)
-        self.assertEqual(telem.ecu.abs_level, 2)
-        self.assertEqual(telem.ecu.abs_max, 8)
-        self.assertEqual(telem.ecu.motor_map, 1)
-        self.assertEqual(telem.ecu.wiper_state, 1)
-        self.assertAlmostEqual(telem.ecu.lift_and_coast, 1.0, places=4)
 
 
 if __name__ == "__main__":

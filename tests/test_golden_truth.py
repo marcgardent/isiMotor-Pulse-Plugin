@@ -8,7 +8,6 @@ import os
 import struct
 import unittest
 
-from isimotor_rawudp_client.client import IsiMotorClient
 from isimotor_rawudp_client.decoder import (
     HEADER_SIZE,
     decode_compact_scoring,
@@ -42,7 +41,8 @@ class TestGoldenTruth(unittest.TestCase):
         with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
-        self.assertEqual(len(data), 1888, f"Expected 1888 bytes, got {len(data)}")
+        # TelemInfo (Type 1) is a FlatBuffer with no header/framing: the
+        # message IS the FlatBuffer, decoded directly (no decode_packet).
         t = decode_telemetry(data)
         self.assertIsNotNone(t, "Telemetry decode returned None")
 
@@ -136,9 +136,9 @@ class TestGoldenTruth(unittest.TestCase):
         with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
-        expected_size = 284 + 3 * 584
-        self.assertEqual(len(data), expected_size, f"Expected {expected_size} bytes, got {len(data)}")
-
+        # FullScoringSession (Type 4) is a FlatBuffer with no header/framing,
+        # including all its embedded vehicles: the message IS the FlatBuffer,
+        # decoded directly (no decode_packet).
         fs = decode_full_scoring(data)
         self.assertIsNotNone(fs, "Full scoring decode returned None")
 
@@ -303,34 +303,6 @@ class TestGoldenTruth(unittest.TestCase):
         self.assertEqual(hdr.chunk_index, 0)
         self.assertEqual(hdr.total_chunks, 2)
         self.assertEqual(hdr.sub_type_or_id, 3)
-
-    def test_chunk_slicing_and_reassembly(self):
-        bin_path = os.path.join(GOLDEN_DIR, "full_scoring_golden.bin")
-        with open(bin_path, "rb") as f:
-            full_data = f.read()
-
-        client = IsiMotorClient()
-        chunk_size = 1200
-        total_chunks = (len(full_data) + chunk_size - 1) // chunk_size
-
-        chunk0_payload = full_data[0:chunk_size]
-        hdr0 = struct.pack("<4sBBHIdBBH", b"SIMP", 1, 4, len(chunk0_payload), 42, 100.0, 0, total_chunks, 3)
-        pkt0 = hdr0 + chunk0_payload
-
-        chunk1_payload = full_data[chunk_size:]
-        hdr1 = struct.pack("<4sBBHIdBBH", b"SIMP", 1, 4, len(chunk1_payload), 42, 100.0, 1, total_chunks, 3)
-        pkt1 = hdr1 + chunk1_payload
-
-        # Process chunk 0 (incomplete)
-        res0 = client.reassembler.process(pkt0, 1000.0)
-        self.assertIsNone(res0, "Expected None while chunks are incomplete")
-
-        # Process chunk 1 (complete)
-        res1 = client.reassembler.process(pkt1, 1000.0)
-        self.assertIsNotNone(res1, "Expected FullScoringSession upon assembling all chunks")
-        self.assertEqual(res1.num_vehicles, 3)
-        self.assertEqual(res1.track_name, "Circuit de la Sarthe - Le Mans")
-        self.assertEqual(len(res1.vehicles), 3)
 
     def test_event_golden_decoding(self):
         bin_path = os.path.join(GOLDEN_DIR, "event_golden.bin")
