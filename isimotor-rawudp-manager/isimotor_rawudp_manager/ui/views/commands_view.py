@@ -1,5 +1,5 @@
 """
-Inbound UDP Remote Commands View composition.
+Inbound ZeroMQ Remote Commands View composition.
 """
 
 from __future__ import annotations

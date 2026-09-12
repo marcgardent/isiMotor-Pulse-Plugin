@@ -1,5 +1,5 @@
 """
-isiMotor UDP Telemetry Packet Explorer & Benchmark (Facade Module).
+isiMotor ZeroMQ Telemetry Packet Explorer & Benchmark (Facade Module).
 Maintains 100% backward compatibility for all imports and CLI entry points.
 """
 

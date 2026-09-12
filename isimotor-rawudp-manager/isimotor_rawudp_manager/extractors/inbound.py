@@ -12,7 +12,9 @@ from .base import BaseExtractor, TableRow
 def extract_inbound_rows(engine: TelemetryEngine) -> list[TableRow]:
     """Returns list of (key, raw_value, formatted_string, description) for Inbound Control testing."""
     rows: list[TableRow] = []
-    rows.append(("_inbound.status", "Active", "[bold green]Online / Ready[/]", "Status of Inbound UDP Control socket"))
+    rows.append(
+        ("_inbound.status", "Active", "[bold green]Online / Ready[/]", "Status of Inbound ZeroMQ PUB (commands)")
+    )
     rows.append(
         (
             "_inbound.target_host",
@@ -26,7 +28,7 @@ def extract_inbound_rows(engine: TelemetryEngine) -> list[TableRow]:
             "_inbound.target_port",
             engine.inbound_target_port,
             f"[yellow]{engine.inbound_target_port}[/]",
-            "Destination Inbound UDP Port (default: 5001)",
+            "Destination Inbound ZeroMQ TCP Port (default: 5101)",
         )
     )
     rows.append(
@@ -53,7 +55,7 @@ def extract_inbound_rows(engine: TelemetryEngine) -> list[TableRow]:
             "_inbound.interactive_keys",
             "U / D / L / R / Enter / W",
             "[bold yellow]U[/]: Pit Up | [bold yellow]D[/]: Pit Down | [bold yellow]L[/]: Prev | [bold yellow]R[/]: Next | [bold yellow]Enter[/]: Select | [bold yellow]W[/]: Rain Injection",
-            "Interactive Keyboard Shortcuts to trigger live UDP commands",
+            "Interactive Keyboard Shortcuts to trigger live ZeroMQ commands",
         )
     )
     rows.append(

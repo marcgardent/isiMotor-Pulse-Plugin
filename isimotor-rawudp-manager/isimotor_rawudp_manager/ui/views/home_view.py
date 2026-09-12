@@ -21,7 +21,7 @@ def compose_home_view(app: IsiMotorBenchmarkApp) -> ComposeResult:
     with Vertical(id=VIEW_HOME):
         with Container(id="home-hero-banner"):
             yield Static(
-                "🏎️  [bold #58a6ff]isiMotorRawUDP[/] [bold #3fb950]Manager[/] [dim]│ Low-Latency SIMP Telemetry & Bidirectional Inbound Bridge[/]",
+                "🏎️  [bold #58a6ff]isiMotorRawUDP[/] [bold #3fb950]Manager[/] [dim]│ Low-Latency ZeroMQ/FlatBuffers Telemetry & Bidirectional Inbound Bridge[/]",
                 id="home-hero-text",
             )
         with Horizontal(id="home-cards-container"):
@@ -54,7 +54,7 @@ def compose_home_view(app: IsiMotorBenchmarkApp) -> ComposeResult:
                     )
 
             with Vertical(id="card-network", classes="home-card"):
-                yield Static("🌐 [bold #3fb950]3. UDP Network & Live[/]", classes="home-card-header")
+                yield Static("🌐 [bold #3fb950]3. ZeroMQ Network & Live[/]", classes="home-card-header")
                 yield app.lbl_home_network
                 with Horizontal(classes="home-card-actions"):
                     yield Button(

@@ -249,14 +249,14 @@ class IsiMotorBenchmarkApp(App):
 
         # Explorer View widgets
         self.packet_tabs = Tabs(
-            Tab("🏎️ TelemInfo (1888 B)", id=TAB_TELEM),
+            Tab("🏎️ TelemInfo", id=TAB_TELEM),
             Tab("🏁 Full Scoring", id=TAB_SCORING),
             Tab("📋 Compact Scoring", id=TAB_COMPACT_SCORING),
             Tab("🌦️ Weather", id=TAB_WEATHER),
             Tab("⚡ FFB (400Hz)", id=TAB_FFB),
             Tab("🎥 Graphics", id=TAB_GRAPHICS),
             Tab("🔧 Physics & Aids", id=TAB_PHYSICS),
-            Tab("🔔 Events (2 B)", id=TAB_EVENT),
+            Tab("🔔 Events", id=TAB_EVENT),
             Tab("📊 Stream Rates", id=TAB_STATS),
             active=TAB_TELEM,
             id="packet-tabs",

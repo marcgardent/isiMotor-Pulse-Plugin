@@ -81,7 +81,7 @@ def render_home_network_summary(engine: TelemetryEngine, elapsed: float) -> str:
     min_sec = f"{int(elapsed // 60):02d}:{int(elapsed % 60):02d}s"
 
     lines = [
-        f"• [bold white]Telemetry UDP Socket :[/] [bold cyan]{engine.host}:{engine.port}[/]",
+        f"• [bold white]Telemetry ZeroMQ Base:[/] [bold cyan]{engine.host}:{engine.port}[/]",
         f"• [bold white]Connection Status    :[/] {status_tag}",
         f"• [bold white]Total Packets        :[/] [bold yellow]{engine.total_packets:,}[/] pkts",
         f"• [bold white]Current Bandwidth    :[/] [bold magenta]{total_kb_s:5.1f} KB/s[/] [dim]({total_freq:5.1f} Hz)[/dim]",

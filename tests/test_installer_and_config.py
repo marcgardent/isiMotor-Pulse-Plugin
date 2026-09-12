@@ -188,7 +188,7 @@ class TestInstallerAndConfig(unittest.TestCase):
 
         self.assertIn("DLL Binary", install_text)
         self.assertIn("ZeroMQ PUB Endpoint", config_text)
-        self.assertIn("Telemetry UDP Socket", network_text)
+        self.assertIn("Telemetry ZeroMQ Base", network_text)
 
         app = IsiMotorBenchmarkApp(host="127.0.0.1", port=5000)
         self.assertEqual(app.active_nav, NAV_HOME)

@@ -19,7 +19,7 @@ def extract_stats_rows(engine: TelemetryEngine) -> list[TableRow]:
             "connection.endpoint",
             f"{engine.host}:{engine.port}",
             f"[bold #58a6ff]{engine.host}:{engine.port}[/]",
-            "UDP socket listening endpoint",
+            "ZeroMQ SUB base endpoint (one TCP port per packet type, base_port + type)",
         ),
         (
             "connection.elapsed_time",

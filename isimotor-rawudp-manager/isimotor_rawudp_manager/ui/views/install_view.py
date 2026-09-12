@@ -30,7 +30,7 @@ def compose_install_view(app: IsiMotorBenchmarkApp) -> ComposeResult:
             # Left Column: Network, Activations & Files
             with Vertical(classes="cfg-column"):
                 with Container(classes="form-section-card"):
-                    yield Static("🌐 [bold #58a6ff]1. Network & UDP Socket Setup[/]", classes="form-section-title")
+                    yield Static("🌐 [bold #58a6ff]1. Network & ZeroMQ Socket Setup[/]", classes="form-section-title")
                     with Horizontal(classes="cfg-form-row"):
                         yield Label("Target IP [default: 127.0.0.1]:", classes="cfg-label")
                         yield app.cfg_target_ip
