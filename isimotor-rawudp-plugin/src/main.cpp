@@ -7,10 +7,10 @@
  * Licensed under the Apache License, Version 2.0.
  * 
  * Features:
- * - Zero third-party dependencies (no nlohmann/json, no Boost, native Winsock2 only).
+ * - ZeroMQ PUB/SUB transport over TCP (libzmq/cppzmq), no JSON/Boost dependency.
  * - Zero dynamic memory allocations in high-frequency telemetry and scoring update loops.
- * - Standardized 24-byte UDP header with monotonic sequence numbering and chunk slicing.
- * - Direct binary memory dump of TelemInfoV01 (1888 bytes) over UDP.
+ * - Standardized 24-byte header with monotonic sequence numbering and chunk slicing.
+ * - Direct binary memory dump of TelemInfoV01 (1888 bytes) published over ZeroMQ.
  * - Multi-vehicle full scoring stream (up to 128 vehicles, ScoringInfoV01 + VehicleScoringInfoV01).
  * - Track rules, flags, and Safety Car / FCY stream (TrackRulesV01, Type 5).
  * - Pit Menu navigation & strategy stream (PitMenuV01, Type 6 @ 100Hz).
@@ -34,24 +34,15 @@
 #include <cstdarg>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#pragma comment(lib, "ws2_32.lib")
 #else
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
 #define __cdecl
 #define __declspec(x)
 typedef void* HWND;
 #define long int
-#define SOCKET int
-#define INVALID_SOCKET -1
-#define closesocket close
 #define HINSTANCE void*
 #define HMODULE void*
 #define BOOL int
@@ -65,18 +56,16 @@ typedef void* HWND;
 typedef union _LARGE_INTEGER {
     int64_t QuadPart;
 } LARGE_INTEGER;
-struct WSADATA {};
-#define MAKEWORD(a, b) 0
-#define WSAStartup(v, d) 0
-#define WSACleanup() ((void)0)
 #define GetCurrentProcessId() 0
 #endif
+
+#include <zmq.hpp>
 
 #include "InternalsPlugin.hpp"
 
 #define PLUGIN_NAME "isiMotor_RawUDP.dll"
-#define DEFAULT_UDP_PORT 5000
-#define DEFAULT_UDP_HOST "127.0.0.1"
+#define DEFAULT_ZMQ_PORT 5000
+#define DEFAULT_ZMQ_HOST "127.0.0.1"
 
 // Module handle saved at DLL injection time
 static HINSTANCE g_hModule = NULL;
@@ -456,9 +445,10 @@ public:
 struct PluginConfig {
     bool enabled;
     bool enableLogging;
-    char targetIp[64];
-    int targetPort;
-    int inboundPort;
+    char tcpHost[64];
+    int tcpPort;
+    char inboundTcpHost[64];
+    int inboundTcpPort;
     bool enableInboundControl;
     double playerTelemetryHz;
     double opponentTelemetryHz;
@@ -612,10 +602,11 @@ static char s_chunkPacketBuffer[sizeof(RawUdpHeader) + MAX_UDP_CHUNK_SIZE];
 
 class IsiMotorRawUdpPlugin : public InternalsPluginV06 {
 private:
-    SOCKET udpSocket;
-    SOCKET inboundSocket;
-    sockaddr_in serverAddr;
-    sockaddr_in inboundAddr;
+    zmq::context_t zmqContext;
+    zmq::socket_t pubSocket;      // Outbound telemetry: plugin binds PUB, clients connect SUB.
+    zmq::socket_t inboundSocket;  // Inbound commands: plugin binds SUB, clients connect PUB.
+    bool pubBound;
+    bool inboundBound;
     PluginConfig config;
     RateLimiter playerTelemetryLimiter;
     RateLimiter opponentTelemetryLimiters[128];
@@ -768,14 +759,20 @@ private:
         }
     }
 
+    static void BuildTcpEndpoint(const char* host, int port, char* out, size_t outLen) {
+        std::snprintf(out, outLen, "tcp://%s:%d", host, port);
+    }
+
     void InitDefaults() {
         config.enabled = true;
         config.enableLogging = false;
         g_enableLogging = false;
-        std::strncpy(config.targetIp, DEFAULT_UDP_HOST, sizeof(config.targetIp) - 1);
-        config.targetIp[sizeof(config.targetIp) - 1] = '\0';
-        config.targetPort = DEFAULT_UDP_PORT;
-        config.inboundPort = 5001;
+        std::strncpy(config.tcpHost, DEFAULT_ZMQ_HOST, sizeof(config.tcpHost) - 1);
+        config.tcpHost[sizeof(config.tcpHost) - 1] = '\0';
+        config.tcpPort = DEFAULT_ZMQ_PORT;
+        std::strncpy(config.inboundTcpHost, DEFAULT_ZMQ_HOST, sizeof(config.inboundTcpHost) - 1);
+        config.inboundTcpHost[sizeof(config.inboundTcpHost) - 1] = '\0';
+        config.inboundTcpPort = 5001;
         config.enableInboundControl = true;
         config.playerTelemetryHz = -1.0;   // unlimited
         config.opponentTelemetryHz = 0.0;  // off (disabled for zero overhead)
@@ -843,13 +840,15 @@ private:
         config.enableLogging = ParseBoolString(strVal, false);
         g_enableLogging = config.enableLogging;
 
-        ExtractJsonString(buf, "TargetIP", config.targetIp, sizeof(config.targetIp), DEFAULT_UDP_HOST);
+        ExtractJsonString(buf, "TcpHost", config.tcpHost, sizeof(config.tcpHost), DEFAULT_ZMQ_HOST);
 
-        ExtractJsonString(buf, "TargetPort", strVal, sizeof(strVal), "5000");
-        config.targetPort = ParseIntString(strVal, DEFAULT_UDP_PORT);
+        ExtractJsonString(buf, "TcpPort", strVal, sizeof(strVal), "5000");
+        config.tcpPort = ParseIntString(strVal, DEFAULT_ZMQ_PORT);
 
-        ExtractJsonString(buf, "InboundPort", strVal, sizeof(strVal), "5001");
-        config.inboundPort = ParseIntString(strVal, 5001);
+        ExtractJsonString(buf, "InboundTcpHost", config.inboundTcpHost, sizeof(config.inboundTcpHost), DEFAULT_ZMQ_HOST);
+
+        ExtractJsonString(buf, "InboundTcpPort", strVal, sizeof(strVal), "5001");
+        config.inboundTcpPort = ParseIntString(strVal, 5001);
 
         ExtractJsonString(buf, "InboundControl", strVal, sizeof(strVal), "Enabled");
         config.enableInboundControl = ParseBoolString(strVal, true);
@@ -901,7 +900,7 @@ private:
 
 public:
     void SendSlicedPayload(unsigned char packetType, unsigned short subTypeOrId, const void* payload, size_t totalPayloadSize, double sessionET) {
-        if (!initialized || udpSocket == INVALID_SOCKET || totalPayloadSize == 0) return;
+        if (!initialized || !pubBound || totalPayloadSize == 0) return;
 
         unsigned int seq = ++sequenceCounters[packetType];
         const char* src = reinterpret_cast<const char*>(payload);
@@ -926,15 +925,18 @@ public:
 
             std::memcpy(s_chunkPacketBuffer + sizeof(RawUdpHeader), src + offset, chunkSize);
 
-            sendto(udpSocket, s_chunkPacketBuffer, static_cast<int>(sizeof(RawUdpHeader) + chunkSize), 0,
-                   reinterpret_cast<const sockaddr*>(&serverAddr), sizeof(serverAddr));
+            try {
+                pubSocket.send(zmq::buffer(s_chunkPacketBuffer, sizeof(RawUdpHeader) + chunkSize), zmq::send_flags::dontwait);
+            } catch (const zmq::error_t&) {
+                // Best-effort: drop the message (e.g. HWM reached, no subscriber connected yet).
+            }
 
             offset += chunkSize;
         }
     }
 
     void SendSystemEvent(unsigned char eventType) {
-        if (!initialized || !config.enableSystemEvents || udpSocket == INVALID_SOCKET) return;
+        if (!initialized || !config.enableSystemEvents || !pubBound) return;
         SystemEventPacket pkt{};
         pkt.eventType = eventType;
         pkt.pad = 0;
@@ -969,29 +971,32 @@ public:
     }
 
     void PollInboundCommands() {
-        if (!initialized || inboundSocket == INVALID_SOCKET || !config.enableInboundControl) return;
+        if (!initialized || !inboundBound || !config.enableInboundControl) return;
 
-        char recvBuf[512];
-        sockaddr_in clientAddr;
-#ifdef _WIN32
-        int addrLen = sizeof(clientAddr);
-#else
-        socklen_t addrLen = sizeof(clientAddr);
-#endif
+        zmq::message_t msg;
 
         while (true) {
-            int bytes = recvfrom(inboundSocket, recvBuf, sizeof(recvBuf), 0,
-                                 reinterpret_cast<sockaddr*>(&clientAddr), &addrLen);
-            if (bytes < static_cast<int>(sizeof(RawUdpHeader))) {
+            zmq::recv_result_t result;
+            try {
+                result = inboundSocket.recv(msg, zmq::recv_flags::dontwait);
+            } catch (const zmq::error_t&) {
                 break;
             }
+            if (!result.has_value()) {
+                break;  // EAGAIN: no more pending messages.
+            }
 
-            const RawUdpHeader* hdr = reinterpret_cast<const RawUdpHeader*>(recvBuf);
+            int bytes = static_cast<int>(msg.size());
+            if (bytes < static_cast<int>(sizeof(RawUdpHeader))) {
+                continue;
+            }
+
+            const RawUdpHeader* hdr = reinterpret_cast<const RawUdpHeader*>(msg.data());
             if (std::memcmp(hdr->magic, "SIMP", 4) != 0 || hdr->protocolVersion != 1) {
                 continue;
             }
 
-            const char* payload = recvBuf + sizeof(RawUdpHeader);
+            const char* payload = reinterpret_cast<const char*>(msg.data()) + sizeof(RawUdpHeader);
             size_t payloadSize = static_cast<size_t>(bytes - sizeof(RawUdpHeader));
 
             if (hdr->packetType == 100 && payloadSize >= sizeof(HWControlCommandPacket)) {
@@ -1006,9 +1011,8 @@ public:
     }
 
 public:
-    IsiMotorRawUdpPlugin() : udpSocket(INVALID_SOCKET), inboundSocket(INVALID_SOCKET), initialized(false) {
-        std::memset(&serverAddr, 0, sizeof(serverAddr));
-        std::memset(&inboundAddr, 0, sizeof(inboundAddr));
+    IsiMotorRawUdpPlugin()
+        : zmqContext(1), pubSocket(), inboundSocket(), pubBound(false), inboundBound(false), initialized(false) {
         std::memset(&config, 0, sizeof(config));
         std::memset(sequenceCounters, 0, sizeof(sequenceCounters));
         std::memset(activeControls, 0, sizeof(activeControls));
@@ -1032,49 +1036,35 @@ public:
             return;
         }
 
-        // Initialize Winsock 2.2
-        WSADATA wsaData;
-        if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-            return;
+        // 1. Outbound telemetry: PUB socket, plugin binds, clients (SUB) connect.
+        try {
+            pubSocket = zmq::socket_t(zmqContext, zmq::socket_type::pub);
+            pubSocket.set(zmq::sockopt::sndhwm, 10);   // Drop rather than buffer if no subscriber keeps up.
+            pubSocket.set(zmq::sockopt::linger, 0);
+            char endpoint[96];
+            BuildTcpEndpoint(config.tcpHost, config.tcpPort, endpoint, sizeof(endpoint));
+            pubSocket.bind(endpoint);
+            pubBound = true;
+            PluginLog("[RawUDP] Telemetry PUB bound on %s", endpoint);
+        } catch (const zmq::error_t& e) {
+            PluginLog("[RawUDP] Failed to bind telemetry PUB socket: %s", e.what());
+            pubBound = false;
         }
 
-        // 1. Create outgoing UDP socket
-        udpSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        if (udpSocket == INVALID_SOCKET) {
-            WSACleanup();
-            return;
-        }
-
-        // Enable Broadcast permission so broadcast targets work out-of-the-box
-        int broadcastEnable = 1;
-        setsockopt(udpSocket, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char*>(&broadcastEnable), sizeof(broadcastEnable));
-
-        // Set Multicast TTL to 2 hops by default
-        unsigned char ttl = 2;
-        setsockopt(udpSocket, IPPROTO_IP, IP_MULTICAST_TTL, reinterpret_cast<const char*>(&ttl), sizeof(ttl));
-
-        // Configure target endpoint
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(static_cast<u_short>(config.targetPort));
-        inet_pton(AF_INET, config.targetIp, &serverAddr.sin_addr);
-
-        // 2. Create inbound UDP socket (FR-07 Bi-Directional Input)
+        // 2. Inbound commands (FR-07 Bi-Directional Input): SUB socket, plugin binds, clients (PUB) connect.
         if (config.enableInboundControl) {
-            inboundSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-            if (inboundSocket != INVALID_SOCKET) {
-                int reuse = 1;
-                setsockopt(inboundSocket, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
-#ifdef _WIN32
-                u_long nonBlocking = 1;
-                ioctlsocket(inboundSocket, FIONBIO, &nonBlocking);
-#else
-                int flags = fcntl(inboundSocket, F_GETFL, 0);
-                fcntl(inboundSocket, F_SETFL, flags | O_NONBLOCK);
-#endif
-                inboundAddr.sin_family = AF_INET;
-                inboundAddr.sin_port = htons(static_cast<u_short>(config.inboundPort));
-                inboundAddr.sin_addr.s_addr = INADDR_ANY;
-                bind(inboundSocket, reinterpret_cast<const sockaddr*>(&inboundAddr), sizeof(inboundAddr));
+            try {
+                inboundSocket = zmq::socket_t(zmqContext, zmq::socket_type::sub);
+                inboundSocket.set(zmq::sockopt::subscribe, "");
+                inboundSocket.set(zmq::sockopt::linger, 0);
+                char inboundEndpoint[96];
+                BuildTcpEndpoint(config.inboundTcpHost, config.inboundTcpPort, inboundEndpoint, sizeof(inboundEndpoint));
+                inboundSocket.bind(inboundEndpoint);
+                inboundBound = true;
+                PluginLog("[RawUDP] Inbound commands SUB bound on %s", inboundEndpoint);
+            } catch (const zmq::error_t& e) {
+                PluginLog("[RawUDP] Failed to bind inbound SUB socket: %s", e.what());
+                inboundBound = false;
             }
         }
 
@@ -1105,21 +1095,20 @@ public:
         configWatcher.Stop();
 #endif
         if (initialized) {
-            if (udpSocket != INVALID_SOCKET) {
-                closesocket(udpSocket);
-                udpSocket = INVALID_SOCKET;
+            if (pubBound) {
+                pubSocket.close();
+                pubBound = false;
             }
-            if (inboundSocket != INVALID_SOCKET) {
-                closesocket(inboundSocket);
-                inboundSocket = INVALID_SOCKET;
+            if (inboundBound) {
+                inboundSocket.close();
+                inboundBound = false;
             }
-            WSACleanup();
             initialized = false;
         }
     }
 
     void SendExtendedState(double sessionET) {
-        if (!initialized || udpSocket == INVALID_SOCKET) return;
+        if (!initialized || !pubBound) return;
         if (!extendedStateLimiter.IsEnabled()) return;
 
         ExtendedStatePacket pkt{};
@@ -1209,7 +1198,7 @@ public:
 
     // High frequency callback (~60-100Hz): Direct memory dump (zero-copy, zero-allocation)
     void UpdateTelemetry(const TelemInfoV01 &info) override {
-        if (!initialized || udpSocket == INVALID_SOCKET) return;
+        if (!initialized || !pubBound) return;
 
         // Periodic ExtendedState stream (SIMP Type 8 @ 5Hz)
         if (extendedStateLimiter.IsEnabled() && extendedStateLimiter.ShouldSend()) {
@@ -1248,33 +1237,41 @@ public:
     }
 
     void UpdateScoring(const ScoringInfoV01 &info) override {
-        if (!initialized || udpSocket == INVALID_SOCKET) return;
+        if (!initialized || !pubBound) return;
 
         // Hot-reload: check if config file was modified
 #ifdef _WIN32
         if (configWatcher.CheckAndClearDirty()) {
             // Save current network config to detect changes
-            char prevIp[64];
-            std::strncpy(prevIp, config.targetIp, sizeof(prevIp));
-            prevIp[sizeof(prevIp) - 1] = '\0';
-            int prevPort = config.targetPort;
-            int prevInboundPort = config.inboundPort;
+            char prevHost[64];
+            std::strncpy(prevHost, config.tcpHost, sizeof(prevHost));
+            prevHost[sizeof(prevHost) - 1] = '\0';
+            int prevPort = config.tcpPort;
+            int prevInboundPort = config.inboundTcpPort;
 
             LoadConfigFile();
 
             // Hot-reloadable: rates and flags are already applied by LoadConfigFile()
 
-            // Network changes: update target address in-place (no socket recreation needed)
-            if (std::strcmp(prevIp, config.targetIp) != 0 || prevPort != config.targetPort) {
-                serverAddr.sin_port = htons(static_cast<u_short>(config.targetPort));
-                inet_pton(AF_INET, config.targetIp, &serverAddr.sin_addr);
-                PluginLog("[RawUDP] Hot-reload: target updated to %s:%d", config.targetIp, config.targetPort);
+            // Outbound endpoint changed: re-bind the PUB socket in-place (no context/socket recreation needed).
+            if (pubBound && (std::strcmp(prevHost, config.tcpHost) != 0 || prevPort != config.tcpPort)) {
+                char oldEndpoint[96];
+                char newEndpoint[96];
+                BuildTcpEndpoint(prevHost, prevPort, oldEndpoint, sizeof(oldEndpoint));
+                BuildTcpEndpoint(config.tcpHost, config.tcpPort, newEndpoint, sizeof(newEndpoint));
+                try {
+                    pubSocket.unbind(oldEndpoint);
+                    pubSocket.bind(newEndpoint);
+                    PluginLog("[RawUDP] Hot-reload: telemetry endpoint updated to %s", newEndpoint);
+                } catch (const zmq::error_t& e) {
+                    PluginLog("[RawUDP] Hot-reload: failed to rebind telemetry endpoint to %s: %s", newEndpoint, e.what());
+                }
             }
 
-            // Inbound port change requires socket re-bind (log warning)
-            if (prevInboundPort != config.inboundPort) {
-                PluginLog("[RawUDP] Hot-reload: InboundPort changed (%d -> %d), restart required to apply",
-                          prevInboundPort, config.inboundPort);
+            // Inbound endpoint change requires socket re-bind (log warning, same as before: restart required)
+            if (prevInboundPort != config.inboundTcpPort) {
+                PluginLog("[RawUDP] Hot-reload: InboundTcpPort changed (%d -> %d), restart required to apply",
+                          prevInboundPort, config.inboundTcpPort);
             }
 
             PluginLog("[RawUDP] Configuration hot-reloaded from: %s", resolvedConfigPath);
@@ -1433,7 +1430,7 @@ public:
             weatherOverride.active = false; // Override applied
 
             // Broadcast the modified conditions immediately if output socket is ready
-            if (udpSocket != INVALID_SOCKET && !(config.unsubscribedBuffersMask & UNSUB_WEATHER) && weatherLimiter.IsEnabled()) {
+            if (pubBound && !(config.unsubscribedBuffersMask & UNSUB_WEATHER) && weatherLimiter.IsEnabled()) {
                 WeatherPacket pkt{};
                 pkt.et = info.mET;
                 for (int r = 0; r < 3; ++r) {
@@ -1454,7 +1451,7 @@ public:
 
         // 2. Standard weather broadcast (FR-04)
         if (config.unsubscribedBuffersMask & UNSUB_WEATHER) return false;
-        if (udpSocket == INVALID_SOCKET) return false;
+        if (!pubBound) return false;
         if (!weatherLimiter.ShouldSend()) return false;
 
         WeatherPacket pkt{};
@@ -1476,7 +1473,7 @@ public:
 
     // High frequency Force Feedback callback (FR-06, SIMP Type 9 @ up to 400Hz)
     bool ForceFeedback(double &forceValue) override {
-        if (!initialized || udpSocket == INVALID_SOCKET) return false;
+        if (!initialized || !pubBound) return false;
         if (config.unsubscribedBuffersMask & UNSUB_FORCE_FEEDBACK) return false;
         if (!forceFeedbackLimiter.ShouldSend()) return false;
 
@@ -1489,7 +1486,7 @@ public:
 
     // High frequency Graphics & Camera callback (FR-06, SIMP Type 10 @ 60-100Hz)
     void UpdateGraphics(const GraphicsInfoV02 &info) override {
-        if (!initialized || udpSocket == INVALID_SOCKET) return;
+        if (!initialized || !pubBound) return;
         if (config.unsubscribedBuffersMask & UNSUB_GRAPHICS) return;
         if (!graphicsLimiter.ShouldSend()) return;
 

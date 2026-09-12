@@ -14,7 +14,7 @@
 - **Portable & Standalone**: Single executable file. No Python environment, external runtimes, or dependencies required.
 - **One-Click Automated Setup**: Automatically scans your drives to detect **Le Mans Ultimate** and **rFactor 2**, installs the native plugin DLL, and configures game settings in one click.
 - **Live Stream Diagnostics**: Real-time inspection of high-rate vehicle telemetry, full-grid scoring (up to 128 cars), pit menu strategy, track rules, flags, weather, and Force Feedback (400Hz).
-- **Interactive Control Testbed**: Send live pit menu commands, cockpit button inputs, and weather adjustments directly over UDP.
+- **Interactive Control Testbed**: Send live pit menu commands, cockpit button inputs, and weather adjustments directly over ZeroMQ (TCP).
 
 ---
 
@@ -38,7 +38,7 @@ The Manager features a top navigation bar with 4 dedicated views:
 | **`🏠 Home`** | `F1` | Connection status, stream health, packet frequencies (Hz), and bandwidth |
 | **`📦 Install`** | `F2` | Automated game discovery, one-click DLL installation & profile configuration editor |
 | **`📊 Explorer`** | `F3` | Deep-packet live telemetry inspector, scoring leaderboards & clipboard export |
-| **`🎮 Commands`** | `F4` | Interactive UDP command transmitter for pit menu navigation & cockpit buttons |
+| **`🎮 Commands`** | `F4` | Interactive ZeroMQ command transmitter for pit menu navigation & cockpit buttons |
 
 ---
 
@@ -55,12 +55,12 @@ The Manager features a top navigation bar with 4 dedicated views:
    - It initializes `CustomPluginVariables.JSON` with optimized default settings.
 4. **Configuring Streaming Options**:
    - Adjust options directly in the configuration editor:
-     - **Target IP**: Destination address (`127.0.0.1` for local overlays, `192.168.1.50` for LAN dashboard tablets, `239.255.0.1` for Multicast).
-     - **Target Port**: Outgoing UDP telemetry port (default `5000`).
+     - **TCP Host**: Telemetry PUB bind address (`127.0.0.1` for local overlays, `0.0.0.0` or your LAN IP to accept dashboard tablets on the network).
+     - **TCP Port**: Outgoing ZeroMQ telemetry port (default `5000`).
      - **Channel Refresh Rates**: Customize individual refresh frequencies for Player Telemetry (`unlimited` / `100Hz`), Opponents Telemetry (`off` / `20Hz`), Compact Scoring (`10Hz`), Full Scoring (`5Hz`), Weather (`1Hz`), and Force Feedback (`unlimited` / `400Hz`).
-     - **Inbound Port**: Inbound command listening port (default `5001`).
+     - **Inbound TCP Port**: Inbound command listening port (default `5001`).
    - Click **`[ 💾 Save ]`** to apply changes across all detected games simultaneously.
-   - **🔄 Live hot-reload**: The plugin detects file changes in real-time using an event-based Win32 file watcher (zero polling). Most parameters — streaming rates, `TargetIP`, `TargetPort`, `EnableLogging`, `SystemEvents`, `UnsubscribedBuffersMask` — apply instantly without restarting the simulator. Only `InboundPort` requires a restart.
+   - **🔄 Live hot-reload**: The plugin detects file changes in real-time using an event-based Win32 file watcher (zero polling). Most parameters — streaming rates, `TcpHost`, `TcpPort`, `EnableLogging`, `SystemEvents`, `UnsubscribedBuffersMask` — apply instantly without restarting the simulator. Only `InboundTcpPort` requires a restart.
 5. **Uninstalling**:
    - Click **`[ 🗑️ Uninstall ]`** to safely remove the plugin DLL from detected installations.
 
@@ -68,7 +68,7 @@ The Manager features a top navigation bar with 4 dedicated views:
 
 ## 📊 4. Live Telemetry & Grid Explorer (`[ 📊 Explorer ]` Tab - `F3`)
 
-The Explorer view provides deep real-time inspection of all binary UDP data packets streamed by the game:
+The Explorer view provides deep real-time inspection of all binary ZeroMQ-streamed data packets streamed by the game:
 
 ### Available Packet Channels (`1`–`0`, `i`, `p` shortcuts)
 - **🏎️ Vehicle Dynamics (TelemInfo - 1888 bytes)**: Speed, Gear, RPM, Throttle, Brake, Steering, 4-wheel temperatures/pressures/wear, tire surface grip, G-forces, and hybrid battery/MGU status.
@@ -89,7 +89,7 @@ The Explorer view provides deep real-time inspection of all binary UDP data pack
 
 ## 🎮 5. Interactive Inbound Commands (`[ 🎮 Commands ]` Tab - `F4`)
 
-The Commands tab lets you test and trigger inbound UDP actions directly from your keyboard or button box:
+The Commands tab lets you test and trigger inbound ZeroMQ command actions directly from your keyboard or button box:
 
 ### Pit Menu Strategy Controls
 - **Up (`U`)** / **Down (`D`)**: Navigate up and down through category choices
@@ -108,21 +108,23 @@ The Commands tab lets you test and trigger inbound UDP actions directly from you
 
 ## 🌐 6. Network Setup & Routing
 
+The plugin transports telemetry and inbound commands over **ZeroMQ PUB/SUB, on TCP only**. The plugin always **binds** its telemetry PUB socket (and its inbound commands SUB socket); every consumer — dashboards, overlays, the Manager itself — **connects** to it as a client. Any number of consumers can connect to the same PUB endpoint simultaneously, so there is no separate multicast/broadcast configuration to manage.
+
 ### Scenario A — Local Dashboard / SimHub / Overlay (Same PC)
-- **Target IP**: `127.0.0.1`
-- **Target Port**: `5000`
+- **TCP Host**: `127.0.0.1`
+- **TCP Port**: `5000`
 - **Setup**: Zero configuration required. Telemetry is delivered locally with sub-microsecond latency.
 
-### Scenario B — Wi-Fi Tablet or Dedicated Dashboard Device on LAN (Unicast)
-- **Target IP**: `192.168.1.50` (IP address of your tablet or dashboard device)
-- **Target Port**: `5000`
-- **Why Unicast**: Wi-Fi hardware acknowledges unicast packets at the MAC layer, preventing packet drops over wireless networks.
+### Scenario B — Wi-Fi Tablet or Dedicated Dashboard Device on LAN
+- **TCP Host**: `0.0.0.0` (bind on all interfaces so LAN clients can connect) or your PC's LAN IP.
+- **TCP Port**: `5000`
+- **Client side**: point the dashboard/overlay's ZeroMQ SUB socket at `tcp://<simPC-LAN-IP>:5000`.
 
-### Scenario C — Multiple Devices Simultaneously (Multicast / Broadcast)
-- **Target IP**: `239.255.0.1` (Multicast) or `255.255.255.255` (LAN Broadcast)
-- **Target Port**: `5000`
-- **Benefit**: Infinite devices can receive telemetry simultaneously without adding CPU load to the simulation.
-- **Firewall**: Ensure UDP port `5000` Outbound and UDP port `5001` Inbound are permitted in Windows Firewall.
+### Scenario C — Multiple Devices Simultaneously
+- **TCP Host**: `0.0.0.0`
+- **TCP Port**: `5000`
+- **Benefit**: Every additional consumer just opens its own SUB connection to the same PUB endpoint — no multicast group or broadcast address to configure.
+- **Firewall**: Ensure TCP port `5000` Outbound and TCP port `5001` Inbound are permitted in Windows Firewall.
 
 ---
 

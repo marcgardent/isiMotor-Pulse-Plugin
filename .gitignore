@@ -10,6 +10,7 @@ bin/
 *.o
 *.exe
 tests/cpp_mock/isi_mock_host
+tests/cpp_mock/zmq-headers/
 
 # Python
 __pycache__/

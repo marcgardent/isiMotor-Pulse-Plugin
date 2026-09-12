@@ -102,7 +102,7 @@ project_root = manager_root.parent
 
 
 class IsiMotorBenchmarkApp(App):
-    """Raw UDP Telemetry Explorer & Benchmark for isiMotor."""
+    """ZeroMQ Telemetry Explorer & Benchmark for isiMotor."""
 
     CSS = APP_CSS
 
@@ -135,7 +135,7 @@ class IsiMotorBenchmarkApp(App):
     search_query_explorer = reactive("")
     search_query_install = reactive("")
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 5000):
+    def __init__(self, host: str = "127.0.0.1", port: int = 5000):
         super().__init__()
         self.host = host
         self.port = port
@@ -321,7 +321,7 @@ class IsiMotorBenchmarkApp(App):
             dt.add_column("Current Value", key="col_val", width=32)
             dt.add_column("Description & Units", key="col_desc")
 
-        # Start UDP receiver engine
+        # Start ZeroMQ SUB receiver engine
         self.engine.start()
 
         # Populate tables, form inputs, and home cards
@@ -847,9 +847,9 @@ class IsiMotorBenchmarkApp(App):
         vars_dict = self.config_overview.get("active_variables", dict(DEFAULT_PLUGIN_VARIABLES))
 
         # Endpoints
-        self.cfg_target_ip.value = str(vars_dict.get("TargetIP", "127.0.0.1"))
-        self.cfg_target_port.value = str(vars_dict.get("TargetPort", "5000"))
-        self.cfg_inbound_port.value = str(vars_dict.get("InboundPort", "5001"))
+        self.cfg_target_ip.value = str(vars_dict.get("TcpHost", "127.0.0.1"))
+        self.cfg_target_port.value = str(vars_dict.get("TcpPort", "5000"))
+        self.cfg_inbound_port.value = str(vars_dict.get("InboundTcpPort", "5001"))
         self.cfg_unsub_mask.value = str(vars_dict.get("UnsubscribedBuffersMask", "0"))
 
         # Activations
@@ -934,10 +934,10 @@ class IsiMotorBenchmarkApp(App):
         return {
             " Enabled": enabled_int,
             "EnableLogging": logging_str,
-            "TargetIP": self.cfg_target_ip.value.strip() or "127.0.0.1",
-            "TargetPort": self.cfg_target_port.value.strip() or "5000",
+            "TcpHost": self.cfg_target_ip.value.strip() or "127.0.0.1",
+            "TcpPort": self.cfg_target_port.value.strip() or "5000",
             "InboundControl": inbound_str,
-            "InboundPort": self.cfg_inbound_port.value.strip() or "5001",
+            "InboundTcpPort": self.cfg_inbound_port.value.strip() or "5001",
             "PlayerTelemetryRate": format_mode_and_hz_to_rate(
                 str(self.sel_rate_telem.value), self.input_rate_telem.value, "100"
             ),
@@ -1001,7 +1001,7 @@ class IsiMotorBenchmarkApp(App):
         )
 
     def _update_ui(self) -> None:
-        """Periodic UI update: polls UDP socket and refreshes active view cells."""
+        """Periodic UI update: polls ZeroMQ subscriber and refreshes active view cells."""
         if not self.is_running:
             return
 
@@ -1109,9 +1109,9 @@ class IsiMotorBenchmarkApp(App):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="isiMotor UDP Raw Telemetry Explorer & Benchmark (Textual)")
-    parser.add_argument("--host", default="0.0.0.0", help="UDP listening host (default: 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=5000, help="UDP listening port (default: 5000)")
+    parser = argparse.ArgumentParser(description="isiMotor ZeroMQ Telemetry Explorer & Benchmark (Textual)")
+    parser.add_argument("--host", default="127.0.0.1", help="Telemetry PUB host to connect to (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=5000, help="Telemetry PUB port to connect to (default: 5000)")
     args = parser.parse_args()
 
     app = IsiMotorBenchmarkApp(host=args.host, port=args.port)

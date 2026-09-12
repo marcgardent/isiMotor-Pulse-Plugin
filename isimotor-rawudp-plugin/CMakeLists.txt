@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(isiMotor_RawUDP VERSION 0.6.2 LANGUAGES CXX)
 
+# libzmq's own CMakeLists still declares an old cmake_minimum_required();
+# newer CMake refuses that outright unless a policy floor is set here.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+
 # --- C++ Standard ---
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,6 +13,58 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
+
+# --- ZeroMQ transport (libzmq + cppzmq) ---
+# Vendored via FetchContent and linked statically, so the resulting DLL stays
+# a standalone, zero-runtime-dependency artifact (same goal as before, now
+# fulfilled with a pinned ZeroMQ version instead of raw Winsock/BSD sockets).
+include(FetchContent)
+
+set(ZMQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(WITH_LIBSODIUM OFF CACHE BOOL "" FORCE)
+set(ENABLE_CURVE OFF CACHE BOOL "" FORCE)
+set(WITH_PERF_TOOL OFF CACHE BOOL "" FORCE)
+set(ENABLE_CPACK OFF CACHE BOOL "" FORCE)
+set(ENABLE_DRAFTS OFF CACHE BOOL "" FORCE)
+
+# Under MinGW cross-compilation, CMAKE_SYSTEM_VERSION is unset, so libzmq's
+# own auto-detection resolves _WIN32_WINNT to an empty string, which breaks
+# version-gated declarations in <wincrypt.h>/<bcrypt.h>/<ncrypt.h> (NTSTATUS
+# / BCRYPT_KEY_HANDLE errors). Pin it explicitly (Windows Vista+ / Server 2008+).
+set(ZMQ_WIN32_WINNT "0x0600" CACHE STRING "" FORCE)
+
+# We only need TCP transport. libzmq's IPC (AF_UNIX) support detection for
+# MinGW targets is broken (ipc_address.hpp unconditionally includes the
+# POSIX <sys/socket.h> even when built for Windows) - force it off since it
+# is unused here rather than working around that upstream bug.
+set(ZMQ_HAVE_IPC 0 CACHE INTERNAL "" FORCE)
+
+FetchContent_Declare(
+    libzmq
+    GIT_REPOSITORY https://github.com/zeromq/libzmq.git
+    GIT_TAG        v4.3.5
+    GIT_SHALLOW    TRUE
+)
+FetchContent_Declare(
+    cppzmq
+    GIT_REPOSITORY https://github.com/zeromq/cppzmq.git
+    GIT_TAG        v4.10.0
+    GIT_SHALLOW    TRUE
+)
+
+set(CPPZMQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+
+if(MINGW)
+    # Without WIN32_LEAN_AND_MEAN, <windows.h> pulls in <wincrypt.h>, which
+    # conflicts with <bcrypt.h>/<ncrypt.h> on some mingw-w64 header versions
+    # (NTSTATUS/BCRYPT_KEY_HANDLE redefinition errors) when libzmq's own
+    # windows.hpp includes <iphlpapi.h>/<mswsock.h>. Defining it globally
+    # before building libzmq avoids pulling in the conflicting headers.
+    add_definitions(-DWIN32_LEAN_AND_MEAN)
+endif()
+
+FetchContent_MakeAvailable(libzmq cppzmq)
 
 # --- Source Files ---
 set(SOURCES
@@ -21,7 +77,11 @@ set(SOURCES
 add_library(isiMotor_RawUDP SHARED ${SOURCES})
 
 target_include_directories(isiMotor_RawUDP PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(isiMotor_RawUDP PRIVATE ws2_32)
+target_link_libraries(isiMotor_RawUDP PRIVATE libzmq-static cppzmq)
+
+if(WIN32)
+    target_link_libraries(isiMotor_RawUDP PRIVATE ws2_32 iphlpapi rpcrt4)
+endif()
 
 # --- Static linking for zero-dependency standalone DLL ---
 if(MSVC)

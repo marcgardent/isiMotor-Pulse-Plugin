@@ -1,9 +1,7 @@
 """
-Non-blocking UDP receiver, chunk reassembly and packet ingestion engine.
+Non-blocking ZeroMQ SUB receiver, chunk reassembly and packet ingestion engine.
 """
 
-import select
-import socket
 import time
 
 from isimotor_rawudp_client.decoder import (
@@ -21,6 +19,7 @@ from isimotor_rawudp_client.decoder import (
     encode_hw_control,
     encode_weather_control,
 )
+from isimotor_rawudp_client.transport import ZmqPublisher, ZmqSubscriber
 from isimotor_rawudp_types import (
     CompactScoring,
     ExtendedState,
@@ -51,16 +50,17 @@ from .stats import PacketStats
 
 
 class TelemetryEngine:
-    """Non-blocking UDP receiver, stream demultiplexer and packet decoder."""
+    """Non-blocking ZeroMQ SUB receiver, stream demultiplexer and packet decoder."""
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 5000):
+    def __init__(self, host: str = "127.0.0.1", port: int = 5000):
         self.host = host
         self.port = port
         self.start_time = time.time()
         self.total_packets = 0
         self.total_bytes = 0
         self.running = False
-        self.socket: socket.socket | None = None
+        self._subscriber: ZmqSubscriber | None = None
+        self._publisher = ZmqPublisher()
 
         self.stats: dict[str, PacketStats] = {
             PKT_RAW_TELEMETRY: PacketStats(PKT_RAW_TELEMETRY, "Sliced/Raw SIMP", "1888/1904 B"),
@@ -94,9 +94,10 @@ class TelemetryEngine:
         self._inbound_seq: int = 0
         self.reassembly_buffers: dict[tuple, dict] = {}
         self.last_cleanup_time: float = 0.0
+        self._pending: list[bytes] = []
 
     def send_hw_control(self, control_name: str, control_value: float = 1.0, duration_ms: int = 50) -> bool:
-        """Sends an inbound Type 100 control packet."""
+        """Publishes an inbound Type 100 control packet."""
         self._inbound_seq += 1
         pkt = encode_hw_control(
             control_name=control_name,
@@ -105,20 +106,16 @@ class TelemetryEngine:
             with_header=True,
             sequence_number=self._inbound_seq,
         )
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            sock.sendto(pkt, (self.inbound_target_host, self.inbound_target_port))
+        ok = self._publisher.send_raw(pkt, self.inbound_target_host, self.inbound_target_port)
+        if ok:
             self.last_inbound_cmd_sent = f"{control_name} (val={control_value}, dur={duration_ms}ms)"
-            self.last_inbound_cmd_time = time.time()
-            return True
-        except Exception as e:
-            self.last_inbound_cmd_sent = f"Error: {e}"
-            return False
-        finally:
-            sock.close()
+        else:
+            self.last_inbound_cmd_sent = "Error: publish failed"
+        self.last_inbound_cmd_time = time.time()
+        return ok
 
     def send_weather_override(self, ambient_temp: float = 20.0, raining: float = 0.0) -> bool:
-        """Sends an inbound Type 101 weather control packet."""
+        """Publishes an inbound Type 101 weather control packet."""
         self._inbound_seq += 1
         pkt = encode_weather_control(
             ambient_temp=ambient_temp,
@@ -132,50 +129,37 @@ class TelemetryEngine:
             with_header=True,
             sequence_number=self._inbound_seq,
         )
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            sock.sendto(pkt, (self.inbound_target_host, self.inbound_target_port))
+        ok = self._publisher.send_raw(pkt, self.inbound_target_host, self.inbound_target_port)
+        if ok:
             self.last_inbound_cmd_sent = f"WeatherOverride (Temp={ambient_temp:.1f}°C, Rain={raining * 100:.0f}%)"
-            self.last_inbound_cmd_time = time.time()
-            return True
-        except Exception as e:
-            self.last_inbound_cmd_sent = f"Error: {e}"
-            return False
-        finally:
-            sock.close()
+        else:
+            self.last_inbound_cmd_sent = "Error: publish failed"
+        self.last_inbound_cmd_time = time.time()
+        return ok
 
     def start(self) -> None:
-        """Opens non-blocking UDP listening socket."""
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.socket.setblocking(False)
-        self.socket.bind((self.host, self.port))
+        """Starts the background ZeroMQ SUB receiver (connects to the plugin's telemetry PUB)."""
+        self._pending = []
+        self._subscriber = ZmqSubscriber(host=self.host, port=self.port)
+        self._subscriber.start(lambda data, _timestamp: self._pending.append(data))
         self.running = True
 
     def stop(self) -> None:
-        """Closes the listening socket."""
+        """Stops the background receiver and closes the publisher socket."""
         self.running = False
-        if self.socket:
-            try:
-                self.socket.close()
-            except Exception:
-                pass
-            self.socket = None
+        if self._subscriber:
+            self._subscriber.stop()
+            self._subscriber = None
+        self._publisher.close()
 
     def poll(self) -> None:
-        """Drains pending packets from the socket."""
-        if not self.socket or not self.running:
+        """Drains pending packets received by the background subscriber thread."""
+        if not self.running:
             return
 
-        while True:
-            r, _, _ = select.select([self.socket], [], [], 0.001)
-            if not r:
-                break
-            try:
-                data, addr = self.socket.recvfrom(65535)
-                self._process_packet(data, addr)
-            except (OSError, BlockingIOError):
-                break
+        pending, self._pending = self._pending, []
+        for data in pending:
+            self._process_packet(data)
 
     def _process_packet(self, data: bytes, addr: tuple[str, int] | float | None = None) -> None:
         """Decodes an incoming binary packet and dispatches to models and stats."""

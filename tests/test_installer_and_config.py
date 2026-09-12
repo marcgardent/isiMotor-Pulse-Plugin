@@ -26,10 +26,10 @@ class TestInstallerAndConfig(unittest.TestCase):
         """Validates that DEFAULT_PLUGIN_VARIABLES contains all required stream and network keys."""
         required_keys = [
             " Enabled",
-            "TargetIP",
-            "TargetPort",
+            "TcpHost",
+            "TcpPort",
             "InboundControl",
-            "InboundPort",
+            "InboundTcpPort",
             "PlayerTelemetryRate",
             "OpponentTelemetryRate",
             "CompactScoringRate",
@@ -62,8 +62,8 @@ class TestInstallerAndConfig(unittest.TestCase):
 
         entry = data["isiMotor_RawUDP.dll"]
         self.assertEqual(entry[" Enabled"], 1)
-        self.assertEqual(entry["TargetIP"], "127.0.0.1")
-        self.assertEqual(entry["TargetPort"], "5000")
+        self.assertEqual(entry["TcpHost"], "127.0.0.1")
+        self.assertEqual(entry["TcpPort"], "5000")
         self.assertEqual(entry["InboundControl"], "Enabled")
         self.assertEqual(entry["PlayerTelemetryRate"], "unlimited")
         self.assertEqual(entry["OpponentTelemetryRate"], "off")
@@ -80,8 +80,8 @@ class TestInstallerAndConfig(unittest.TestCase):
         existing_data = {
             "isiMotor_RawUDP": {
                 " Enabled": 1,
-                "TargetIP": "239.255.0.1",  # User customized to Multicast
-                "TargetPort": "9000",  # User customized to Port 9000
+                "TcpHost": "192.168.1.20",  # User customized host
+                "TcpPort": "9000",  # User customized to Port 9000
                 "TelemetryRate": "60Hz",  # User customized to 60Hz
             }
         }
@@ -96,8 +96,8 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertNotIn("isiMotor_RawUDP", data)
         entry = data["isiMotor_RawUDP.dll"]
         # Custom values preserved
-        self.assertEqual(entry["TargetIP"], "239.255.0.1")
-        self.assertEqual(entry["TargetPort"], "9000")
+        self.assertEqual(entry["TcpHost"], "192.168.1.20")
+        self.assertEqual(entry["TcpPort"], "9000")
         self.assertEqual(entry["TelemetryRate"], "60Hz")
         # Missing defaults populated
         self.assertEqual(entry["InboundControl"], "Enabled")
@@ -115,8 +115,8 @@ class TestInstallerAndConfig(unittest.TestCase):
         # 1. Test read_plugin_json_variables on non-existent file returns defaults
         non_existent = self.test_dir / "does_not_exist.json"
         defaults = read_plugin_json_variables(non_existent)
-        self.assertEqual(defaults["TargetIP"], "127.0.0.1")
-        self.assertEqual(defaults["TargetPort"], "5000")
+        self.assertEqual(defaults["TcpHost"], "127.0.0.1")
+        self.assertEqual(defaults["TcpPort"], "5000")
 
         # 2. Setup mock game directory and fake source DLL
         game_dir = self.test_dir / "MockGame"
@@ -145,15 +145,15 @@ class TestInstallerAndConfig(unittest.TestCase):
         g = overview["games"][0]
         self.assertTrue(g["dll_installed"])
         self.assertTrue(g["json_exists"])
-        self.assertEqual(g["variables"]["TargetIP"], "127.0.0.1")
+        self.assertEqual(g["variables"]["TcpHost"], "127.0.0.1")
 
         # 5. Test extract_config_rows
         rows = extract_config_rows(overview)
         self.assertGreaterEqual(len(rows), 15)
         row_keys = [r[0] for r in rows]
         self.assertIn("dll.status", row_keys)
-        self.assertIn("config.TargetIP", row_keys)
-        self.assertIn("config.TargetPort", row_keys)
+        self.assertIn("config.TcpHost", row_keys)
+        self.assertIn("config.TcpPort", row_keys)
         self.assertIn("config.EnableLogging", row_keys)
         self.assertIn("config.PlayerTelemetryRate", row_keys)
         self.assertIn("config.OpponentTelemetryRate", row_keys)
@@ -186,7 +186,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         network_text = render_home_network_summary(engine, 10.0)
 
         self.assertIn("DLL Binary", install_text)
-        self.assertIn("UDP Destination", config_text)
+        self.assertIn("ZeroMQ PUB Endpoint", config_text)
         self.assertIn("Telemetry UDP Socket", network_text)
 
         app = IsiMotorBenchmarkApp(host="127.0.0.1", port=5000)
@@ -256,8 +256,8 @@ class TestInstallerAndConfig(unittest.TestCase):
                 self.assertFalse(app.input_rate_weather.display)
 
                 form_vars = app._read_config_from_form()
-                self.assertEqual(form_vars["TargetIP"], "192.168.1.50")
-                self.assertEqual(form_vars["TargetPort"], "5055")
+                self.assertEqual(form_vars["TcpHost"], "192.168.1.50")
+                self.assertEqual(form_vars["TcpPort"], "5055")
                 self.assertEqual(form_vars["PlayerTelemetryRate"], "100Hz")
                 self.assertEqual(form_vars["OpponentTelemetryRate"], "25Hz")
                 self.assertEqual(form_vars["WeatherRate"], "off")
@@ -298,8 +298,8 @@ class TestInstallerAndConfig(unittest.TestCase):
         test_dir = Path(tempfile.mkdtemp(prefix="isimotor_form_test_"))
         try:
             custom_vars = dict(DEFAULT_PLUGIN_VARIABLES)
-            custom_vars["TargetIP"] = "10.0.0.99"
-            custom_vars["TargetPort"] = "5555"
+            custom_vars["TcpHost"] = "10.0.0.99"
+            custom_vars["TcpPort"] = "5555"
             custom_vars["TelemetryRate"] = "60Hz"
 
             ok, _msg = write_plugin_json_variables(test_dir, custom_vars)
@@ -308,8 +308,8 @@ class TestInstallerAndConfig(unittest.TestCase):
             saved_json = test_dir / "UserData" / "player" / "CustomPluginVariables.JSON"
             self.assertTrue(saved_json.exists())
             read_back = read_plugin_json_variables(saved_json)
-            self.assertEqual(read_back["TargetIP"], "10.0.0.99")
-            self.assertEqual(read_back["TargetPort"], "5555")
+            self.assertEqual(read_back["TcpHost"], "10.0.0.99")
+            self.assertEqual(read_back["TcpPort"], "5555")
             self.assertEqual(read_back["TelemetryRate"], "60Hz")
 
             # Test save_configuration_to_all_games with custom_target

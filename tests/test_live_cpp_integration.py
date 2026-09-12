@@ -1,17 +1,17 @@
 """
 Test Suite: Live End-to-End C++ Mock Host Integration
 Spawns the compiled C++ isi_mock_host binary as a subprocess and tests real-time
-UDP packet reception and decoding over 127.0.0.1.
+ZeroMQ PUB/SUB packet reception and decoding over TCP.
 """
 
 import os
-import socket
 import subprocess
 import time
 import unittest
 
 from isimotor_rawudp_client.client import IsiMotorClient
 from isimotor_rawudp_client.decoder.header import decode_header
+from isimotor_rawudp_client.transport import ZmqSubscriber
 
 MOCK_BIN = os.path.join(os.path.dirname(__file__), "cpp_mock", "isi_mock_host")
 TEST_PORT = 5066
@@ -29,7 +29,7 @@ class TestLiveCppIntegration(unittest.TestCase):
 
     def test_live_cpp_mock_streaming(self):
         """
-        Tests live UDP stream from native C++ isi_mock_host @ 100Hz using IsiMotorClient.
+        Tests live ZeroMQ stream from native C++ isi_mock_host @ 100Hz using IsiMotorClient.
         Receives and validates telemetry, compact scoring, full scoring grid, and system events.
         """
         client = IsiMotorClient(host="127.0.0.1", port=TEST_PORT)
@@ -141,10 +141,17 @@ class TestLiveCppIntegration(unittest.TestCase):
         duration = 1.0
         port = 5077
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("127.0.0.1", port))
-        sock.settimeout(1.5)
+        sub = ZmqSubscriber(host="127.0.0.1", port=port)
+        received_count = 0
+
+        def _on_data(data: bytes, _timestamp: float) -> None:
+            nonlocal received_count
+            hdr = decode_header(data)
+            if hdr and hdr.packet_type == 1 and hdr.chunk_index == 0:
+                received_count += 1
+
+        sub.start(_on_data)
+        time.sleep(0.3)  # let the SUB connection + subscription settle before the mock starts streaming
 
         proc = subprocess.Popen(
             [MOCK_BIN, "--serve", str(port), str(target_hz), str(duration)],
@@ -152,19 +159,10 @@ class TestLiveCppIntegration(unittest.TestCase):
             stderr=subprocess.PIPE,
         )
 
-        received_count = 0
-        start_time = time.time()
         try:
-            while time.time() - start_time < duration + 0.5:
-                try:
-                    data, _ = sock.recvfrom(65535)
-                    hdr = decode_header(data)
-                    if hdr and hdr.packet_type == 1 and hdr.chunk_index == 0:
-                        received_count += 1
-                except TimeoutError:
-                    break
+            time.sleep(duration + 0.5)
         finally:
-            sock.close()
+            sub.stop()
             if proc.stdout:
                 proc.stdout.close()
             if proc.stderr:
@@ -177,7 +175,7 @@ class TestLiveCppIntegration(unittest.TestCase):
 
     def test_live_bidirectional_control(self):
         """
-        Tests live bi-directional UDP communication (FR-07):
+        Tests live bi-directional ZeroMQ communication (FR-07):
         - Sending Pit Menu actions (PitMenuDown)
         - Sending Hardware controls (TCIncrease)
         - Injecting dynamic weather overrides (ambient_temp, raining)

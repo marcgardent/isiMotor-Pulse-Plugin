@@ -151,6 +151,10 @@ class ZmqPublisher:
 
         return self._transmit(packet, dest_host, dest_port)
 
+    def send_raw(self, packet: bytes, host: str | None = None, port: int | None = None) -> bool:
+        """Publishes a pre-encoded raw command packet to the target plugin endpoint."""
+        return self._transmit(packet, host or self.default_host, port or self.default_port)
+
     def _transmit(self, packet: bytes, host: str, port: int) -> bool:
         """Publishes a command packet to the target plugin endpoint."""
         try:

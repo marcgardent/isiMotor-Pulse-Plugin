@@ -127,18 +127,18 @@ def extract_config_rows(overview: dict[str, Any]) -> list[TableRow]:
     )
     rows.append(
         (
-            "config.TargetIP",
-            active_vars.get("TargetIP", "127.0.0.1"),
-            f"[bold cyan]{active_vars.get('TargetIP', '127.0.0.1')}[/]",
-            "Target UDP destination IP (Unicast, Multicast 239.x or Broadcast 255.255.255.255)",
+            "config.TcpHost",
+            active_vars.get("TcpHost", "127.0.0.1"),
+            f"[bold cyan]{active_vars.get('TcpHost', '127.0.0.1')}[/]",
+            "Telemetry PUB bind address (ZeroMQ over TCP)",
         )
     )
     rows.append(
         (
-            "config.TargetPort",
-            active_vars.get("TargetPort", "5000"),
-            f"[bold yellow]{active_vars.get('TargetPort', '5000')}[/]",
-            "Target UDP destination port (Default: 5000)",
+            "config.TcpPort",
+            active_vars.get("TcpPort", "5000"),
+            f"[bold yellow]{active_vars.get('TcpPort', '5000')}[/]",
+            "Telemetry PUB bind port (Default: 5000)",
         )
     )
     rows.append(
@@ -146,15 +146,15 @@ def extract_config_rows(overview: dict[str, Any]) -> list[TableRow]:
             "config.InboundControl",
             active_vars.get("InboundControl", "Enabled"),
             f"[bold {'green' if str(active_vars.get('InboundControl')).lower() in ('enabled', 'true', '1') else 'red'}]{active_vars.get('InboundControl', 'Enabled')}[/]",
-            "Bi-directional UDP remote control & hardware inputs (Enabled / Disabled)",
+            "Bi-directional remote control & hardware inputs over ZeroMQ (Enabled / Disabled)",
         )
     )
     rows.append(
         (
-            "config.InboundPort",
-            active_vars.get("InboundPort", "5001"),
-            f"[bold yellow]{active_vars.get('InboundPort', '5001')}[/]",
-            "Listening UDP port for remote commands (Default: 5001)",
+            "config.InboundTcpPort",
+            active_vars.get("InboundTcpPort", "5001"),
+            f"[bold yellow]{active_vars.get('InboundTcpPort', '5001')}[/]",
+            "Inbound commands SUB bind port for remote commands (ZeroMQ, Default: 5001)",
         )
     )
     rows.append(

@@ -162,7 +162,7 @@ class TestManagerSolidArchitecture(unittest.TestCase):
         rows = ext.extract(overview)
         keys = [r[0] for r in rows]
         self.assertIn("dll.status", keys)
-        self.assertIn("config.TargetIP", keys)
+        self.assertIn("config.TcpHost", keys)
         self.assertIn("config.EnableLogging", keys)
         self.assertIn("config.PlayerTelemetryRate", keys)
         self.assertIn("config.OpponentTelemetryRate", keys)

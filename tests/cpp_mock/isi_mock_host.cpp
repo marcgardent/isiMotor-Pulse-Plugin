@@ -20,12 +20,7 @@
 #include <vector>
 #include <algorithm>
 
-// POSIX socket headers for Linux
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
+#include <zmq.hpp>
 
 // Windows / isiMotor compatibility macros
 #define __cdecl
@@ -979,9 +974,9 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
     fj_wc.close();
 }
 
-// ── Live UDP Server Mock ──────────────────────────────────────────────────────
+// ── Live ZeroMQ PUB/SUB Server Mock ────────────────────────────────────────────
 
-void send_sliced_udp_mock(int sock, const sockaddr_in &dest, unsigned char packetType, unsigned short subId, const void* payload, size_t totalPayloadSize, double sessionET, unsigned int &seq) {
+void send_sliced_udp_mock(zmq::socket_t &pub, unsigned char packetType, unsigned short subId, const void* payload, size_t totalPayloadSize, double sessionET, unsigned int &seq) {
     const size_t MAX_CHUNK = 1200;
     const char* src = reinterpret_cast<const char*>(payload);
     size_t offset = 0;
@@ -1008,38 +1003,53 @@ void send_sliced_udp_mock(int sock, const sockaddr_in &dest, unsigned char packe
 
         std::memcpy(buffer + sizeof(RawUdpHeader), src + offset, chunkSize);
 
-        sendto(sock, buffer, sizeof(RawUdpHeader) + chunkSize, 0,
-               reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+        try {
+            pub.send(zmq::buffer(buffer, sizeof(RawUdpHeader) + chunkSize), zmq::send_flags::dontwait);
+        } catch (const zmq::error_t&) {
+            // Best-effort, same semantics as the plugin's own PUB socket.
+        }
 
         offset += chunkSize;
     }
 }
 
 void run_live_udp_server(int port, int hz, int duration_sec) {
-    int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0) {
-        std::cerr << "Error creating UDP socket" << std::endl;
+    zmq::context_t ctx(1);
+
+    // Outbound telemetry: PUB socket, bound (mirrors the real plugin's role); clients (SUB) connect.
+    zmq::socket_t pub(ctx, zmq::socket_type::pub);
+    pub.set(zmq::sockopt::sndhwm, 1000);
+    pub.set(zmq::sockopt::linger, 0);
+    char endpoint[64];
+    std::snprintf(endpoint, sizeof(endpoint), "tcp://127.0.0.1:%d", port);
+    try {
+        pub.bind(endpoint);
+    } catch (const zmq::error_t& e) {
+        std::cerr << "Error binding telemetry PUB socket on " << endpoint << ": " << e.what() << std::endl;
         return;
     }
 
-    sockaddr_in dest{};
-    dest.sin_family = AF_INET;
-    dest.sin_port = htons(port);
-    inet_pton(AF_INET, "127.0.0.1", &dest.sin_addr);
-
-    // Inbound Socket for FR-07 Bi-Directional Input & Control
+    // Inbound commands (FR-07 Bi-Directional Input & Control): SUB socket, bound; clients (PUB) connect.
     int inbound_port = port + 1;
-    int inbound_sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (inbound_sock >= 0) {
-        int reuse = 1;
-        setsockopt(inbound_sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-        fcntl(inbound_sock, F_SETFL, O_NONBLOCK);
-        sockaddr_in in_addr{};
-        in_addr.sin_family = AF_INET;
-        in_addr.sin_port = htons(inbound_port);
-        in_addr.sin_addr.s_addr = INADDR_ANY;
-        bind(inbound_sock, reinterpret_cast<sockaddr*>(&in_addr), sizeof(in_addr));
+    zmq::socket_t inbound_sock(ctx, zmq::socket_type::sub);
+    inbound_sock.set(zmq::sockopt::subscribe, "");
+    inbound_sock.set(zmq::sockopt::linger, 0);
+    bool inbound_bound = false;
+    {
+        char inbound_endpoint[64];
+        std::snprintf(inbound_endpoint, sizeof(inbound_endpoint), "tcp://127.0.0.1:%d", inbound_port);
+        try {
+            inbound_sock.bind(inbound_endpoint);
+            inbound_bound = true;
+        } catch (const zmq::error_t& e) {
+            std::cerr << "Error binding inbound SUB socket on " << inbound_endpoint << ": " << e.what() << std::endl;
+        }
     }
+
+    // ZMQ_PUB requires its subscriber(s) to complete connection + subscription
+    // propagation before it will forward any message ("slow joiner"); give
+    // the test client time to connect before streaming starts.
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
     TelemInfoV01 telem;
     populate_golden_telemetry(telem);
@@ -1093,7 +1103,7 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
     unsigned int gfx_seq = 0;
 
     // Send initial system event (Type 3)
-    send_sliced_udp_mock(sock, dest, 3, 0, &ev, sizeof(ev), 0.0, event_seq);
+    send_sliced_udp_mock(pub, 3, 0, &ev, sizeof(ev), 0.0, event_seq);
 
     int total_frames = hz * duration_sec;
     int scoring_divider = std::max(1, hz / 5);    // 5Hz scoring
@@ -1103,8 +1113,8 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
     int gfx_divider = std::max(1, hz / 60);       // 60Hz graphics
     auto frame_delay = std::chrono::microseconds(1000000 / hz);
 
-    std::cout << "[C++ Mock Host] Streaming UDP packets to 127.0.0.1:" << port
-              << " (Inbound listening on :" << inbound_port << ") @ "
+    std::cout << "[C++ Mock Host] Streaming ZeroMQ PUB packets on tcp://127.0.0.1:" << port
+              << " (Inbound SUB on :" << inbound_port << ") @ "
               << hz << "Hz for " << duration_sec << "s..." << std::endl;
 
     for (int frame = 0; frame < total_frames; ++frame) {
@@ -1114,19 +1124,24 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
         telem.mSpeedLimiter = (frame % 200 < 50) ? 1 : 0;
 
         // Poll inbound commands (FR-07)
-        if (inbound_sock >= 0) {
-            char in_buf[512];
-            sockaddr_in from_addr{};
-            socklen_t from_len = sizeof(from_addr);
+        if (inbound_bound) {
+            zmq::message_t in_msg;
             while (true) {
-                int bytes = recvfrom(inbound_sock, in_buf, sizeof(in_buf), 0,
-                                     reinterpret_cast<sockaddr*>(&from_addr), &from_len);
-                if (bytes < static_cast<int>(sizeof(RawUdpHeader))) break;
+                zmq::recv_result_t result;
+                try {
+                    result = inbound_sock.recv(in_msg, zmq::recv_flags::dontwait);
+                } catch (const zmq::error_t&) {
+                    break;
+                }
+                if (!result.has_value()) break;
 
-                const RawUdpHeader* in_hdr = reinterpret_cast<const RawUdpHeader*>(in_buf);
+                int bytes = static_cast<int>(in_msg.size());
+                if (bytes < static_cast<int>(sizeof(RawUdpHeader))) continue;
+
+                const RawUdpHeader* in_hdr = reinterpret_cast<const RawUdpHeader*>(in_msg.data());
                 if (std::memcmp(in_hdr->magic, "SIMP", 4) != 0) continue;
 
-                const char* in_payload = in_buf + sizeof(RawUdpHeader);
+                const char* in_payload = reinterpret_cast<const char*>(in_msg.data()) + sizeof(RawUdpHeader);
                 size_t in_size = static_cast<size_t>(bytes - sizeof(RawUdpHeader));
 
                 if (in_hdr->packetType == 100 && in_size >= sizeof(HWControlCommandPacket)) {
@@ -1144,34 +1159,34 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
                     weather.raining[1][1] = cmd->raining;
                     weather.cloudiness = cmd->darkCloud;
                     weather.windMaxSpeed = cmd->windSpeed;
-                    send_sliced_udp_mock(sock, dest, 7, 0, &weather, sizeof(weather), telem.mElapsedTime, weather_seq);
+                    send_sliced_udp_mock(pub, 7, 0, &weather, sizeof(weather), telem.mElapsedTime, weather_seq);
                 }
             }
         }
 
         // 1. Send telemetry (Type 1, 1888 bytes)
-        send_sliced_udp_mock(sock, dest, 1, 0, &telem, sizeof(telem), telem.mElapsedTime, telem_seq);
+        send_sliced_udp_mock(pub, 1, 0, &telem, sizeof(telem), telem.mElapsedTime, telem_seq);
 
         // 2. Send PitMenu (Type 6 @ 100Hz)
-        send_sliced_udp_mock(sock, dest, 6, 0, &pit_menu, sizeof(pit_menu), 0.0, pit_seq);
+        send_sliced_udp_mock(pub, 6, 0, &pit_menu, sizeof(pit_menu), 0.0, pit_seq);
 
         // 3. Send Force Feedback (Type 9 @ high frequency up to 400Hz)
         ffb.forceValue = 0.65 + 0.3 * std::sin(sim_time * 25.0);
-        send_sliced_udp_mock(sock, dest, 9, 0, &ffb, sizeof(ffb), 0.0, ffb_seq);
+        send_sliced_udp_mock(pub, 9, 0, &ffb, sizeof(ffb), 0.0, ffb_seq);
 
         // 4. Send Graphics (Type 10 @ 60Hz)
         if (frame % gfx_divider == 0) {
-            send_sliced_udp_mock(sock, dest, 10, static_cast<unsigned short>(gfx.slotId), &gfx, sizeof(gfx), 0.0, gfx_seq);
+            send_sliced_udp_mock(pub, 10, static_cast<unsigned short>(gfx.slotId), &gfx, sizeof(gfx), 0.0, gfx_seq);
         }
 
         // 5. Send Scoring (Compact Type 2 + Full Sliced Type 4 @ 5Hz)
         if (frame % scoring_divider == 0) {
             scoring.currentET = 1250.0 + sim_time;
-            send_sliced_udp_mock(sock, dest, 2, 0, &scoring, sizeof(scoring), scoring.currentET, scoring_seq);
+            send_sliced_udp_mock(pub, 2, 0, &scoring, sizeof(scoring), scoring.currentET, scoring_seq);
 
             full_sess.currentET = 1250.0 + sim_time;
             std::memcpy(full_scoring_buf.data(), &full_sess, sizeof(full_sess));
-            send_sliced_udp_mock(sock, dest, 4, static_cast<unsigned short>(full_vehs.size()),
+            send_sliced_udp_mock(pub, 4, static_cast<unsigned short>(full_vehs.size()),
                                 full_scoring_buf.data(), full_scoring_buf.size(), full_sess.currentET, full_scoring_seq);
         }
 
@@ -1179,27 +1194,27 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
         if (frame % rules_divider == 0) {
             rules_sess.currentET = 1250.0 + sim_time;
             std::memcpy(rules_buf.data(), &rules_sess, sizeof(rules_sess));
-            send_sliced_udp_mock(sock, dest, 5, static_cast<unsigned short>(rules_parts.size()),
+            send_sliced_udp_mock(pub, 5, static_cast<unsigned short>(rules_parts.size()),
                                 rules_buf.data(), rules_buf.size(), rules_sess.currentET, rules_seq);
         }
 
         // 7. Send Extended State (Type 8 @ 5Hz)
         if (frame % ext_divider == 0) {
             ext_state.accumulatedImpactMagnitude = 3250.75 + sim_time * 10.0;
-            send_sliced_udp_mock(sock, dest, 8, 0, &ext_state, sizeof(ext_state), telem.mElapsedTime, ext_seq);
+            send_sliced_udp_mock(pub, 8, 0, &ext_state, sizeof(ext_state), telem.mElapsedTime, ext_seq);
         }
 
         // 8. Send Weather (Type 7 @ 1Hz)
         if (frame % weather_divider == 0) {
             weather.et = 1250.0 + sim_time;
-            send_sliced_udp_mock(sock, dest, 7, 0, &weather, sizeof(weather), weather.et, weather_seq);
+            send_sliced_udp_mock(pub, 7, 0, &weather, sizeof(weather), weather.et, weather_seq);
         }
 
         std::this_thread::sleep_for(frame_delay);
     }
 
-    if (inbound_sock >= 0) close(inbound_sock);
-    close(sock);
+    if (inbound_bound) inbound_sock.close();
+    pub.close();
     std::cout << "[C++ Mock Host] Stream completed (" << total_frames << " frames sent)." << std::endl;
 }
 
