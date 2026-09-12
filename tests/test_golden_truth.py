@@ -12,13 +12,15 @@ from isimotor_rawudp_client.client import IsiMotorClient
 from isimotor_rawudp_client.decoder import (
     HEADER_SIZE,
     decode_compact_scoring,
+    decode_extended_state,
     decode_force_feedback,
     decode_full_scoring,
+    decode_graphics,
     decode_header,
     decode_hw_control,
-    decode_packet,
     decode_system_event,
     decode_telemetry,
+    decode_weather,
     decode_weather_control,
     encode_hw_control,
     encode_weather_control,
@@ -106,7 +108,8 @@ class TestGoldenTruth(unittest.TestCase):
         with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
-        self.assertEqual(len(data), 160, f"Expected 160 bytes, got {len(data)}")
+        # CompactScoring (Type 2) is a FlatBuffer with no header/framing: the
+        # message IS the FlatBuffer, decoded directly (no decode_packet).
         s = decode_compact_scoring(data)
         self.assertIsNotNone(s)
 
@@ -196,8 +199,9 @@ class TestGoldenTruth(unittest.TestCase):
         with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
-        self.assertEqual(len(data), 108)
-        w = decode_packet(struct.pack("<4sBBHIdBBH", b"SIMP", 1, 7, 108, 11, 1250.456, 0, 1, 0) + data)
+        # WeatherControl (Type 7) is a FlatBuffer with no header/framing: the
+        # message IS the FlatBuffer, decoded directly (no decode_packet).
+        w = decode_weather(data)
         self.assertIsNotNone(w)
         self.assertAlmostEqual(w.et, truth["et"], places=3)
         self.assertAlmostEqual(w.cloudiness, truth["cloudiness"], places=2)
@@ -217,8 +221,9 @@ class TestGoldenTruth(unittest.TestCase):
         with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
-        self.assertEqual(len(data), 68)
-        ext = decode_packet(struct.pack("<4sBBHIdBBH", b"SIMP", 1, 8, 68, 20, 125.456, 0, 1, 0) + data)
+        # ExtendedState (Type 8) is a FlatBuffer with no header/framing: the
+        # message IS the FlatBuffer, decoded directly (no decode_packet).
+        ext = decode_extended_state(data)
         self.assertIsNotNone(ext)
         self.assertEqual(ext.physics.traction_control, truth["traction_control"])
         self.assertEqual(ext.physics.traction_control_str, "Medium")
@@ -267,8 +272,9 @@ class TestGoldenTruth(unittest.TestCase):
         with open(json_path, encoding="utf-8") as f:
             truth = json.load(f)
 
-        self.assertEqual(len(data), 128)
-        gfx = decode_packet(struct.pack("<4sBBHIdBBH", b"SIMP", 1, 10, 128, 40, 0.0, 0, 1, 42) + data)
+        # Graphics (Type 10) is a FlatBuffer with no header/framing: the
+        # message IS the FlatBuffer, decoded directly (no decode_packet).
+        gfx = decode_graphics(data)
         self.assertIsNotNone(gfx)
         self.assertAlmostEqual(gfx.cam_pos.x, truth["cam_pos"][0], places=2)
         self.assertAlmostEqual(gfx.cam_pos.y, truth["cam_pos"][1], places=2)

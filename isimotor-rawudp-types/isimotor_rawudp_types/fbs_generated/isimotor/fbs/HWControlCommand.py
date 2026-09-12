@@ -6,71 +6,71 @@ import flatbuffers
 from flatbuffers.compat import import_numpy
 np = import_numpy()
 
-class HWControl(object):
+class HWControlCommand(object):
     __slots__ = ['_tab']
 
     @classmethod
     def GetRootAs(cls, buf, offset=0):
         n = flatbuffers.encode.Get(flatbuffers.packer.uoffset, buf, offset)
-        x = HWControl()
+        x = HWControlCommand()
         x.Init(buf, n + offset)
         return x
 
     @classmethod
-    def GetRootAsHWControl(cls, buf, offset=0):
+    def GetRootAsHWControlCommand(cls, buf, offset=0):
         """This method is deprecated. Please switch to GetRootAs."""
         return cls.GetRootAs(buf, offset)
-    # HWControl
+    # HWControlCommand
     def Init(self, buf, pos):
         self._tab = flatbuffers.table.Table(buf, pos)
 
-    # HWControl
+    # HWControlCommand
     def ControlName(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(4))
         if o != 0:
             return self._tab.String(o + self._tab.Pos)
         return None
 
-    # HWControl
+    # HWControlCommand
     def ControlValue(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
         if o != 0:
             return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
         return 1.0
 
-    # HWControl
+    # HWControlCommand
     def DurationMs(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(8))
         if o != 0:
             return self._tab.Get(flatbuffers.number_types.Uint16Flags, o + self._tab.Pos)
         return 50
 
-def HWControlStart(builder):
+def HWControlCommandStart(builder):
     builder.StartObject(3)
 
 def Start(builder):
-    HWControlStart(builder)
+    HWControlCommandStart(builder)
 
-def HWControlAddControlName(builder, controlName):
+def HWControlCommandAddControlName(builder, controlName):
     builder.PrependUOffsetTRelativeSlot(0, flatbuffers.number_types.UOffsetTFlags.py_type(controlName), 0)
 
 def AddControlName(builder, controlName):
-    HWControlAddControlName(builder, controlName)
+    HWControlCommandAddControlName(builder, controlName)
 
-def HWControlAddControlValue(builder, controlValue):
+def HWControlCommandAddControlValue(builder, controlValue):
     builder.PrependFloat64Slot(1, controlValue, 1.0)
 
 def AddControlValue(builder, controlValue):
-    HWControlAddControlValue(builder, controlValue)
+    HWControlCommandAddControlValue(builder, controlValue)
 
-def HWControlAddDurationMs(builder, durationMs):
+def HWControlCommandAddDurationMs(builder, durationMs):
     builder.PrependUint16Slot(2, durationMs, 50)
 
 def AddDurationMs(builder, durationMs):
-    HWControlAddDurationMs(builder, durationMs)
+    HWControlCommandAddDurationMs(builder, durationMs)
 
-def HWControlEnd(builder):
+def HWControlCommandEnd(builder):
     return builder.EndObject()
 
 def End(builder):
-    return HWControlEnd(builder)
+    return HWControlCommandEnd(builder)

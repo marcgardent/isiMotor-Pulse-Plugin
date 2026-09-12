@@ -170,21 +170,41 @@ class TelemetryEngine:
 
         pkt_type = PKT_FOREIGN
 
-        # SystemEvent (3) and ForceFeedback (9) are header-less FlatBuffers,
-        # each on its own port: the packet type is known from the socket the
-        # message arrived on, so decode them directly (no SIMP header at all).
-        if packet_type == 3:
+        # Types 2, 3, 7, 8, 9, 10 are header-less FlatBuffers, each on its own
+        # port: the packet type is known from the socket the message arrived
+        # on, so decode them directly (no SIMP header at all).
+        if packet_type == 2:
+            pkt_type = PKT_COMPACT_SCORING
+            scoring = decode_compact_scoring(data)
+            if scoring:
+                self.latest_scoring = scoring
+        elif packet_type == 3:
             pkt_type = PKT_SYSTEM_EVENT
             ev = decode_system_event(data)
             if ev:
                 self.latest_event = ev
                 self.latest_event_time = now
+        elif packet_type == 7:
+            pkt_type = PKT_WEATHER
+            w = decode_weather(data)
+            if w:
+                self.latest_weather = w
+        elif packet_type == 8:
+            pkt_type = PKT_EXTENDED_STATE
+            ext = decode_extended_state(data)
+            if ext:
+                self.latest_extended_state = ext
         elif packet_type == 9:
             pkt_type = PKT_FORCE_FEEDBACK
             ffb = decode_force_feedback(data)
             if ffb:
                 self.latest_force_feedback = ffb
-        # 1. Standardized 24-byte Header (remaining legacy packet types)
+        elif packet_type == 10:
+            pkt_type = PKT_GRAPHICS
+            gfx = decode_graphics(data)
+            if gfx:
+                self.latest_graphics = gfx
+        # 1. Standardized 24-byte Header (remaining legacy packet types: 1, 4)
         elif data.startswith(b"SIMP") and size >= HEADER_SIZE and data[4] == 1:
             hdr = decode_header(data)
             if hdr:
@@ -211,11 +231,6 @@ class TelemetryEngine:
                             telem = decode_telemetry(b"".join(ordered))
                             if telem:
                                 self.latest_telemetry = telem
-                elif hdr.packet_type == 2:
-                    pkt_type = PKT_COMPACT_SCORING
-                    scoring = decode_compact_scoring(payload)
-                    if scoring:
-                        self.latest_scoring = scoring
                 elif hdr.packet_type == 4:
                     pkt_type = PKT_FULL_SCORING
                     if hdr.total_chunks == 1:
@@ -240,21 +255,6 @@ class TelemetryEngine:
                             if fs:
                                 self.latest_full_scoring = fs
                                 self.stats[PKT_FULL_SCORING].record_logical(now)
-                elif hdr.packet_type == 7:
-                    pkt_type = PKT_WEATHER
-                    w = decode_weather(payload)
-                    if w:
-                        self.latest_weather = w
-                elif hdr.packet_type == 8:
-                    pkt_type = PKT_EXTENDED_STATE
-                    ext = decode_extended_state(payload)
-                    if ext:
-                        self.latest_extended_state = ext
-                elif hdr.packet_type == 10:
-                    pkt_type = PKT_GRAPHICS
-                    gfx = decode_graphics(payload)
-                    if gfx:
-                        self.latest_graphics = gfx
                 elif hdr.packet_type == 100:
                     pkt_type = PKT_HW_CONTROL
                 elif hdr.packet_type == 101:

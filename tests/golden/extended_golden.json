@@ -1,14 +1,13 @@
 {
-  "struct_size": 68,
   "traction_control": 2,
   "anti_lock_brakes": 1,
   "auto_clutch": 1,
   "auto_blip": 1,
   "tire_mult": 2,
-  "max_impact_magnitude": 1845.500000,
-  "accumulated_impact_magnitude": 3250.750000,
+  "max_impact_magnitude": 1845.50,
+  "accumulated_impact_magnitude": 3250.75,
   "in_realtime_fc": true,
   "session_started": true,
   "session": 10,
-  "current_pit_speed_limit": 16.666700
+  "current_pit_speed_limit": 16.6667
 }

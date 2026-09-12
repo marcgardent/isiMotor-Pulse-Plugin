@@ -1,0 +1,45 @@
+// isiMotor RawUDP - ExtendedState (outbound, packet type 8).
+// Published on its own ZeroMQ PUB port (TcpBasePort + 8); the message on
+// that port IS this FlatBuffer, with no outer framing/header.
+namespace isimotor.fbs;
+
+table PhysicsOptions {
+  traction_control: ubyte;
+  anti_lock_brakes: ubyte;
+  stability_control: ubyte;
+  auto_shift: ubyte;
+  auto_clutch: ubyte;
+  invulnerable: ubyte;
+  opposite_lock: ubyte;
+  steering_help: ubyte;
+  braking_help: ubyte;
+  spin_recovery: ubyte;
+  auto_pit: ubyte;
+  auto_lift: ubyte;
+  auto_blip: ubyte;
+  fuel_mult: ubyte;
+  tire_mult: ubyte;
+  mech_fail: ubyte;
+  allow_pitcrew_push: ubyte;
+  repeat_shifts: ubyte;
+  hold_clutch: ubyte;
+  auto_reverse: ubyte;
+  alternate_neutral: ubyte;
+  ai_control: ubyte;
+  manual_shift_override_time: float;
+  auto_shift_override_time: float;
+  speed_sensitive_steering: float;
+  steer_ratio_speed: float;
+}
+
+table ExtendedState {
+  physics: PhysicsOptions;
+  max_impact_magnitude: double;
+  accumulated_impact_magnitude: double;
+  in_realtime_fc: bool;
+  session_started: bool;
+  session: int32;
+  current_pit_speed_limit: float;
+}
+
+root_type ExtendedState;

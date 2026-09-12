@@ -16,13 +16,13 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 23 &&
 namespace isimotor {
 namespace fbs {
 
-struct HWControl;
-struct HWControlBuilder;
-struct HWControlT;
+struct HWControlCommand;
+struct HWControlCommandBuilder;
+struct HWControlCommandT;
 
-struct WeatherControl;
-struct WeatherControlBuilder;
-struct WeatherControlT;
+struct WeatherControlCommand;
+struct WeatherControlCommandBuilder;
+struct WeatherControlCommandT;
 
 struct InboundCommand;
 struct InboundCommandBuilder;
@@ -30,17 +30,17 @@ struct InboundCommandT;
 
 enum CommandPayload : uint8_t {
   CommandPayload_NONE = 0,
-  CommandPayload_HWControl = 1,
-  CommandPayload_WeatherControl = 2,
+  CommandPayload_HWControlCommand = 1,
+  CommandPayload_WeatherControlCommand = 2,
   CommandPayload_MIN = CommandPayload_NONE,
-  CommandPayload_MAX = CommandPayload_WeatherControl
+  CommandPayload_MAX = CommandPayload_WeatherControlCommand
 };
 
 inline const CommandPayload (&EnumValuesCommandPayload())[3] {
   static const CommandPayload values[] = {
     CommandPayload_NONE,
-    CommandPayload_HWControl,
-    CommandPayload_WeatherControl
+    CommandPayload_HWControlCommand,
+    CommandPayload_WeatherControlCommand
   };
   return values;
 }
@@ -48,15 +48,15 @@ inline const CommandPayload (&EnumValuesCommandPayload())[3] {
 inline const char * const *EnumNamesCommandPayload() {
   static const char * const names[4] = {
     "NONE",
-    "HWControl",
-    "WeatherControl",
+    "HWControlCommand",
+    "WeatherControlCommand",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameCommandPayload(CommandPayload e) {
-  if (::flatbuffers::IsOutRange(e, CommandPayload_NONE, CommandPayload_WeatherControl)) return "";
+  if (::flatbuffers::IsOutRange(e, CommandPayload_NONE, CommandPayload_WeatherControlCommand)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesCommandPayload()[index];
 }
@@ -65,24 +65,24 @@ template<typename T> struct CommandPayloadTraits {
   static const CommandPayload enum_value = CommandPayload_NONE;
 };
 
-template<> struct CommandPayloadTraits<isimotor::fbs::HWControl> {
-  static const CommandPayload enum_value = CommandPayload_HWControl;
+template<> struct CommandPayloadTraits<isimotor::fbs::HWControlCommand> {
+  static const CommandPayload enum_value = CommandPayload_HWControlCommand;
 };
 
-template<> struct CommandPayloadTraits<isimotor::fbs::WeatherControl> {
-  static const CommandPayload enum_value = CommandPayload_WeatherControl;
+template<> struct CommandPayloadTraits<isimotor::fbs::WeatherControlCommand> {
+  static const CommandPayload enum_value = CommandPayload_WeatherControlCommand;
 };
 
 template<typename T> struct CommandPayloadUnionTraits {
   static const CommandPayload enum_value = CommandPayload_NONE;
 };
 
-template<> struct CommandPayloadUnionTraits<isimotor::fbs::HWControlT> {
-  static const CommandPayload enum_value = CommandPayload_HWControl;
+template<> struct CommandPayloadUnionTraits<isimotor::fbs::HWControlCommandT> {
+  static const CommandPayload enum_value = CommandPayload_HWControlCommand;
 };
 
-template<> struct CommandPayloadUnionTraits<isimotor::fbs::WeatherControlT> {
-  static const CommandPayload enum_value = CommandPayload_WeatherControl;
+template<> struct CommandPayloadUnionTraits<isimotor::fbs::WeatherControlCommandT> {
+  static const CommandPayload enum_value = CommandPayload_WeatherControlCommand;
 };
 
 struct CommandPayloadUnion {
@@ -115,37 +115,37 @@ struct CommandPayloadUnion {
   static void *UnPack(const void *obj, CommandPayload type, const ::flatbuffers::resolver_function_t *resolver);
   ::flatbuffers::Offset<void> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr) const;
 
-  isimotor::fbs::HWControlT *AsHWControl() {
-    return type == CommandPayload_HWControl ?
-      reinterpret_cast<isimotor::fbs::HWControlT *>(value) : nullptr;
+  isimotor::fbs::HWControlCommandT *AsHWControlCommand() {
+    return type == CommandPayload_HWControlCommand ?
+      reinterpret_cast<isimotor::fbs::HWControlCommandT *>(value) : nullptr;
   }
-  const isimotor::fbs::HWControlT *AsHWControl() const {
-    return type == CommandPayload_HWControl ?
-      reinterpret_cast<const isimotor::fbs::HWControlT *>(value) : nullptr;
+  const isimotor::fbs::HWControlCommandT *AsHWControlCommand() const {
+    return type == CommandPayload_HWControlCommand ?
+      reinterpret_cast<const isimotor::fbs::HWControlCommandT *>(value) : nullptr;
   }
-  isimotor::fbs::WeatherControlT *AsWeatherControl() {
-    return type == CommandPayload_WeatherControl ?
-      reinterpret_cast<isimotor::fbs::WeatherControlT *>(value) : nullptr;
+  isimotor::fbs::WeatherControlCommandT *AsWeatherControlCommand() {
+    return type == CommandPayload_WeatherControlCommand ?
+      reinterpret_cast<isimotor::fbs::WeatherControlCommandT *>(value) : nullptr;
   }
-  const isimotor::fbs::WeatherControlT *AsWeatherControl() const {
-    return type == CommandPayload_WeatherControl ?
-      reinterpret_cast<const isimotor::fbs::WeatherControlT *>(value) : nullptr;
+  const isimotor::fbs::WeatherControlCommandT *AsWeatherControlCommand() const {
+    return type == CommandPayload_WeatherControlCommand ?
+      reinterpret_cast<const isimotor::fbs::WeatherControlCommandT *>(value) : nullptr;
   }
 };
 
 bool VerifyCommandPayload(::flatbuffers::Verifier &verifier, const void *obj, CommandPayload type);
 bool VerifyCommandPayloadVector(::flatbuffers::Verifier &verifier, const ::flatbuffers::Vector<::flatbuffers::Offset<void>> *values, const ::flatbuffers::Vector<uint8_t> *types);
 
-struct HWControlT : public ::flatbuffers::NativeTable {
-  typedef HWControl TableType;
+struct HWControlCommandT : public ::flatbuffers::NativeTable {
+  typedef HWControlCommand TableType;
   std::string control_name{};
   double control_value = 1.0;
   uint16_t duration_ms = 50;
 };
 
-struct HWControl FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef HWControlT NativeTableType;
-  typedef HWControlBuilder Builder;
+struct HWControlCommand FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef HWControlCommandT NativeTableType;
+  typedef HWControlCommandBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_CONTROL_NAME = 4,
     VT_CONTROL_VALUE = 6,
@@ -168,64 +168,64 @@ struct HWControl FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint16_t>(verifier, VT_DURATION_MS, 2) &&
            verifier.EndTable();
   }
-  HWControlT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(HWControlT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<HWControl> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const HWControlT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+  HWControlCommandT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(HWControlCommandT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<HWControlCommand> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const HWControlCommandT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 };
 
-struct HWControlBuilder {
-  typedef HWControl Table;
+struct HWControlCommandBuilder {
+  typedef HWControlCommand Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
   void add_control_name(::flatbuffers::Offset<::flatbuffers::String> control_name) {
-    fbb_.AddOffset(HWControl::VT_CONTROL_NAME, control_name);
+    fbb_.AddOffset(HWControlCommand::VT_CONTROL_NAME, control_name);
   }
   void add_control_value(double control_value) {
-    fbb_.AddElement<double>(HWControl::VT_CONTROL_VALUE, control_value, 1.0);
+    fbb_.AddElement<double>(HWControlCommand::VT_CONTROL_VALUE, control_value, 1.0);
   }
   void add_duration_ms(uint16_t duration_ms) {
-    fbb_.AddElement<uint16_t>(HWControl::VT_DURATION_MS, duration_ms, 50);
+    fbb_.AddElement<uint16_t>(HWControlCommand::VT_DURATION_MS, duration_ms, 50);
   }
-  explicit HWControlBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+  explicit HWControlCommandBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  ::flatbuffers::Offset<HWControl> Finish() {
+  ::flatbuffers::Offset<HWControlCommand> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<HWControl>(end);
+    auto o = ::flatbuffers::Offset<HWControlCommand>(end);
     return o;
   }
 };
 
-inline ::flatbuffers::Offset<HWControl> CreateHWControl(
+inline ::flatbuffers::Offset<HWControlCommand> CreateHWControlCommand(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> control_name = 0,
     double control_value = 1.0,
     uint16_t duration_ms = 50) {
-  HWControlBuilder builder_(_fbb);
+  HWControlCommandBuilder builder_(_fbb);
   builder_.add_control_value(control_value);
   builder_.add_control_name(control_name);
   builder_.add_duration_ms(duration_ms);
   return builder_.Finish();
 }
 
-inline ::flatbuffers::Offset<HWControl> CreateHWControlDirect(
+inline ::flatbuffers::Offset<HWControlCommand> CreateHWControlCommandDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *control_name = nullptr,
     double control_value = 1.0,
     uint16_t duration_ms = 50) {
   auto control_name__ = control_name ? _fbb.CreateString(control_name) : 0;
-  return isimotor::fbs::CreateHWControl(
+  return isimotor::fbs::CreateHWControlCommand(
       _fbb,
       control_name__,
       control_value,
       duration_ms);
 }
 
-::flatbuffers::Offset<HWControl> CreateHWControl(::flatbuffers::FlatBufferBuilder &_fbb, const HWControlT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+::flatbuffers::Offset<HWControlCommand> CreateHWControlCommand(::flatbuffers::FlatBufferBuilder &_fbb, const HWControlCommandT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
-struct WeatherControlT : public ::flatbuffers::NativeTable {
-  typedef WeatherControl TableType;
+struct WeatherControlCommandT : public ::flatbuffers::NativeTable {
+  typedef WeatherControlCommand TableType;
   double ambient_temp = 0.0;
   double track_temp = 0.0;
   double dark_cloud = 0.0;
@@ -236,9 +236,9 @@ struct WeatherControlT : public ::flatbuffers::NativeTable {
   double max_path_wetness = 0.0;
 };
 
-struct WeatherControl FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef WeatherControlT NativeTableType;
-  typedef WeatherControlBuilder Builder;
+struct WeatherControlCommand FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef WeatherControlCommandT NativeTableType;
+  typedef WeatherControlCommandBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_AMBIENT_TEMP = 4,
     VT_TRACK_TEMP = 6,
@@ -285,51 +285,51 @@ struct WeatherControl FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<double>(verifier, VT_MAX_PATH_WETNESS, 8) &&
            verifier.EndTable();
   }
-  WeatherControlT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(WeatherControlT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<WeatherControl> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const WeatherControlT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+  WeatherControlCommandT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(WeatherControlCommandT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<WeatherControlCommand> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const WeatherControlCommandT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 };
 
-struct WeatherControlBuilder {
-  typedef WeatherControl Table;
+struct WeatherControlCommandBuilder {
+  typedef WeatherControlCommand Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
   void add_ambient_temp(double ambient_temp) {
-    fbb_.AddElement<double>(WeatherControl::VT_AMBIENT_TEMP, ambient_temp, 0.0);
+    fbb_.AddElement<double>(WeatherControlCommand::VT_AMBIENT_TEMP, ambient_temp, 0.0);
   }
   void add_track_temp(double track_temp) {
-    fbb_.AddElement<double>(WeatherControl::VT_TRACK_TEMP, track_temp, 0.0);
+    fbb_.AddElement<double>(WeatherControlCommand::VT_TRACK_TEMP, track_temp, 0.0);
   }
   void add_dark_cloud(double dark_cloud) {
-    fbb_.AddElement<double>(WeatherControl::VT_DARK_CLOUD, dark_cloud, 0.0);
+    fbb_.AddElement<double>(WeatherControlCommand::VT_DARK_CLOUD, dark_cloud, 0.0);
   }
   void add_raining(double raining) {
-    fbb_.AddElement<double>(WeatherControl::VT_RAINING, raining, 0.0);
+    fbb_.AddElement<double>(WeatherControlCommand::VT_RAINING, raining, 0.0);
   }
   void add_wind_speed(double wind_speed) {
-    fbb_.AddElement<double>(WeatherControl::VT_WIND_SPEED, wind_speed, 0.0);
+    fbb_.AddElement<double>(WeatherControlCommand::VT_WIND_SPEED, wind_speed, 0.0);
   }
   void add_wind_direction(double wind_direction) {
-    fbb_.AddElement<double>(WeatherControl::VT_WIND_DIRECTION, wind_direction, 0.0);
+    fbb_.AddElement<double>(WeatherControlCommand::VT_WIND_DIRECTION, wind_direction, 0.0);
   }
   void add_min_path_wetness(double min_path_wetness) {
-    fbb_.AddElement<double>(WeatherControl::VT_MIN_PATH_WETNESS, min_path_wetness, 0.0);
+    fbb_.AddElement<double>(WeatherControlCommand::VT_MIN_PATH_WETNESS, min_path_wetness, 0.0);
   }
   void add_max_path_wetness(double max_path_wetness) {
-    fbb_.AddElement<double>(WeatherControl::VT_MAX_PATH_WETNESS, max_path_wetness, 0.0);
+    fbb_.AddElement<double>(WeatherControlCommand::VT_MAX_PATH_WETNESS, max_path_wetness, 0.0);
   }
-  explicit WeatherControlBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+  explicit WeatherControlCommandBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  ::flatbuffers::Offset<WeatherControl> Finish() {
+  ::flatbuffers::Offset<WeatherControlCommand> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<WeatherControl>(end);
+    auto o = ::flatbuffers::Offset<WeatherControlCommand>(end);
     return o;
   }
 };
 
-inline ::flatbuffers::Offset<WeatherControl> CreateWeatherControl(
+inline ::flatbuffers::Offset<WeatherControlCommand> CreateWeatherControlCommand(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     double ambient_temp = 0.0,
     double track_temp = 0.0,
@@ -339,7 +339,7 @@ inline ::flatbuffers::Offset<WeatherControl> CreateWeatherControl(
     double wind_direction = 0.0,
     double min_path_wetness = 0.0,
     double max_path_wetness = 0.0) {
-  WeatherControlBuilder builder_(_fbb);
+  WeatherControlCommandBuilder builder_(_fbb);
   builder_.add_max_path_wetness(max_path_wetness);
   builder_.add_min_path_wetness(min_path_wetness);
   builder_.add_wind_direction(wind_direction);
@@ -351,7 +351,7 @@ inline ::flatbuffers::Offset<WeatherControl> CreateWeatherControl(
   return builder_.Finish();
 }
 
-::flatbuffers::Offset<WeatherControl> CreateWeatherControl(::flatbuffers::FlatBufferBuilder &_fbb, const WeatherControlT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+::flatbuffers::Offset<WeatherControlCommand> CreateWeatherControlCommand(::flatbuffers::FlatBufferBuilder &_fbb, const WeatherControlCommandT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct InboundCommandT : public ::flatbuffers::NativeTable {
   typedef InboundCommand TableType;
@@ -372,11 +372,11 @@ struct InboundCommand FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetPointer<const void *>(VT_PAYLOAD);
   }
   template<typename T> const T *payload_as() const;
-  const isimotor::fbs::HWControl *payload_as_HWControl() const {
-    return payload_type() == isimotor::fbs::CommandPayload_HWControl ? static_cast<const isimotor::fbs::HWControl *>(payload()) : nullptr;
+  const isimotor::fbs::HWControlCommand *payload_as_HWControlCommand() const {
+    return payload_type() == isimotor::fbs::CommandPayload_HWControlCommand ? static_cast<const isimotor::fbs::HWControlCommand *>(payload()) : nullptr;
   }
-  const isimotor::fbs::WeatherControl *payload_as_WeatherControl() const {
-    return payload_type() == isimotor::fbs::CommandPayload_WeatherControl ? static_cast<const isimotor::fbs::WeatherControl *>(payload()) : nullptr;
+  const isimotor::fbs::WeatherControlCommand *payload_as_WeatherControlCommand() const {
+    return payload_type() == isimotor::fbs::CommandPayload_WeatherControlCommand ? static_cast<const isimotor::fbs::WeatherControlCommand *>(payload()) : nullptr;
   }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -390,12 +390,12 @@ struct InboundCommand FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   static ::flatbuffers::Offset<InboundCommand> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const InboundCommandT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 };
 
-template<> inline const isimotor::fbs::HWControl *InboundCommand::payload_as<isimotor::fbs::HWControl>() const {
-  return payload_as_HWControl();
+template<> inline const isimotor::fbs::HWControlCommand *InboundCommand::payload_as<isimotor::fbs::HWControlCommand>() const {
+  return payload_as_HWControlCommand();
 }
 
-template<> inline const isimotor::fbs::WeatherControl *InboundCommand::payload_as<isimotor::fbs::WeatherControl>() const {
-  return payload_as_WeatherControl();
+template<> inline const isimotor::fbs::WeatherControlCommand *InboundCommand::payload_as<isimotor::fbs::WeatherControlCommand>() const {
+  return payload_as_WeatherControlCommand();
 }
 
 struct InboundCommandBuilder {
@@ -431,13 +431,13 @@ inline ::flatbuffers::Offset<InboundCommand> CreateInboundCommand(
 
 ::flatbuffers::Offset<InboundCommand> CreateInboundCommand(::flatbuffers::FlatBufferBuilder &_fbb, const InboundCommandT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
-inline HWControlT *HWControl::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::unique_ptr<HWControlT>(new HWControlT());
+inline HWControlCommandT *HWControlCommand::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<HWControlCommandT>(new HWControlCommandT());
   UnPackTo(_o.get(), _resolver);
   return _o.release();
 }
 
-inline void HWControl::UnPackTo(HWControlT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+inline void HWControlCommand::UnPackTo(HWControlCommandT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
   { auto _e = control_name(); if (_e) _o->control_name = _e->str(); }
@@ -445,31 +445,31 @@ inline void HWControl::UnPackTo(HWControlT *_o, const ::flatbuffers::resolver_fu
   { auto _e = duration_ms(); _o->duration_ms = _e; }
 }
 
-inline ::flatbuffers::Offset<HWControl> HWControl::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const HWControlT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreateHWControl(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<HWControlCommand> HWControlCommand::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const HWControlCommandT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateHWControlCommand(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<HWControl> CreateHWControl(::flatbuffers::FlatBufferBuilder &_fbb, const HWControlT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<HWControlCommand> CreateHWControlCommand(::flatbuffers::FlatBufferBuilder &_fbb, const HWControlCommandT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const HWControlT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const HWControlCommandT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _control_name = _o->control_name.empty() ? 0 : _fbb.CreateString(_o->control_name);
   auto _control_value = _o->control_value;
   auto _duration_ms = _o->duration_ms;
-  return isimotor::fbs::CreateHWControl(
+  return isimotor::fbs::CreateHWControlCommand(
       _fbb,
       _control_name,
       _control_value,
       _duration_ms);
 }
 
-inline WeatherControlT *WeatherControl::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::unique_ptr<WeatherControlT>(new WeatherControlT());
+inline WeatherControlCommandT *WeatherControlCommand::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<WeatherControlCommandT>(new WeatherControlCommandT());
   UnPackTo(_o.get(), _resolver);
   return _o.release();
 }
 
-inline void WeatherControl::UnPackTo(WeatherControlT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+inline void WeatherControlCommand::UnPackTo(WeatherControlCommandT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
   { auto _e = ambient_temp(); _o->ambient_temp = _e; }
@@ -482,14 +482,14 @@ inline void WeatherControl::UnPackTo(WeatherControlT *_o, const ::flatbuffers::r
   { auto _e = max_path_wetness(); _o->max_path_wetness = _e; }
 }
 
-inline ::flatbuffers::Offset<WeatherControl> WeatherControl::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const WeatherControlT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreateWeatherControl(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<WeatherControlCommand> WeatherControlCommand::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const WeatherControlCommandT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateWeatherControlCommand(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<WeatherControl> CreateWeatherControl(::flatbuffers::FlatBufferBuilder &_fbb, const WeatherControlT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<WeatherControlCommand> CreateWeatherControlCommand(::flatbuffers::FlatBufferBuilder &_fbb, const WeatherControlCommandT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const WeatherControlT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const WeatherControlCommandT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _ambient_temp = _o->ambient_temp;
   auto _track_temp = _o->track_temp;
   auto _dark_cloud = _o->dark_cloud;
@@ -498,7 +498,7 @@ inline ::flatbuffers::Offset<WeatherControl> CreateWeatherControl(::flatbuffers:
   auto _wind_direction = _o->wind_direction;
   auto _min_path_wetness = _o->min_path_wetness;
   auto _max_path_wetness = _o->max_path_wetness;
-  return isimotor::fbs::CreateWeatherControl(
+  return isimotor::fbs::CreateWeatherControlCommand(
       _fbb,
       _ambient_temp,
       _track_temp,
@@ -544,12 +544,12 @@ inline bool VerifyCommandPayload(::flatbuffers::Verifier &verifier, const void *
     case CommandPayload_NONE: {
       return true;
     }
-    case CommandPayload_HWControl: {
-      auto ptr = reinterpret_cast<const isimotor::fbs::HWControl *>(obj);
+    case CommandPayload_HWControlCommand: {
+      auto ptr = reinterpret_cast<const isimotor::fbs::HWControlCommand *>(obj);
       return verifier.VerifyTable(ptr);
     }
-    case CommandPayload_WeatherControl: {
-      auto ptr = reinterpret_cast<const isimotor::fbs::WeatherControl *>(obj);
+    case CommandPayload_WeatherControlCommand: {
+      auto ptr = reinterpret_cast<const isimotor::fbs::WeatherControlCommand *>(obj);
       return verifier.VerifyTable(ptr);
     }
     default: return true;
@@ -571,12 +571,12 @@ inline bool VerifyCommandPayloadVector(::flatbuffers::Verifier &verifier, const 
 inline void *CommandPayloadUnion::UnPack(const void *obj, CommandPayload type, const ::flatbuffers::resolver_function_t *resolver) {
   (void)resolver;
   switch (type) {
-    case CommandPayload_HWControl: {
-      auto ptr = reinterpret_cast<const isimotor::fbs::HWControl *>(obj);
+    case CommandPayload_HWControlCommand: {
+      auto ptr = reinterpret_cast<const isimotor::fbs::HWControlCommand *>(obj);
       return ptr->UnPack(resolver);
     }
-    case CommandPayload_WeatherControl: {
-      auto ptr = reinterpret_cast<const isimotor::fbs::WeatherControl *>(obj);
+    case CommandPayload_WeatherControlCommand: {
+      auto ptr = reinterpret_cast<const isimotor::fbs::WeatherControlCommand *>(obj);
       return ptr->UnPack(resolver);
     }
     default: return nullptr;
@@ -586,13 +586,13 @@ inline void *CommandPayloadUnion::UnPack(const void *obj, CommandPayload type, c
 inline ::flatbuffers::Offset<void> CommandPayloadUnion::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ::flatbuffers::rehasher_function_t *_rehasher) const {
   (void)_rehasher;
   switch (type) {
-    case CommandPayload_HWControl: {
-      auto ptr = reinterpret_cast<const isimotor::fbs::HWControlT *>(value);
-      return CreateHWControl(_fbb, ptr, _rehasher).Union();
+    case CommandPayload_HWControlCommand: {
+      auto ptr = reinterpret_cast<const isimotor::fbs::HWControlCommandT *>(value);
+      return CreateHWControlCommand(_fbb, ptr, _rehasher).Union();
     }
-    case CommandPayload_WeatherControl: {
-      auto ptr = reinterpret_cast<const isimotor::fbs::WeatherControlT *>(value);
-      return CreateWeatherControl(_fbb, ptr, _rehasher).Union();
+    case CommandPayload_WeatherControlCommand: {
+      auto ptr = reinterpret_cast<const isimotor::fbs::WeatherControlCommandT *>(value);
+      return CreateWeatherControlCommand(_fbb, ptr, _rehasher).Union();
     }
     default: return 0;
   }
@@ -600,12 +600,12 @@ inline ::flatbuffers::Offset<void> CommandPayloadUnion::Pack(::flatbuffers::Flat
 
 inline CommandPayloadUnion::CommandPayloadUnion(const CommandPayloadUnion &u) : type(u.type), value(nullptr) {
   switch (type) {
-    case CommandPayload_HWControl: {
-      value = new isimotor::fbs::HWControlT(*reinterpret_cast<isimotor::fbs::HWControlT *>(u.value));
+    case CommandPayload_HWControlCommand: {
+      value = new isimotor::fbs::HWControlCommandT(*reinterpret_cast<isimotor::fbs::HWControlCommandT *>(u.value));
       break;
     }
-    case CommandPayload_WeatherControl: {
-      value = new isimotor::fbs::WeatherControlT(*reinterpret_cast<isimotor::fbs::WeatherControlT *>(u.value));
+    case CommandPayload_WeatherControlCommand: {
+      value = new isimotor::fbs::WeatherControlCommandT(*reinterpret_cast<isimotor::fbs::WeatherControlCommandT *>(u.value));
       break;
     }
     default:
@@ -615,13 +615,13 @@ inline CommandPayloadUnion::CommandPayloadUnion(const CommandPayloadUnion &u) : 
 
 inline void CommandPayloadUnion::Reset() {
   switch (type) {
-    case CommandPayload_HWControl: {
-      auto ptr = reinterpret_cast<isimotor::fbs::HWControlT *>(value);
+    case CommandPayload_HWControlCommand: {
+      auto ptr = reinterpret_cast<isimotor::fbs::HWControlCommandT *>(value);
       delete ptr;
       break;
     }
-    case CommandPayload_WeatherControl: {
-      auto ptr = reinterpret_cast<isimotor::fbs::WeatherControlT *>(value);
+    case CommandPayload_WeatherControlCommand: {
+      auto ptr = reinterpret_cast<isimotor::fbs::WeatherControlCommandT *>(value);
       delete ptr;
       break;
     }

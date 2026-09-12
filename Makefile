@@ -204,6 +204,11 @@ generate-schemas:
 	@flatc --python -o isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated schemas/*.fbs
 	@touch isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated/__init__.py
 	@touch isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated/isimotor/__init__.py
+	@echo "==> Fixing cross-file imports (flatc emits 'from isimotor.fbs.X import X', which"
+	@echo "    only resolves if isimotor_rawudp_types/fbs_generated/ is put on sys.path;"
+	@echo "    rewrite to the fully-qualified package path instead)..."
+	@grep -rl "from isimotor\.fbs\." isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated/ 2>/dev/null | \
+		xargs -r sed -i 's/from isimotor\.fbs\./from isimotor_rawudp_types.fbs_generated.isimotor.fbs./'
 	@echo "==> Schema generation complete. Review the diff before committing."
 
 clean:

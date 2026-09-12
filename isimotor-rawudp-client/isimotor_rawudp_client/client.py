@@ -25,7 +25,11 @@ from isimotor_rawudp_types import (
 
 from .decoder.events import decode_system_event
 from .decoder.feedback import decode_force_feedback
+from .decoder.graphics import decode_graphics
 from .decoder.packet_decoder import AnyPacket, PacketDecoderRegistry
+from .decoder.physics import decode_extended_state
+from .decoder.scoring import decode_compact_scoring
+from .decoder.weather import decode_weather
 from .dispatcher import EventDispatcher, PacketCallback
 from .reassembly import ChunkReassembler
 from .state import StateStore
@@ -35,8 +39,12 @@ from .transport import ZmqPublisher, ZmqSubscriber
 # packet type/socket rather than through the header-based decoder registry
 # (see decoder/fbs_codec.py).
 _FBS_DECODERS: dict[int, Callable[[bytes], AnyPacket | None]] = {
+    2: decode_compact_scoring,
     3: decode_system_event,
+    7: decode_weather,
+    8: decode_extended_state,
     9: decode_force_feedback,
+    10: decode_graphics,
 }
 
 

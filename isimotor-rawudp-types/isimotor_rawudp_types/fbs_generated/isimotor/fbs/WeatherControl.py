@@ -25,114 +25,114 @@ class WeatherControl(object):
         self._tab = flatbuffers.table.Table(buf, pos)
 
     # WeatherControl
-    def AmbientTemp(self):
+    def Et(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(4))
         if o != 0:
             return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
         return 0.0
 
     # WeatherControl
-    def TrackTemp(self):
+    def Raining(self, j):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
         if o != 0:
-            return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
-        return 0.0
+            a = self._tab.Vector(o)
+            return self._tab.Get(flatbuffers.number_types.Float64Flags, a + flatbuffers.number_types.UOffsetTFlags.py_type(j * 8))
+        return 0
 
     # WeatherControl
-    def DarkCloud(self):
+    def RainingAsNumpy(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
+        if o != 0:
+            return self._tab.GetVectorAsNumpy(flatbuffers.number_types.Float64Flags, o)
+        return 0
+
+    # WeatherControl
+    def RainingLength(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
+        if o != 0:
+            return self._tab.VectorLen(o)
+        return 0
+
+    # WeatherControl
+    def RainingIsNone(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
+        return o == 0
+
+    # WeatherControl
+    def Cloudiness(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(8))
         if o != 0:
             return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
         return 0.0
 
     # WeatherControl
-    def Raining(self):
+    def AmbientTempK(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(10))
         if o != 0:
             return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
         return 0.0
 
     # WeatherControl
-    def WindSpeed(self):
+    def WindMaxSpeed(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
         if o != 0:
             return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
         return 0.0
 
     # WeatherControl
-    def WindDirection(self):
+    def ApplyCloudinessInstantly(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(14))
         if o != 0:
-            return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
-        return 0.0
-
-    # WeatherControl
-    def MinPathWetness(self):
-        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
-        if o != 0:
-            return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
-        return 0.0
-
-    # WeatherControl
-    def MaxPathWetness(self):
-        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(18))
-        if o != 0:
-            return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
-        return 0.0
+            return bool(self._tab.Get(flatbuffers.number_types.BoolFlags, o + self._tab.Pos))
+        return False
 
 def WeatherControlStart(builder):
-    builder.StartObject(8)
+    builder.StartObject(6)
 
 def Start(builder):
     WeatherControlStart(builder)
 
-def WeatherControlAddAmbientTemp(builder, ambientTemp):
-    builder.PrependFloat64Slot(0, ambientTemp, 0.0)
+def WeatherControlAddEt(builder, et):
+    builder.PrependFloat64Slot(0, et, 0.0)
 
-def AddAmbientTemp(builder, ambientTemp):
-    WeatherControlAddAmbientTemp(builder, ambientTemp)
-
-def WeatherControlAddTrackTemp(builder, trackTemp):
-    builder.PrependFloat64Slot(1, trackTemp, 0.0)
-
-def AddTrackTemp(builder, trackTemp):
-    WeatherControlAddTrackTemp(builder, trackTemp)
-
-def WeatherControlAddDarkCloud(builder, darkCloud):
-    builder.PrependFloat64Slot(2, darkCloud, 0.0)
-
-def AddDarkCloud(builder, darkCloud):
-    WeatherControlAddDarkCloud(builder, darkCloud)
+def AddEt(builder, et):
+    WeatherControlAddEt(builder, et)
 
 def WeatherControlAddRaining(builder, raining):
-    builder.PrependFloat64Slot(3, raining, 0.0)
+    builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(raining), 0)
 
 def AddRaining(builder, raining):
     WeatherControlAddRaining(builder, raining)
 
-def WeatherControlAddWindSpeed(builder, windSpeed):
-    builder.PrependFloat64Slot(4, windSpeed, 0.0)
+def WeatherControlStartRainingVector(builder, numElems):
+    return builder.StartVector(8, numElems, 8)
 
-def AddWindSpeed(builder, windSpeed):
-    WeatherControlAddWindSpeed(builder, windSpeed)
+def StartRainingVector(builder, numElems: int) -> int:
+    return WeatherControlStartRainingVector(builder, numElems)
 
-def WeatherControlAddWindDirection(builder, windDirection):
-    builder.PrependFloat64Slot(5, windDirection, 0.0)
+def WeatherControlAddCloudiness(builder, cloudiness):
+    builder.PrependFloat64Slot(2, cloudiness, 0.0)
 
-def AddWindDirection(builder, windDirection):
-    WeatherControlAddWindDirection(builder, windDirection)
+def AddCloudiness(builder, cloudiness):
+    WeatherControlAddCloudiness(builder, cloudiness)
 
-def WeatherControlAddMinPathWetness(builder, minPathWetness):
-    builder.PrependFloat64Slot(6, minPathWetness, 0.0)
+def WeatherControlAddAmbientTempK(builder, ambientTempK):
+    builder.PrependFloat64Slot(3, ambientTempK, 0.0)
 
-def AddMinPathWetness(builder, minPathWetness):
-    WeatherControlAddMinPathWetness(builder, minPathWetness)
+def AddAmbientTempK(builder, ambientTempK):
+    WeatherControlAddAmbientTempK(builder, ambientTempK)
 
-def WeatherControlAddMaxPathWetness(builder, maxPathWetness):
-    builder.PrependFloat64Slot(7, maxPathWetness, 0.0)
+def WeatherControlAddWindMaxSpeed(builder, windMaxSpeed):
+    builder.PrependFloat64Slot(4, windMaxSpeed, 0.0)
 
-def AddMaxPathWetness(builder, maxPathWetness):
-    WeatherControlAddMaxPathWetness(builder, maxPathWetness)
+def AddWindMaxSpeed(builder, windMaxSpeed):
+    WeatherControlAddWindMaxSpeed(builder, windMaxSpeed)
+
+def WeatherControlAddApplyCloudinessInstantly(builder, applyCloudinessInstantly):
+    builder.PrependBoolSlot(5, applyCloudinessInstantly, 0)
+
+def AddApplyCloudinessInstantly(builder, applyCloudinessInstantly):
+    WeatherControlAddApplyCloudinessInstantly(builder, applyCloudinessInstantly)
 
 def WeatherControlEnd(builder):
     return builder.EndObject()

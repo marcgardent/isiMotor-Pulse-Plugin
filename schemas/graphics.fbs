@@ -1,0 +1,24 @@
+// isiMotor RawUDP - Graphics (outbound, packet type 10).
+// Published on its own ZeroMQ PUB port (TcpBasePort + 10); the message on
+// that port IS this FlatBuffer, with no outer framing/header.
+namespace isimotor.fbs;
+
+struct Vec3 {
+  x: double;
+  y: double;
+  z: double;
+}
+
+table Graphics {
+  cam_pos: Vec3;
+  cam_ori_0: Vec3;
+  cam_ori_1: Vec3;
+  cam_ori_2: Vec3;
+  ambient_red: double;
+  ambient_green: double;
+  ambient_blue: double;
+  slot_id: int32;
+  camera_type: int32;
+}
+
+root_type Graphics;

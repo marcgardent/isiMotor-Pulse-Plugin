@@ -1,9 +1,8 @@
 {
-  "struct_size": 108,
-  "et": 1250.456000,
-  "cloudiness": 0.250000,
-  "ambient_temp_k": 297.650000,
+  "et": 1250.456,
+  "cloudiness": 0.25,
+  "ambient_temp_k": 297.65,
   "ambient_temp_c": 24.500000,
-  "wind_max_speed": 4.500000,
-  "origin_raining": 0.050000
+  "wind_max_speed": 4.5,
+  "origin_raining": 0.05
 }

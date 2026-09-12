@@ -4,5 +4,5 @@
 
 class CommandPayload(object):
     NONE = 0
-    HWControl = 1
-    WeatherControl = 2
+    HWControlCommand = 1
+    WeatherControlCommand = 2

@@ -2,9 +2,13 @@
 // Sent grouped on a single ZeroMQ PUB->SUB port (InboundTcpPort): since the
 // port carries more than one command kind, the root table wraps a union so
 // the receiver can tell them apart without any extra framing/header.
+//
+// Named *Command to avoid clashing with the outbound WeatherControl table
+// (schemas/weather.fbs) - both live in the isimotor.fbs namespace, but this
+// one is the inbound override command, not the broadcasted weather state.
 namespace isimotor.fbs;
 
-table HWControl {
+table HWControlCommand {
   // Control name (e.g. "PitMenuUp", "PitMenuSelect", "TCIncrease").
   control_name: string;
   // 1.0 = press/on, 0.0 = release/off, or an analog value.
@@ -13,7 +17,7 @@ table HWControl {
   duration_ms: uint16 = 50;
 }
 
-table WeatherControl {
+table WeatherControlCommand {
   ambient_temp: double;      // Air temp in °C.
   track_temp: double;        // Track surface temp in °C.
   dark_cloud: double;        // 0.0 to 1.0.
@@ -24,7 +28,7 @@ table WeatherControl {
   max_path_wetness: double;  // 0.0 to 1.0.
 }
 
-union CommandPayload { HWControl, WeatherControl }
+union CommandPayload { HWControlCommand, WeatherControlCommand }
 
 table InboundCommand {
   payload: CommandPayload;

@@ -7,11 +7,11 @@ import struct
 from isimotor_rawudp_types import CompactScoring, FullScoringSession, TelemVect3, VehicleScoring
 
 from ..constants import (
-    COMPACT_SCORING_SIZE,
     FULL_SCORING_SESSION_SIZE,
     VEHICLE_SCORING_SIZE,
 )
 from .base import _decode_string
+from .fbs_codec import decode_compact_scoring_fbs
 from .lmu import (
     decode_lmu_scoring_extension,
     decode_lmu_vehicle_scoring_extension,
@@ -19,50 +19,11 @@ from .lmu import (
 
 
 def decode_compact_scoring(data: bytes, offset: int = 0) -> CompactScoring | None:
-    """Decodes a 160-byte SIMP Type 2 compact scoring payload."""
-    if len(data) - offset < COMPACT_SCORING_SIZE:
+    """Decodes a CompactScoring FlatBuffer payload (packet type 2)."""
+    fields = decode_compact_scoring_fbs(data[offset:] if offset else data)
+    if fields is None:
         return None
-
-    track = _decode_string(data[offset : offset + 64])
-    session = struct.unpack_from("<i", data, offset + 64)[0]
-    current_et = struct.unpack_from("<d", data, offset + 68)[0]
-    total_lap_dist = struct.unpack_from("<d", data, offset + 76)[0]
-    max_laps = struct.unpack_from("<i", data, offset + 84)[0]
-    in_rt = bool(data[offset + 88])
-    total_laps = struct.unpack_from("<h", data, offset + 90)[0]
-    sector = struct.unpack_from("<b", data, offset + 92)[0]
-    in_garage = bool(data[offset + 93])
-    count_lap_flag = data[offset + 94]
-
-    cur_s1 = struct.unpack_from("<d", data, offset + 96)[0]
-    cur_s2 = struct.unpack_from("<d", data, offset + 104)[0]
-    last_s1 = struct.unpack_from("<d", data, offset + 112)[0]
-    last_s2 = struct.unpack_from("<d", data, offset + 120)[0]
-    last_lap = struct.unpack_from("<d", data, offset + 128)[0]
-    best_s1 = struct.unpack_from("<d", data, offset + 136)[0]
-    best_s2 = struct.unpack_from("<d", data, offset + 144)[0]
-    best_lap = struct.unpack_from("<d", data, offset + 152)[0]
-
-    return CompactScoring(
-        track_name=track,
-        session=session,
-        current_et=current_et,
-        total_lap_dist=total_lap_dist,
-        max_laps=max_laps,
-        in_realtime=in_rt,
-        total_laps=total_laps,
-        sector=sector,
-        in_garage_stall=in_garage,
-        count_lap_flag=count_lap_flag,
-        cur_sector1=cur_s1,
-        cur_sector2=cur_s2,
-        last_sector1=last_s1,
-        last_sector2=last_s2,
-        last_lap_time=last_lap,
-        best_sector1=best_s1,
-        best_sector2=best_s2,
-        best_lap_time=best_lap,
-    )
+    return CompactScoring(**fields)
 
 
 def decode_vehicle_scoring(data: bytes, offset: int = 0) -> VehicleScoring:

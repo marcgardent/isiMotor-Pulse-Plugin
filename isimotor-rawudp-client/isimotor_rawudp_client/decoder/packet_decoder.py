@@ -21,19 +21,12 @@ from isimotor_rawudp_types import (
 
 from ..constants import (
     HEADER_SIZE,
-    PKT_TYPE_COMPACT_SCORING,
-    PKT_TYPE_EXTENDED_STATE,
     PKT_TYPE_FULL_SCORING,
-    PKT_TYPE_GRAPHICS,
     PKT_TYPE_TELEMETRY,
-    PKT_TYPE_WEATHER,
 )
-from .graphics import decode_graphics
 from .header import decode_header
-from .physics import decode_extended_state
-from .scoring import decode_compact_scoring, decode_full_scoring
+from .scoring import decode_full_scoring
 from .telemetry import decode_telemetry
-from .weather import decode_weather
 
 AnyPacket = Union[
     TelemInfo,
@@ -62,16 +55,17 @@ class PacketDecoderRegistry:
         self._register_defaults()
 
     def _register_defaults(self) -> None:
-        # Packet types 3 (SystemEvent), 9 (ForceFeedback), 100 (HWControl) and
-        # 101 (WeatherControl) are FlatBuffers with no RawUdpHeader/chunking
-        # (see decoder/fbs_codec.py); they are dispatched directly by their
-        # packet type/socket, not through this header-based registry.
+        # Packet types 2 (CompactScoring), 3 (SystemEvent), 7 (WeatherControl),
+        # 8 (ExtendedState), 9 (ForceFeedback), 10 (Graphics), 100 (HWControl)
+        # and 101 (WeatherControlCommand) are FlatBuffers with no
+        # RawUdpHeader/chunking (see decoder/fbs_codec.py); they are
+        # dispatched directly by their packet type/socket (see client.py's
+        # _FBS_DECODERS), not through this header-based registry. Only Type 1
+        # (Telemetry) and Type 4 (FullScoringSession) remain on the legacy
+        # header + chunk-reassembly path, since they can be sliced across
+        # multiple ZMQ messages.
         self.register(PKT_TYPE_TELEMETRY, decode_telemetry)
-        self.register(PKT_TYPE_COMPACT_SCORING, decode_compact_scoring)
         self.register(PKT_TYPE_FULL_SCORING, decode_full_scoring)
-        self.register(PKT_TYPE_WEATHER, decode_weather)
-        self.register(PKT_TYPE_EXTENDED_STATE, decode_extended_state)
-        self.register(PKT_TYPE_GRAPHICS, decode_graphics)
 
     def register(self, packet_type: int, decoder: DecoderFunc) -> None:
         """Registers or overrides a payload decoder for a given packet type."""

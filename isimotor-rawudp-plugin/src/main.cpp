@@ -65,6 +65,10 @@ typedef union _LARGE_INTEGER {
 #include "system_event_generated.h"
 #include "force_feedback_generated.h"
 #include "inbound_command_generated.h"
+#include "compact_scoring_generated.h"
+#include "weather_generated.h"
+#include "extended_state_generated.h"
+#include "graphics_generated.h"
 
 #include "InternalsPlugin.hpp"
 
@@ -129,30 +133,7 @@ struct RawUdpHeader {
     unsigned short subTypeOrId;      // Context ID (e.g., active vehicle count or slot ID)
 };
 
-/**
- * Compact Scoring Packet Payload (SIMP Type 2, 160 bytes)
- * Lightweight representation of session and player timing data.
- */
-struct CompactScoringPacket {
-    char trackName[64];      // Current track name (null-terminated)
-    long session;            // 0=testday, 1-4=practice, 5-8=qual, 9=warmup, 10-13=race
-    double currentET;        // Current session elapsed time in seconds
-    double lapDist;          // Track total lap distance in meters
-    long maxLaps;            // Maximum laps for session
-    bool inRealtime;         // True if in active realtime driving mode
-    short totalLaps;         // Player laps completed
-    signed char sector;      // Current sector (0=Sector 3, 1=Sector 1, 2=Sector 2)
-    bool inGarageStall;      // True if vehicle is inside the garage stall
-    unsigned char countLapFlag; // 0=invalid, 1=lap count only, 2=valid lap & time
-    double curSector1;       // Player current sector 1 time
-    double curSector2;       // Player current sector 2 cumulative time (S1 + S2)
-    double lastSector1;      // Player last lap sector 1 time
-    double lastSector2;      // Player last lap sector 2 cumulative time
-    double lastLapTime;      // Player last lap total time
-    double bestSector1;      // Player personal best sector 1 time
-    double bestSector2;      // Player personal best sector 2 cumulative time
-    double bestLapTime;      // Player personal best lap time
-};
+// CompactScoring (Type 2) is now a FlatBuffer (schemas/compact_scoring.fbs) - see UpdateScoring().
 
 // SystemEvent (Type 3) is now a FlatBuffer (schemas/system_event.fbs, isimotor::fbs::SystemEvent) - see SendSystemEvent().
 
@@ -249,80 +230,13 @@ struct PitMenuPacket {
     long          numChoices;                // Total available choices in category
 };
 
-/**
- * Weather Conditions Packet (SIMP Type 7, 108 bytes)
- */
-struct WeatherPacket {
-    double        et;                        // Effective session ET
-    double        raining[3][3];             // Rain intensity grid
-    double        cloudiness;                // Cloud cover (0.0 - 1.0)
-    double        ambientTempK;              // Ambient temperature (Kelvin)
-    double        windMaxSpeed;              // Wind speed (m/s)
-    bool          applyCloudinessInstantly;  // Instant cloud application flag
-    unsigned char pad[3];
-};
+// WeatherControl (Type 7) is now a FlatBuffer (schemas/weather.fbs) - see SendWeather().
 
-/**
- * Extended State Packet (SIMP Type 8, 68 bytes)
- * Driving aids, physics multipliers, accumulated damage & session state.
- */
-struct ExtendedStatePacket {
-    // Physics options (40 bytes)
-    unsigned char tractionControl;          // 0 (off) - 3 (high)
-    unsigned char antiLockBrakes;           // 0 (off) - 2 (high)
-    unsigned char stabilityControl;         // 0 (off) - 2 (high)
-    unsigned char autoShift;                // 0 (off), 1 (upshifts), 2 (downshifts), 3 (all)
-    unsigned char autoClutch;               // 0 (off), 1 (on)
-    unsigned char invulnerable;             // 0 (off), 1 (on)
-    unsigned char oppositeLock;             // 0 (off), 1 (on)
-    unsigned char steeringHelp;             // 0 (off) - 3 (high)
-    unsigned char brakingHelp;              // 0 (off) - 2 (high)
-    unsigned char spinRecovery;             // 0 (off), 1 (on)
-    unsigned char autoPit;                  // 0 (off), 1 (on)
-    unsigned char autoLift;                 // 0 (off), 1 (on)
-    unsigned char autoBlip;                 // 0 (off), 1 (on)
-    unsigned char fuelMult;                 // fuel multiplier (0x-7x)
-    unsigned char tireMult;                 // tire wear multiplier (0x-7x)
-    unsigned char mechFail;                 // mechanical failure (0=off, 1=normal, 2=timescaled)
-    unsigned char allowPitcrewPush;         // 0 (off), 1 (on)
-    unsigned char repeatShifts;             // accidental repeat shift prevention (0-5)
-    unsigned char holdClutch;               // 0 (off), 1 (on)
-    unsigned char autoReverse;              // 0 (off), 1 (on)
-    unsigned char alternateNeutral;         // 0 (off), 1 (on)
-    unsigned char aiControl;                // 0 (player), 1 (AI)
-    unsigned char pad1[2];
-    float         manualShiftOverrideTime;  // time before auto-shift can resume
-    float         autoShiftOverrideTime;    // time before manual shift can resume
-    float         speedSensitiveSteering;   // 0.0 (off) - 1.0
-    float         steerRatioSpeed;          // speed (m/s) under which lock expands
-    
-    // Accumulated damage tracking (16 bytes)
-    double        maxImpactMagnitude;       // Max collision impact recorded in session
-    double        accumulatedImpactMagnitude;// Cumulative collision damage energy
-
-    // Session status & transitions (12 bytes)
-    bool          inRealtimeFC;             // In realtime cockpit mode
-    bool          sessionStarted;           // Session started flag
-    unsigned char pad2[2];
-    long          session;                  // Current session index
-    float         currentPitSpeedLimit;     // Pit speed limit m/s
-};
+// ExtendedState (Type 8) is now a FlatBuffer (schemas/extended_state.fbs) - see SendExtendedState().
 
 // ForceFeedback (Type 9) is now a FlatBuffer (schemas/force_feedback.fbs, isimotor::fbs::ForceFeedback) - see ForceFeedback() override below.
 
-/**
- * Graphics & Camera Packet (SIMP Type 10, 128 bytes)
- * Camera world position, orientation matrix & ambient lighting.
- */
-struct GraphicsPacket {
-    TelemVect3 camPos;                     // Camera 3D world position
-    TelemVect3 camOri[3];                  // Camera 3x3 orientation matrix
-    double     ambientRed;                 // Ambient light RGB
-    double     ambientGreen;
-    double     ambientBlue;
-    long       slotId;                     // Slot ID being viewed (-1 if none)
-    long       cameraType;                 // Camera viewpoint type
-};
+// Graphics (Type 10) is now a FlatBuffer (schemas/graphics.fbs) - see UpdateGraphics().
 
 // Inbound commands (HWControl, Type 100; WeatherControl, Type 101) are now a
 // single isimotor::fbs::InboundCommand FlatBuffer with a CommandPayload union
@@ -602,6 +516,10 @@ private:
     // message boundary IS the FlatBuffer, so no chunking is needed either).
     flatbuffers::FlatBufferBuilder fbSystemEventBuilder;
     flatbuffers::FlatBufferBuilder fbForceFeedbackBuilder;
+    flatbuffers::FlatBufferBuilder fbCompactScoringBuilder;
+    flatbuffers::FlatBufferBuilder fbWeatherBuilder;
+    flatbuffers::FlatBufferBuilder fbExtendedStateBuilder;
+    flatbuffers::FlatBufferBuilder fbGraphicsBuilder;
 
     // Hot-reload: file watcher and resolved config path
 #ifdef _WIN32
@@ -1002,13 +920,13 @@ public:
             }
             const isimotor::fbs::InboundCommand* cmd = isimotor::fbs::GetInboundCommand(msg.data());
 
-            if (cmd->payload_type() == isimotor::fbs::CommandPayload_HWControl) {
-                const isimotor::fbs::HWControl* hw = cmd->payload_as_HWControl();
+            if (cmd->payload_type() == isimotor::fbs::CommandPayload_HWControlCommand) {
+                const isimotor::fbs::HWControlCommand* hw = cmd->payload_as_HWControlCommand();
                 if (hw && hw->control_name()) {
                     ApplyHWControl(hw->control_name()->c_str(), hw->control_value(), hw->duration_ms());
                 }
-            } else if (cmd->payload_type() == isimotor::fbs::CommandPayload_WeatherControl) {
-                const isimotor::fbs::WeatherControl* wc = cmd->payload_as_WeatherControl();
+            } else if (cmd->payload_type() == isimotor::fbs::CommandPayload_WeatherControlCommand) {
+                const isimotor::fbs::WeatherControlCommand* wc = cmd->payload_as_WeatherControlCommand();
                 if (wc) {
                     weatherOverride.data.ambientTemp = wc->ambient_temp();
                     weatherOverride.data.trackTemp = wc->track_temp();
@@ -1130,51 +1048,28 @@ public:
     }
 
     void SendExtendedState(double sessionET) {
+        (void)sessionET;  // No longer carried: FlatBuffers dropped the RawUdpHeader metadata entirely.
         if (!initialized || !pubBound[8]) return;
         if (!extendedStateLimiter.IsEnabled()) return;
 
-        ExtendedStatePacket pkt{};
-        // Physics options
-        pkt.tractionControl = cachedPhysics.mTractionControl;
-        pkt.antiLockBrakes = cachedPhysics.mAntiLockBrakes;
-        pkt.stabilityControl = cachedPhysics.mStabilityControl;
-        pkt.autoShift = cachedPhysics.mAutoShift;
-        pkt.autoClutch = cachedPhysics.mAutoClutch;
-        pkt.invulnerable = cachedPhysics.mInvulnerable;
-        pkt.oppositeLock = cachedPhysics.mOppositeLock;
-        pkt.steeringHelp = cachedPhysics.mSteeringHelp;
-        pkt.brakingHelp = cachedPhysics.mBrakingHelp;
-        pkt.spinRecovery = cachedPhysics.mSpinRecovery;
-        pkt.autoPit = cachedPhysics.mAutoPit;
-        pkt.autoLift = cachedPhysics.mAutoLift;
-        pkt.autoBlip = cachedPhysics.mAutoBlip;
-        pkt.fuelMult = cachedPhysics.mFuelMult;
-        pkt.tireMult = cachedPhysics.mTireMult;
-        pkt.mechFail = cachedPhysics.mMechFail;
-        pkt.allowPitcrewPush = cachedPhysics.mAllowPitcrewPush;
-        pkt.repeatShifts = cachedPhysics.mRepeatShifts;
-        pkt.holdClutch = cachedPhysics.mHoldClutch;
-        pkt.autoReverse = cachedPhysics.mAutoReverse;
-        pkt.alternateNeutral = cachedPhysics.mAlternateNeutral;
-        pkt.aiControl = cachedPhysics.mAIControl;
-        pkt.pad1[0] = 0; pkt.pad1[1] = 0;
-        pkt.manualShiftOverrideTime = cachedPhysics.mManualShiftOverrideTime;
-        pkt.autoShiftOverrideTime = cachedPhysics.mAutoShiftOverrideTime;
-        pkt.speedSensitiveSteering = cachedPhysics.mSpeedSensitiveSteering;
-        pkt.steerRatioSpeed = cachedPhysics.mSteerRatioSpeed;
+        fbExtendedStateBuilder.Clear();
+        auto physics = isimotor::fbs::CreatePhysicsOptions(
+            fbExtendedStateBuilder,
+            cachedPhysics.mTractionControl, cachedPhysics.mAntiLockBrakes, cachedPhysics.mStabilityControl,
+            cachedPhysics.mAutoShift, cachedPhysics.mAutoClutch, cachedPhysics.mInvulnerable,
+            cachedPhysics.mOppositeLock, cachedPhysics.mSteeringHelp, cachedPhysics.mBrakingHelp,
+            cachedPhysics.mSpinRecovery, cachedPhysics.mAutoPit, cachedPhysics.mAutoLift,
+            cachedPhysics.mAutoBlip, cachedPhysics.mFuelMult, cachedPhysics.mTireMult,
+            cachedPhysics.mMechFail, cachedPhysics.mAllowPitcrewPush, cachedPhysics.mRepeatShifts,
+            cachedPhysics.mHoldClutch, cachedPhysics.mAutoReverse, cachedPhysics.mAlternateNeutral,
+            cachedPhysics.mAIControl, cachedPhysics.mManualShiftOverrideTime, cachedPhysics.mAutoShiftOverrideTime,
+            cachedPhysics.mSpeedSensitiveSteering, cachedPhysics.mSteerRatioSpeed);
 
-        // Damage tracking
-        pkt.maxImpactMagnitude = maxImpactMagnitude;
-        pkt.accumulatedImpactMagnitude = accumulatedImpactMagnitude;
-
-        // Status
-        pkt.inRealtimeFC = inRealtimeFC;
-        pkt.sessionStarted = sessionStarted;
-        pkt.pad2[0] = 0; pkt.pad2[1] = 0;
-        pkt.session = currentSession;
-        pkt.currentPitSpeedLimit = currentPitSpeedLimit;
-
-        SendSlicedPayload(8, 0, &pkt, sizeof(pkt), sessionET);
+        auto root = isimotor::fbs::CreateExtendedState(
+            fbExtendedStateBuilder, physics, maxImpactMagnitude, accumulatedImpactMagnitude,
+            inRealtimeFC, sessionStarted, currentSession, currentPitSpeedLimit);
+        fbExtendedStateBuilder.Finish(root);
+        SendFlatBuffer(8, fbExtendedStateBuilder);
     }
 
     void EnterRealtime() override {
@@ -1305,41 +1200,46 @@ public:
 
         if (config.unsubscribedBuffersMask & UNSUB_SCORING) return;
 
-        // 1. Compact Scoring Packet (SIMP Type 2)
+        // 1. Compact Scoring Packet (Type 2)
         if (compactScoringLimiter.IsEnabled() && compactScoringLimiter.ShouldSend()) {
-            CompactScoringPacket pkt{};
-
-            std::strncpy(pkt.trackName, info.mTrackName, sizeof(pkt.trackName) - 1);
-            pkt.trackName[sizeof(pkt.trackName) - 1] = '\0';
-            pkt.session = info.mSession;
-            pkt.currentET = info.mCurrentET;
-            pkt.lapDist = info.mLapDist;
-            pkt.maxLaps = info.mMaxLaps;
-            pkt.inRealtime = info.mInRealtime;
+            long totalLaps = 0;
+            signed char sector = 0;
+            bool inGarageStall = false;
+            unsigned char countLapFlag = 0;
+            double curSector1 = 0.0, curSector2 = 0.0, lastSector1 = 0.0, lastSector2 = 0.0;
+            double lastLapTime = 0.0, bestSector1 = 0.0, bestSector2 = 0.0, bestLapTime = 0.0;
 
             // Locate player vehicle scoring record
             if (info.mVehicle != nullptr && info.mNumVehicles > 0) {
                 for (int i = 0; i < info.mNumVehicles; ++i) {
                     const auto &v = info.mVehicle[i];
                     if (v.mIsPlayer || v.mControl == 0) {
-                        pkt.totalLaps = v.mTotalLaps;
-                        pkt.sector = v.mSector;
-                        pkt.inGarageStall = v.mInGarageStall;
-                        pkt.countLapFlag = v.mCountLapFlag;
-                        pkt.curSector1 = v.mCurSector1;
-                        pkt.curSector2 = v.mCurSector2;
-                        pkt.lastSector1 = v.mLastSector1;
-                        pkt.lastSector2 = v.mLastSector2;
-                        pkt.lastLapTime = v.mLastLapTime;
-                        pkt.bestSector1 = v.mBestSector1;
-                        pkt.bestSector2 = v.mBestSector2;
-                        pkt.bestLapTime = v.mBestLapTime;
+                        totalLaps = v.mTotalLaps;
+                        sector = v.mSector;
+                        inGarageStall = v.mInGarageStall;
+                        countLapFlag = v.mCountLapFlag;
+                        curSector1 = v.mCurSector1;
+                        curSector2 = v.mCurSector2;
+                        lastSector1 = v.mLastSector1;
+                        lastSector2 = v.mLastSector2;
+                        lastLapTime = v.mLastLapTime;
+                        bestSector1 = v.mBestSector1;
+                        bestSector2 = v.mBestSector2;
+                        bestLapTime = v.mBestLapTime;
                         break;
                     }
                 }
             }
 
-            SendSlicedPayload(2, 0, &pkt, sizeof(pkt), info.mCurrentET);
+            fbCompactScoringBuilder.Clear();
+            auto trackNameOffset = fbCompactScoringBuilder.CreateString(info.mTrackName);
+            auto root = isimotor::fbs::CreateCompactScoring(
+                fbCompactScoringBuilder, trackNameOffset, info.mSession, info.mCurrentET, info.mLapDist,
+                info.mMaxLaps, info.mInRealtime, static_cast<int16_t>(totalLaps), sector, inGarageStall,
+                countLapFlag, curSector1, curSector2, lastSector1, lastSector2, lastLapTime,
+                bestSector1, bestSector2, bestLapTime);
+            fbCompactScoringBuilder.Finish(root);
+            SendFlatBuffer(2, fbCompactScoringBuilder);
         }
 
         // 2. Full Multi-Car Scoring Stream (SIMP Type 4, Sliced)
@@ -1441,6 +1341,22 @@ public:
         return weatherLimiter.IsEnabled() || (config.enableInboundControl && weatherOverride.active);
     }
 
+    void SendWeather(const WeatherControlInfoV01 &info) {
+        double raining[9];
+        for (int r = 0; r < 3; ++r) {
+            for (int c = 0; c < 3; ++c) {
+                raining[r * 3 + c] = info.mRaining[r][c];
+            }
+        }
+        fbWeatherBuilder.Clear();
+        auto rainingOffset = fbWeatherBuilder.CreateVector<double>(raining, 9);
+        auto root = isimotor::fbs::CreateWeatherControl(
+            fbWeatherBuilder, info.mET, rainingOffset, info.mCloudiness,
+            info.mAmbientTempK, info.mWindMaxSpeed, info.mApplyCloudinessInstantly);
+        fbWeatherBuilder.Finish(root);
+        SendFlatBuffer(7, fbWeatherBuilder);
+    }
+
     bool AccessWeather(double trackNodeSize, WeatherControlInfoV01 &info) override {
         (void)trackNodeSize;
         if (!initialized) return false;
@@ -1456,20 +1372,7 @@ public:
 
             // Broadcast the modified conditions immediately if output socket is ready
             if (pubBound[7] && !(config.unsubscribedBuffersMask & UNSUB_WEATHER) && weatherLimiter.IsEnabled()) {
-                WeatherPacket pkt{};
-                pkt.et = info.mET;
-                for (int r = 0; r < 3; ++r) {
-                    for (int c = 0; c < 3; ++c) {
-                        pkt.raining[r][c] = info.mRaining[r][c];
-                    }
-                }
-                pkt.cloudiness = info.mCloudiness;
-                pkt.ambientTempK = info.mAmbientTempK;
-                pkt.windMaxSpeed = info.mWindMaxSpeed;
-                pkt.applyCloudinessInstantly = info.mApplyCloudinessInstantly;
-                pkt.pad[0] = 0; pkt.pad[1] = 0; pkt.pad[2] = 0;
-
-                SendSlicedPayload(7, 0, &pkt, sizeof(pkt), info.mET);
+                SendWeather(info);
             }
             return true; // Overridden!
         }
@@ -1479,20 +1382,7 @@ public:
         if (!pubBound[7]) return false;
         if (!weatherLimiter.ShouldSend()) return false;
 
-        WeatherPacket pkt{};
-        pkt.et = info.mET;
-        for (int r = 0; r < 3; ++r) {
-            for (int c = 0; c < 3; ++c) {
-                pkt.raining[r][c] = info.mRaining[r][c];
-            }
-        }
-        pkt.cloudiness = info.mCloudiness;
-        pkt.ambientTempK = info.mAmbientTempK;
-        pkt.windMaxSpeed = info.mWindMaxSpeed;
-        pkt.applyCloudinessInstantly = info.mApplyCloudinessInstantly;
-        pkt.pad[0] = 0; pkt.pad[1] = 0; pkt.pad[2] = 0;
-
-        SendSlicedPayload(7, 0, &pkt, sizeof(pkt), info.mET);
+        SendWeather(info);
         return false;
     }
 
@@ -1515,18 +1405,17 @@ public:
         if (config.unsubscribedBuffersMask & UNSUB_GRAPHICS) return;
         if (!graphicsLimiter.ShouldSend()) return;
 
-        GraphicsPacket pkt{};
-        pkt.camPos = info.mCamPos;
-        pkt.camOri[0] = info.mCamOri[0];
-        pkt.camOri[1] = info.mCamOri[1];
-        pkt.camOri[2] = info.mCamOri[2];
-        pkt.ambientRed = info.mAmbientRed;
-        pkt.ambientGreen = info.mAmbientGreen;
-        pkt.ambientBlue = info.mAmbientBlue;
-        pkt.slotId = info.mID;
-        pkt.cameraType = info.mCameraType;
+        isimotor::fbs::Vec3 camPos(info.mCamPos.x, info.mCamPos.y, info.mCamPos.z);
+        isimotor::fbs::Vec3 camOri0(info.mCamOri[0].x, info.mCamOri[0].y, info.mCamOri[0].z);
+        isimotor::fbs::Vec3 camOri1(info.mCamOri[1].x, info.mCamOri[1].y, info.mCamOri[1].z);
+        isimotor::fbs::Vec3 camOri2(info.mCamOri[2].x, info.mCamOri[2].y, info.mCamOri[2].z);
 
-        SendSlicedPayload(10, static_cast<unsigned short>(info.mID >= 0 ? info.mID : 0), &pkt, sizeof(pkt), 0.0);
+        fbGraphicsBuilder.Clear();
+        auto root = isimotor::fbs::CreateGraphics(
+            fbGraphicsBuilder, &camPos, &camOri0, &camOri1, &camOri2,
+            info.mAmbientRed, info.mAmbientGreen, info.mAmbientBlue, info.mID, info.mCameraType);
+        fbGraphicsBuilder.Finish(root);
+        SendFlatBuffer(10, fbGraphicsBuilder);
     }
 };
 

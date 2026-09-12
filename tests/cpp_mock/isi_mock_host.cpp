@@ -26,6 +26,10 @@
 #include "system_event_generated.h"
 #include "force_feedback_generated.h"
 #include "inbound_command_generated.h"
+#include "compact_scoring_generated.h"
+#include "weather_generated.h"
+#include "extended_state_generated.h"
+#include "graphics_generated.h"
 
 // Windows / isiMotor compatibility macros
 #define __cdecl
@@ -356,6 +360,9 @@ void populate_golden_telemetry(TelemInfoV01 &t) {
     }
 }
 
+// CompactScoring (Type 2) is a FlatBuffer now (schemas/compact_scoring.fbs).
+// The legacy struct is kept purely as a convenient internal staging area
+// (never sent raw); encode_scoring_fbs() converts it to the wire FlatBuffer.
 void populate_golden_scoring(CompactScoringPacket &s) {
     std::memset(&s, 0, sizeof(s));
     std::strncpy(s.trackName, "Circuit de la Sarthe - Le Mans", sizeof(s.trackName) - 1);
@@ -376,6 +383,23 @@ void populate_golden_scoring(CompactScoringPacket &s) {
     s.bestSector1 = 40.820;
     s.bestSector2 = 123.500;
     s.bestLapTime = 204.850;
+}
+
+std::vector<uint8_t> encode_scoring_fbs(const CompactScoringPacket &s) {
+    flatbuffers::FlatBufferBuilder builder;
+    auto trackName = builder.CreateString(s.trackName);
+    auto root = isimotor::fbs::CreateCompactScoring(
+        builder, trackName, s.session, s.currentET, s.lapDist, s.maxLaps, s.inRealtime,
+        s.totalLaps, s.sector, s.inGarageStall, s.countLapFlag, s.curSector1, s.curSector2,
+        s.lastSector1, s.lastSector2, s.lastLapTime, s.bestSector1, s.bestSector2, s.bestLapTime);
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
+}
+
+std::vector<uint8_t> build_golden_scoring_fbs() {
+    CompactScoringPacket s;
+    populate_golden_scoring(s);
+    return encode_scoring_fbs(s);
 }
 
 void populate_golden_full_scoring(FullScoringSessionPacket &sess, std::vector<VehicleScoringInfoV01> &vehicles) {
@@ -534,6 +558,9 @@ void populate_golden_pit_menu(PitMenuPacket &p) {
     p.numChoices = 4;
 }
 
+// WeatherControl (Type 7) is a FlatBuffer now (schemas/weather.fbs). The
+// legacy struct is kept purely as a convenient internal staging area (the
+// live loop mutates it in place on inbound weather overrides); never sent raw.
 void populate_golden_weather(WeatherPacket &w) {
     std::memset(&w, 0, sizeof(w));
     w.et = 1250.456;
@@ -548,6 +575,29 @@ void populate_golden_weather(WeatherPacket &w) {
     w.applyCloudinessInstantly = false;
 }
 
+std::vector<uint8_t> encode_weather_fbs(const WeatherPacket &w) {
+    flatbuffers::FlatBufferBuilder builder;
+    double raining[9];
+    for (int r = 0; r < 3; ++r) {
+        for (int c = 0; c < 3; ++c) {
+            raining[r * 3 + c] = w.raining[r][c];
+        }
+    }
+    auto rainingOffset = builder.CreateVector<double>(raining, 9);
+    auto root = isimotor::fbs::CreateWeatherControl(
+        builder, w.et, rainingOffset, w.cloudiness, w.ambientTempK, w.windMaxSpeed, w.applyCloudinessInstantly);
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
+}
+
+std::vector<uint8_t> build_golden_weather_fbs() {
+    WeatherPacket w;
+    populate_golden_weather(w);
+    return encode_weather_fbs(w);
+}
+
+// ExtendedState (Type 8) is a FlatBuffer now (schemas/extended_state.fbs).
+// The legacy struct is kept purely as a convenient internal staging area.
 void populate_golden_extended(ExtendedStatePacket &ext) {
     std::memset(&ext, 0, sizeof(ext));
     ext.tractionControl = 2;          // Medium
@@ -587,6 +637,30 @@ void populate_golden_extended(ExtendedStatePacket &ext) {
     ext.currentPitSpeedLimit = 16.6667f; // 60 km/h
 }
 
+std::vector<uint8_t> encode_extended_fbs(const ExtendedStatePacket &ext) {
+    flatbuffers::FlatBufferBuilder builder;
+    auto physics = isimotor::fbs::CreatePhysicsOptions(
+        builder,
+        ext.tractionControl, ext.antiLockBrakes, ext.stabilityControl, ext.autoShift,
+        ext.autoClutch, ext.invulnerable, ext.oppositeLock, ext.steeringHelp,
+        ext.brakingHelp, ext.spinRecovery, ext.autoPit, ext.autoLift,
+        ext.autoBlip, ext.fuelMult, ext.tireMult, ext.mechFail,
+        ext.allowPitcrewPush, ext.repeatShifts, ext.holdClutch, ext.autoReverse,
+        ext.alternateNeutral, ext.aiControl, ext.manualShiftOverrideTime,
+        ext.autoShiftOverrideTime, ext.speedSensitiveSteering, ext.steerRatioSpeed);
+    auto root = isimotor::fbs::CreateExtendedState(
+        builder, physics, ext.maxImpactMagnitude, ext.accumulatedImpactMagnitude,
+        ext.inRealtimeFC, ext.sessionStarted, ext.session, ext.currentPitSpeedLimit);
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
+}
+
+std::vector<uint8_t> build_golden_extended_fbs() {
+    ExtendedStatePacket ext;
+    populate_golden_extended(ext);
+    return encode_extended_fbs(ext);
+}
+
 // ForceFeedback (Type 9) is a FlatBuffer now; the "golden" value lives here
 // as a plain double, encoded on demand by build_golden_ffb_fbs().
 static const double kGoldenForceValue = 0.685;
@@ -598,6 +672,8 @@ std::vector<uint8_t> build_golden_ffb_fbs() {
     return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 }
 
+// Graphics (Type 10) is a FlatBuffer now (schemas/graphics.fbs). The legacy
+// struct is kept purely as a convenient internal staging area; never sent raw.
 void populate_golden_graphics(GraphicsPacket &gfx) {
     std::memset(&gfx, 0, sizeof(gfx));
     gfx.camPos.Set(-1250.5, 46.8, 3420.2);
@@ -609,6 +685,25 @@ void populate_golden_graphics(GraphicsPacket &gfx) {
     gfx.ambientBlue = 0.92;
     gfx.slotId = 42;
     gfx.cameraType = 1; // Cockpit
+}
+
+std::vector<uint8_t> encode_graphics_fbs(const GraphicsPacket &gfx) {
+    flatbuffers::FlatBufferBuilder builder;
+    isimotor::fbs::Vec3 camPos(gfx.camPos.x, gfx.camPos.y, gfx.camPos.z);
+    isimotor::fbs::Vec3 camOri0(gfx.camOri[0].x, gfx.camOri[0].y, gfx.camOri[0].z);
+    isimotor::fbs::Vec3 camOri1(gfx.camOri[1].x, gfx.camOri[1].y, gfx.camOri[1].z);
+    isimotor::fbs::Vec3 camOri2(gfx.camOri[2].x, gfx.camOri[2].y, gfx.camOri[2].z);
+    auto root = isimotor::fbs::CreateGraphics(
+        builder, &camPos, &camOri0, &camOri1, &camOri2,
+        gfx.ambientRed, gfx.ambientGreen, gfx.ambientBlue, gfx.slotId, gfx.cameraType);
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
+}
+
+std::vector<uint8_t> build_golden_graphics_fbs() {
+    GraphicsPacket gfx;
+    populate_golden_graphics(gfx);
+    return encode_graphics_fbs(gfx);
 }
 
 // SystemEvent (Type 3) is a FlatBuffer now; encoded on demand.
@@ -624,16 +719,16 @@ std::vector<uint8_t> build_golden_event_fbs(uint8_t type = 1) {
 std::vector<uint8_t> build_golden_hw_control_fbs() {
     flatbuffers::FlatBufferBuilder builder;
     auto name = builder.CreateString("PitMenuNext");
-    auto hw = isimotor::fbs::CreateHWControl(builder, name, 1.0, 50);
-    auto root = isimotor::fbs::CreateInboundCommand(builder, isimotor::fbs::CommandPayload_HWControl, hw.Union());
+    auto hw = isimotor::fbs::CreateHWControlCommand(builder, name, 1.0, 50);
+    auto root = isimotor::fbs::CreateInboundCommand(builder, isimotor::fbs::CommandPayload_HWControlCommand, hw.Union());
     builder.Finish(root);
     return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 }
 
 std::vector<uint8_t> build_golden_weather_control_fbs() {
     flatbuffers::FlatBufferBuilder builder;
-    auto wc = isimotor::fbs::CreateWeatherControl(builder, 24.5, 29.8, 0.75, 0.45, 4.2, 1.5708, 0.2, 0.8);
-    auto root = isimotor::fbs::CreateInboundCommand(builder, isimotor::fbs::CommandPayload_WeatherControl, wc.Union());
+    auto wc = isimotor::fbs::CreateWeatherControlCommand(builder, 24.5, 29.8, 0.75, 0.45, 4.2, 1.5708, 0.2, 0.8);
+    auto root = isimotor::fbs::CreateInboundCommand(builder, isimotor::fbs::CommandPayload_WeatherControlCommand, wc.Union());
     builder.Finish(root);
     return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 }
@@ -701,27 +796,25 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
     fj_t << "}\n";
     fj_t.close();
 
-    // 2. Compact Scoring
-    CompactScoringPacket s;
-    populate_golden_scoring(s);
+    // 2. Compact Scoring - FlatBuffer (schemas/compact_scoring.fbs)
+    std::vector<uint8_t> scoring_buf = build_golden_scoring_fbs();
     std::ofstream fb_s(bin_scoring_path, std::ios::binary);
-    fb_s.write(reinterpret_cast<const char*>(&s), sizeof(s));
+    fb_s.write(reinterpret_cast<const char*>(scoring_buf.data()), static_cast<std::streamsize>(scoring_buf.size()));
     fb_s.close();
 
     std::ofstream fj_s(json_scoring_path);
     fj_s << std::setprecision(6) << std::fixed;
     fj_s << "{\n";
-    fj_s << "  \"struct_size\": " << sizeof(s) << ",\n";
-    fj_s << "  \"track_name\": \"" << s.trackName << "\",\n";
-    fj_s << "  \"session\": " << s.session << ",\n";
-    fj_s << "  \"current_et\": " << s.currentET << ",\n";
-    fj_s << "  \"lap_dist\": " << s.lapDist << ",\n";
-    fj_s << "  \"max_laps\": " << s.maxLaps << ",\n";
-    fj_s << "  \"in_realtime\": " << (s.inRealtime ? "true" : "false") << ",\n";
-    fj_s << "  \"total_laps\": " << s.totalLaps << ",\n";
-    fj_s << "  \"sector\": " << static_cast<int>(s.sector) << ",\n";
-    fj_s << "  \"last_lap_time\": " << s.lastLapTime << ",\n";
-    fj_s << "  \"best_lap_time\": " << s.bestLapTime << "\n";
+    fj_s << "  \"track_name\": \"Circuit de la Sarthe - Le Mans\",\n";
+    fj_s << "  \"session\": 10,\n";
+    fj_s << "  \"current_et\": 1250.456,\n";
+    fj_s << "  \"lap_dist\": 13626.0,\n";
+    fj_s << "  \"max_laps\": 24,\n";
+    fj_s << "  \"in_realtime\": true,\n";
+    fj_s << "  \"total_laps\": 8,\n";
+    fj_s << "  \"sector\": 2,\n";
+    fj_s << "  \"last_lap_time\": 205.420,\n";
+    fj_s << "  \"best_lap_time\": 204.850\n";
     fj_s << "}\n";
     fj_s.close();
 
@@ -830,48 +923,44 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
     fj_pm << "}\n";
     fj_pm.close();
 
-    // 6. Weather
-    WeatherPacket wp;
-    populate_golden_weather(wp);
+    // 6. Weather - FlatBuffer (schemas/weather.fbs)
+    std::vector<uint8_t> weather_buf = build_golden_weather_fbs();
     std::ofstream fb_wp(bin_weather_path, std::ios::binary);
-    fb_wp.write(reinterpret_cast<const char*>(&wp), sizeof(wp));
+    fb_wp.write(reinterpret_cast<const char*>(weather_buf.data()), static_cast<std::streamsize>(weather_buf.size()));
     fb_wp.close();
 
     std::ofstream fj_wp(json_weather_path);
     fj_wp << std::setprecision(6) << std::fixed;
     fj_wp << "{\n";
-    fj_wp << "  \"struct_size\": " << sizeof(wp) << ",\n";
-    fj_wp << "  \"et\": " << wp.et << ",\n";
-    fj_wp << "  \"cloudiness\": " << wp.cloudiness << ",\n";
-    fj_wp << "  \"ambient_temp_k\": " << wp.ambientTempK << ",\n";
-    fj_wp << "  \"ambient_temp_c\": " << (wp.ambientTempK - 273.15) << ",\n";
-    fj_wp << "  \"wind_max_speed\": " << wp.windMaxSpeed << ",\n";
-    fj_wp << "  \"origin_raining\": " << wp.raining[1][1] << "\n";
+    fj_wp << "  \"et\": 1250.456,\n";
+    fj_wp << "  \"cloudiness\": 0.25,\n";
+    fj_wp << "  \"ambient_temp_k\": 297.65,\n";
+    fj_wp << "  \"ambient_temp_c\": " << (297.65 - 273.15) << ",\n";
+    fj_wp << "  \"wind_max_speed\": 4.5,\n";
+    fj_wp << "  \"origin_raining\": 0.05\n";
     fj_wp << "}\n";
     fj_wp.close();
 
-    // 7. Extended State (FR-05)
-    ExtendedStatePacket ext;
-    populate_golden_extended(ext);
+    // 7. Extended State (FR-05) - FlatBuffer (schemas/extended_state.fbs)
+    std::vector<uint8_t> ext_buf = build_golden_extended_fbs();
     std::ofstream fb_ext(bin_ext_path, std::ios::binary);
-    fb_ext.write(reinterpret_cast<const char*>(&ext), sizeof(ext));
+    fb_ext.write(reinterpret_cast<const char*>(ext_buf.data()), static_cast<std::streamsize>(ext_buf.size()));
     fb_ext.close();
 
     std::ofstream fj_ext(json_ext_path);
     fj_ext << std::setprecision(6) << std::fixed;
     fj_ext << "{\n";
-    fj_ext << "  \"struct_size\": " << sizeof(ext) << ",\n";
-    fj_ext << "  \"traction_control\": " << static_cast<int>(ext.tractionControl) << ",\n";
-    fj_ext << "  \"anti_lock_brakes\": " << static_cast<int>(ext.antiLockBrakes) << ",\n";
-    fj_ext << "  \"auto_clutch\": " << static_cast<int>(ext.autoClutch) << ",\n";
-    fj_ext << "  \"auto_blip\": " << static_cast<int>(ext.autoBlip) << ",\n";
-    fj_ext << "  \"tire_mult\": " << static_cast<int>(ext.tireMult) << ",\n";
-    fj_ext << "  \"max_impact_magnitude\": " << ext.maxImpactMagnitude << ",\n";
-    fj_ext << "  \"accumulated_impact_magnitude\": " << ext.accumulatedImpactMagnitude << ",\n";
-    fj_ext << "  \"in_realtime_fc\": " << (ext.inRealtimeFC ? "true" : "false") << ",\n";
-    fj_ext << "  \"session_started\": " << (ext.sessionStarted ? "true" : "false") << ",\n";
-    fj_ext << "  \"session\": " << ext.session << ",\n";
-    fj_ext << "  \"current_pit_speed_limit\": " << ext.currentPitSpeedLimit << "\n";
+    fj_ext << "  \"traction_control\": 2,\n";
+    fj_ext << "  \"anti_lock_brakes\": 1,\n";
+    fj_ext << "  \"auto_clutch\": 1,\n";
+    fj_ext << "  \"auto_blip\": 1,\n";
+    fj_ext << "  \"tire_mult\": 2,\n";
+    fj_ext << "  \"max_impact_magnitude\": 1845.50,\n";
+    fj_ext << "  \"accumulated_impact_magnitude\": 3250.75,\n";
+    fj_ext << "  \"in_realtime_fc\": true,\n";
+    fj_ext << "  \"session_started\": true,\n";
+    fj_ext << "  \"session\": 10,\n";
+    fj_ext << "  \"current_pit_speed_limit\": 16.6667\n";
     fj_ext << "}\n";
     fj_ext.close();
 
@@ -888,21 +977,19 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
     fj_ffb << "}\n";
     fj_ffb.close();
 
-    // 9. Graphics (FR-06)
-    GraphicsPacket gfx;
-    populate_golden_graphics(gfx);
+    // 9. Graphics (FR-06) - FlatBuffer (schemas/graphics.fbs)
+    std::vector<uint8_t> gfx_buf = build_golden_graphics_fbs();
     std::ofstream fb_gfx(bin_gfx_path, std::ios::binary);
-    fb_gfx.write(reinterpret_cast<const char*>(&gfx), sizeof(gfx));
+    fb_gfx.write(reinterpret_cast<const char*>(gfx_buf.data()), static_cast<std::streamsize>(gfx_buf.size()));
     fb_gfx.close();
 
     std::ofstream fj_gfx(json_gfx_path);
     fj_gfx << std::setprecision(6) << std::fixed;
     fj_gfx << "{\n";
-    fj_gfx << "  \"struct_size\": " << sizeof(gfx) << ",\n";
-    fj_gfx << "  \"cam_pos\": [" << gfx.camPos.x << ", " << gfx.camPos.y << ", " << gfx.camPos.z << "],\n";
-    fj_gfx << "  \"ambient_rgb\": [" << gfx.ambientRed << ", " << gfx.ambientGreen << ", " << gfx.ambientBlue << "],\n";
-    fj_gfx << "  \"slot_id\": " << gfx.slotId << ",\n";
-    fj_gfx << "  \"camera_type\": " << gfx.cameraType << "\n";
+    fj_gfx << "  \"cam_pos\": [-1250.5, 46.8, 3420.2],\n";
+    fj_gfx << "  \"ambient_rgb\": [0.85, 0.88, 0.92],\n";
+    fj_gfx << "  \"slot_id\": 42,\n";
+    fj_gfx << "  \"camera_type\": 1\n";
     fj_gfx << "}\n";
     fj_gfx.close();
 
@@ -1006,6 +1093,16 @@ void send_sliced_udp_mock(zmq::socket_t &pub, unsigned char packetType, unsigned
     }
 }
 
+// Sends a pre-encoded FlatBuffer message as-is: no header, no chunking (the
+// message boundary already delimits it), matching the plugin's own SendFlatBuffer.
+void send_fbs_mock(zmq::socket_t &pub, const std::vector<uint8_t> &buf) {
+    try {
+        pub.send(zmq::buffer(buf.data(), buf.size()), zmq::send_flags::dontwait);
+    } catch (const zmq::error_t&) {
+        // Best-effort, same semantics as the plugin's own PUB socket.
+    }
+}
+
 void run_live_udp_server(int base_port, int hz, int duration_sec) {
     zmq::context_t ctx(1);
 
@@ -1088,13 +1185,9 @@ void run_live_udp_server(int base_port, int hz, int duration_sec) {
     flatbuffers::FlatBufferBuilder ffbBuilder;  // Reused (Clear()'d) for ForceFeedback, sent up to 400Hz.
 
     unsigned int telem_seq = 0;
-    unsigned int scoring_seq = 0;
     unsigned int full_scoring_seq = 0;
     unsigned int rules_seq = 0;
     unsigned int pit_seq = 0;
-    unsigned int weather_seq = 0;
-    unsigned int ext_seq = 0;
-    unsigned int gfx_seq = 0;
 
     // Send initial system event (Type 3) - FlatBuffer, no header/chunking.
     {
@@ -1143,16 +1236,16 @@ void run_live_udp_server(int base_port, int hz, int duration_sec) {
                 if (!isimotor::fbs::VerifyInboundCommandBuffer(verifier)) continue;
                 const isimotor::fbs::InboundCommand* in_cmd = isimotor::fbs::GetInboundCommand(in_msg.data());
 
-                if (in_cmd->payload_type() == isimotor::fbs::CommandPayload_HWControl) {
-                    const isimotor::fbs::HWControl* cmd = in_cmd->payload_as_HWControl();
+                if (in_cmd->payload_type() == isimotor::fbs::CommandPayload_HWControlCommand) {
+                    const isimotor::fbs::HWControlCommand* cmd = in_cmd->payload_as_HWControlCommand();
                     if (!cmd || !cmd->control_name()) continue;
                     std::cout << "[C++ Mock Host] Received HW Control Command: " << cmd->control_name()->c_str()
                               << " (val=" << cmd->control_value() << ", dur=" << cmd->duration_ms() << "ms)" << std::endl;
                     if (std::strcmp(cmd->control_name()->c_str(), "PitMenuDown") == 0) {
                         pit_menu.choiceIndex = (pit_menu.choiceIndex + 1) % pit_menu.numChoices;
                     }
-                } else if (in_cmd->payload_type() == isimotor::fbs::CommandPayload_WeatherControl) {
-                    const isimotor::fbs::WeatherControl* cmd = in_cmd->payload_as_WeatherControl();
+                } else if (in_cmd->payload_type() == isimotor::fbs::CommandPayload_WeatherControlCommand) {
+                    const isimotor::fbs::WeatherControlCommand* cmd = in_cmd->payload_as_WeatherControlCommand();
                     if (!cmd) continue;
                     std::cout << "[C++ Mock Host] Received Weather Control Command: Temp=" << cmd->ambient_temp()
                               << "C, Rain=" << cmd->raining() << std::endl;
@@ -1160,7 +1253,7 @@ void run_live_udp_server(int base_port, int hz, int duration_sec) {
                     weather.raining[1][1] = cmd->raining();
                     weather.cloudiness = cmd->dark_cloud();
                     weather.windMaxSpeed = cmd->wind_speed();
-                    send_sliced_udp_mock(pubSockets[7], 7, 0, &weather, sizeof(weather), telem.mElapsedTime, weather_seq);
+                    send_fbs_mock(pubSockets[7], encode_weather_fbs(weather));
                 }
             }
         }
@@ -1185,13 +1278,13 @@ void run_live_udp_server(int base_port, int hz, int duration_sec) {
 
         // 4. Send Graphics (Type 10 @ 60Hz)
         if (frame % gfx_divider == 0) {
-            send_sliced_udp_mock(pubSockets[10], 10, static_cast<unsigned short>(gfx.slotId), &gfx, sizeof(gfx), 0.0, gfx_seq);
+            send_fbs_mock(pubSockets[10], encode_graphics_fbs(gfx));
         }
 
         // 5. Send Scoring (Compact Type 2 + Full Sliced Type 4 @ 5Hz)
         if (frame % scoring_divider == 0) {
             scoring.currentET = 1250.0 + sim_time;
-            send_sliced_udp_mock(pubSockets[2], 2, 0, &scoring, sizeof(scoring), scoring.currentET, scoring_seq);
+            send_fbs_mock(pubSockets[2], encode_scoring_fbs(scoring));
 
             full_sess.currentET = 1250.0 + sim_time;
             std::memcpy(full_scoring_buf.data(), &full_sess, sizeof(full_sess));
@@ -1210,13 +1303,13 @@ void run_live_udp_server(int base_port, int hz, int duration_sec) {
         // 7. Send Extended State (Type 8 @ 5Hz)
         if (frame % ext_divider == 0) {
             ext_state.accumulatedImpactMagnitude = 3250.75 + sim_time * 10.0;
-            send_sliced_udp_mock(pubSockets[8], 8, 0, &ext_state, sizeof(ext_state), telem.mElapsedTime, ext_seq);
+            send_fbs_mock(pubSockets[8], encode_extended_fbs(ext_state));
         }
 
         // 8. Send Weather (Type 7 @ 1Hz)
         if (frame % weather_divider == 0) {
             weather.et = 1250.0 + sim_time;
-            send_sliced_udp_mock(pubSockets[7], 7, 0, &weather, sizeof(weather), weather.et, weather_seq);
+            send_fbs_mock(pubSockets[7], encode_weather_fbs(weather));
         }
 
         std::this_thread::sleep_for(frame_delay);

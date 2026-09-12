@@ -1,0 +1,15 @@
+// isiMotor RawUDP - WeatherControl (outbound, packet type 7).
+// Published on its own ZeroMQ PUB port (TcpBasePort + 7); the message on
+// that port IS this FlatBuffer, with no outer framing/header.
+namespace isimotor.fbs;
+
+table WeatherControl {
+  et: double;                  // Effective session ET.
+  raining: [double];           // 3x3 rain intensity grid, row-major (9 values).
+  cloudiness: double;          // Cloud cover (0.0 - 1.0).
+  ambient_temp_k: double;      // Ambient temperature (Kelvin).
+  wind_max_speed: double;      // Wind speed (m/s).
+  apply_cloudiness_instantly: bool;
+}
+
+root_type WeatherControl;
