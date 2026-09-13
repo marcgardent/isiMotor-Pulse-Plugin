@@ -62,14 +62,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mingw-w64 cmake ninja-build
 
-      - name: Cross-Compile isiMotor_RawUDP.dll
+      - name: Cross-Compile isiMotor_Pulse.dll
         run: |
           make cross
 
       - name: Verify Built DLL
         run: |
-          test -f build/isiMotor_RawUDP.dll
-          ls -lh build/isiMotor_RawUDP.dll
+          test -f build/isiMotor_Pulse.dll
+          ls -lh build/isiMotor_Pulse.dll
+
+  schemas-crate-check:
+    name: Rust Schemas Crate Build (isimotor-pulse-schemas)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build isimotor-pulse-schemas (codegen via build.rs)
+        run: |
+          make cargo-check
 
   package-check:
     name: Python Packages Validation
@@ -88,8 +102,8 @@ jobs:
 
       - name: Build Python packages & validate with twine
         run: |
-          uv run --with build python -m build isimotor-rawudp-types
-          uv run --with build python -m build isimotor-rawudp-client
-          uv run --with build python -m build isimotor-rawudp-manager
-          uv run --with twine twine check isimotor-rawudp-types/dist/* isimotor-rawudp-client/dist/* isimotor-rawudp-manager/dist/*
+          uv run --with build python -m build binding/python/isimotor-pulse-types
+          uv run --with build python -m build isimotor-pulse-client
+          uv run --with build python -m build isimotor-pulse-manager
+          uv run --with twine twine check binding/python/isimotor-pulse-types/dist/* isimotor-pulse-client/dist/* isimotor-pulse-manager/dist/*
 

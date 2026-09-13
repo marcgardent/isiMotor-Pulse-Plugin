@@ -4,12 +4,13 @@ Validates default values injection, game JSON structure, and settings preservati
 """
 
 import json
+import os
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
-from isimotor_rawudp_client.install import (
+from isimotor_pulse_client.install import (
     DEFAULT_PLUGIN_VARIABLES,
     configure_game_json,
 )
@@ -26,10 +27,10 @@ class TestInstallerAndConfig(unittest.TestCase):
         """Validates that DEFAULT_PLUGIN_VARIABLES contains all required stream and network keys."""
         required_keys = [
             " Enabled",
-            "TargetIP",
-            "TargetPort",
+            "TcpHost",
+            "TcpBasePort",
             "InboundControl",
-            "InboundPort",
+            "InboundTcpPort",
             "PlayerTelemetryRate",
             "OpponentTelemetryRate",
             "CompactScoringRate",
@@ -49,21 +50,21 @@ class TestInstallerAndConfig(unittest.TestCase):
         game_dir = self.test_dir / "Game"
         game_dir.mkdir(parents=True)
 
-        success = configure_game_json(game_dir, "isiMotor_RawUDP.dll")
+        success = configure_game_json(game_dir, "isiMotor_Pulse.dll")
         self.assertTrue(success)
 
         json_path = game_dir / "UserData" / "player" / "CustomPluginVariables.JSON"
         self.assertTrue(json_path.exists(), "CustomPluginVariables.JSON was not created")
 
         data = json.loads(json_path.read_text(encoding="utf-8"))
-        self.assertIn("isiMotor_RawUDP.dll", data)
-        self.assertNotIn("isiMotor_RawUDP", data)
-        self.assertNotIn("isiMotor-RawUDP", data)
+        self.assertIn("isiMotor_Pulse.dll", data)
+        self.assertNotIn("isiMotor_Pulse", data)
+        self.assertNotIn("isiMotor-Pulse", data)
 
-        entry = data["isiMotor_RawUDP.dll"]
+        entry = data["isiMotor_Pulse.dll"]
         self.assertEqual(entry[" Enabled"], 1)
-        self.assertEqual(entry["TargetIP"], "127.0.0.1")
-        self.assertEqual(entry["TargetPort"], "5000")
+        self.assertEqual(entry["TcpHost"], "127.0.0.1")
+        self.assertEqual(entry["TcpBasePort"], "5000")
         self.assertEqual(entry["InboundControl"], "Enabled")
         self.assertEqual(entry["PlayerTelemetryRate"], "unlimited")
         self.assertEqual(entry["OpponentTelemetryRate"], "off")
@@ -78,26 +79,26 @@ class TestInstallerAndConfig(unittest.TestCase):
         player_dir.mkdir(parents=True)
 
         existing_data = {
-            "isiMotor_RawUDP": {
+            "isiMotor_Pulse": {
                 " Enabled": 1,
-                "TargetIP": "239.255.0.1",  # User customized to Multicast
-                "TargetPort": "9000",  # User customized to Port 9000
+                "TcpHost": "192.168.1.20",  # User customized host
+                "TcpBasePort": "9000",  # User customized to Port 9000
                 "TelemetryRate": "60Hz",  # User customized to 60Hz
             }
         }
         json_path = player_dir / "CustomPluginVariables.JSON"
         json_path.write_text(json.dumps(existing_data), encoding="utf-8")
 
-        success = configure_game_json(game_dir, "isiMotor_RawUDP.dll")
+        success = configure_game_json(game_dir, "isiMotor_Pulse.dll")
         self.assertTrue(success)
 
         data = json.loads(json_path.read_text(encoding="utf-8"))
-        self.assertIn("isiMotor_RawUDP.dll", data)
-        self.assertNotIn("isiMotor_RawUDP", data)
-        entry = data["isiMotor_RawUDP.dll"]
+        self.assertIn("isiMotor_Pulse.dll", data)
+        self.assertNotIn("isiMotor_Pulse", data)
+        entry = data["isiMotor_Pulse.dll"]
         # Custom values preserved
-        self.assertEqual(entry["TargetIP"], "239.255.0.1")
-        self.assertEqual(entry["TargetPort"], "9000")
+        self.assertEqual(entry["TcpHost"], "192.168.1.20")
+        self.assertEqual(entry["TcpBasePort"], "9000")
         self.assertEqual(entry["TelemetryRate"], "60Hz")
         # Missing defaults populated
         self.assertEqual(entry["InboundControl"], "Enabled")
@@ -105,23 +106,23 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertEqual(entry["WeatherRate"], "1Hz")
 
     def test_get_configuration_overview_and_extract_rows(self):
-        from isimotor_rawudp_client.install import (
+        from isimotor_pulse_client.install import (
             copy_and_install_dll,
             get_configuration_overview,
             read_plugin_json_variables,
         )
-        from isimotor_rawudp_manager.sniffer import extract_config_rows
+        from isimotor_pulse_manager.sniffer import extract_config_rows
 
         # 1. Test read_plugin_json_variables on non-existent file returns defaults
         non_existent = self.test_dir / "does_not_exist.json"
         defaults = read_plugin_json_variables(non_existent)
-        self.assertEqual(defaults["TargetIP"], "127.0.0.1")
-        self.assertEqual(defaults["TargetPort"], "5000")
+        self.assertEqual(defaults["TcpHost"], "127.0.0.1")
+        self.assertEqual(defaults["TcpBasePort"], "5000")
 
         # 2. Setup mock game directory and fake source DLL
         game_dir = self.test_dir / "MockGame"
         game_dir.mkdir(parents=True)
-        fake_dll = self.test_dir / "isiMotor_RawUDP.dll"
+        fake_dll = self.test_dir / "isiMotor_Pulse.dll"
         fake_dll.write_bytes(b"MZ_MOCK_DLL_BINARY")
 
         # 3. Test copy_and_install_dll with custom dll and target
@@ -133,7 +134,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertGreaterEqual(len(installed_paths), 1)
 
         # Check files were copied
-        dest_plugin_dll = game_dir / "Plugins" / "isiMotor_RawUDP.dll"
+        dest_plugin_dll = game_dir / "Plugins" / "isiMotor_Pulse.dll"
         self.assertTrue(dest_plugin_dll.exists())
         self.assertEqual(dest_plugin_dll.read_bytes(), b"MZ_MOCK_DLL_BINARY")
 
@@ -145,23 +146,23 @@ class TestInstallerAndConfig(unittest.TestCase):
         g = overview["games"][0]
         self.assertTrue(g["dll_installed"])
         self.assertTrue(g["json_exists"])
-        self.assertEqual(g["variables"]["TargetIP"], "127.0.0.1")
+        self.assertEqual(g["variables"]["TcpHost"], "127.0.0.1")
 
         # 5. Test extract_config_rows
         rows = extract_config_rows(overview)
         self.assertGreaterEqual(len(rows), 15)
         row_keys = [r[0] for r in rows]
         self.assertIn("dll.status", row_keys)
-        self.assertIn("config.TargetIP", row_keys)
-        self.assertIn("config.TargetPort", row_keys)
+        self.assertIn("config.TcpHost", row_keys)
+        self.assertIn("config.TcpBasePort", row_keys)
         self.assertIn("config.EnableLogging", row_keys)
         self.assertIn("config.PlayerTelemetryRate", row_keys)
         self.assertIn("config.OpponentTelemetryRate", row_keys)
         self.assertIn("hotreload.architecture", row_keys)
 
     def test_home_summary_renderers_and_app_navigation(self):
-        from isimotor_rawudp_client.install import get_configuration_overview
-        from isimotor_rawudp_manager.sniffer import (
+        from isimotor_pulse_client.install import get_configuration_overview
+        from isimotor_pulse_manager.sniffer import (
             NAV_HOME,
             TAB_TELEM,
             IsiMotorBenchmarkApp,
@@ -173,12 +174,12 @@ class TestInstallerAndConfig(unittest.TestCase):
 
         overview = get_configuration_overview()
         engine = TelemetryEngine()
-        # Verify raw telemetry packet processing does not raise NameError (TELEMINFO_SIZE)
-        import time
-
-        from isimotor_rawudp_client.constants import TELEMINFO_SIZE
-
-        engine._process_packet(b"\x00" * TELEMINFO_SIZE, time.time())
+        # TelemInfo (Type 1) is a FlatBuffer now (no header/chunking): feed a
+        # real one (from the golden dataset) rather than a dummy zero buffer.
+        golden_path = os.path.join(os.path.dirname(__file__), "golden", "telemetry_golden.bin")
+        with open(golden_path, "rb") as f:
+            telem_bytes = f.read()
+        engine._process_packet(1, telem_bytes)
         self.assertIsNotNone(engine.latest_telemetry)
 
         install_text = render_home_install_summary(overview)
@@ -186,8 +187,8 @@ class TestInstallerAndConfig(unittest.TestCase):
         network_text = render_home_network_summary(engine, 10.0)
 
         self.assertIn("DLL Binary", install_text)
-        self.assertIn("UDP Destination", config_text)
-        self.assertIn("Telemetry UDP Socket", network_text)
+        self.assertIn("ZeroMQ PUB Endpoint", config_text)
+        self.assertIn("Telemetry ZeroMQ Base", network_text)
 
         app = IsiMotorBenchmarkApp(host="127.0.0.1", port=5000)
         self.assertEqual(app.active_nav, NAV_HOME)
@@ -199,7 +200,7 @@ class TestInstallerAndConfig(unittest.TestCase):
     def test_app_async_pilot_navigation(self):
         import asyncio
 
-        from isimotor_rawudp_manager.sniffer import (
+        from isimotor_pulse_manager.sniffer import (
             NAV_COMMANDS,
             NAV_EXPLORER,
             NAV_HOME,
@@ -256,8 +257,8 @@ class TestInstallerAndConfig(unittest.TestCase):
                 self.assertFalse(app.input_rate_weather.display)
 
                 form_vars = app._read_config_from_form()
-                self.assertEqual(form_vars["TargetIP"], "192.168.1.50")
-                self.assertEqual(form_vars["TargetPort"], "5055")
+                self.assertEqual(form_vars["TcpHost"], "192.168.1.50")
+                self.assertEqual(form_vars["TcpBasePort"], "5055")
                 self.assertEqual(form_vars["PlayerTelemetryRate"], "100Hz")
                 self.assertEqual(form_vars["OpponentTelemetryRate"], "25Hz")
                 self.assertEqual(form_vars["WeatherRate"], "off")
@@ -288,7 +289,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         asyncio.run(_run())
 
     def test_write_and_save_plugin_variables(self):
-        from isimotor_rawudp_client.install import (
+        from isimotor_pulse_client.install import (
             DEFAULT_PLUGIN_VARIABLES,
             read_plugin_json_variables,
             save_configuration_to_all_games,
@@ -298,8 +299,8 @@ class TestInstallerAndConfig(unittest.TestCase):
         test_dir = Path(tempfile.mkdtemp(prefix="isimotor_form_test_"))
         try:
             custom_vars = dict(DEFAULT_PLUGIN_VARIABLES)
-            custom_vars["TargetIP"] = "10.0.0.99"
-            custom_vars["TargetPort"] = "5555"
+            custom_vars["TcpHost"] = "10.0.0.99"
+            custom_vars["TcpBasePort"] = "5555"
             custom_vars["TelemetryRate"] = "60Hz"
 
             ok, _msg = write_plugin_json_variables(test_dir, custom_vars)
@@ -308,8 +309,8 @@ class TestInstallerAndConfig(unittest.TestCase):
             saved_json = test_dir / "UserData" / "player" / "CustomPluginVariables.JSON"
             self.assertTrue(saved_json.exists())
             read_back = read_plugin_json_variables(saved_json)
-            self.assertEqual(read_back["TargetIP"], "10.0.0.99")
-            self.assertEqual(read_back["TargetPort"], "5555")
+            self.assertEqual(read_back["TcpHost"], "10.0.0.99")
+            self.assertEqual(read_back["TcpBasePort"], "5555")
             self.assertEqual(read_back["TelemetryRate"], "60Hz")
 
             # Test save_configuration_to_all_games with custom_target
@@ -325,7 +326,7 @@ class TestInstallerAndConfig(unittest.TestCase):
 
     def test_parse_vdf_library_paths(self):
         """Tests parsing modern and legacy Steam libraryfolders.vdf structures."""
-        from isimotor_rawudp_client.install import parse_vdf_library_paths
+        from isimotor_pulse_client.install import parse_vdf_library_paths
 
         steam_root = self.test_dir / "SteamRoot"
         secondary_lib = self.test_dir / "SecondaryLib"
@@ -370,7 +371,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         """Tests that game detection strictly queries libraries registered in libraryfolders.vdf."""
         from unittest.mock import patch
 
-        from isimotor_rawudp_client.install import detect_game_installations
+        from isimotor_pulse_client.install import detect_game_installations
 
         steam_root = self.test_dir / "Steam"
         steam_root.mkdir(parents=True)
@@ -396,7 +397,7 @@ class TestInstallerAndConfig(unittest.TestCase):
 }}'''
         vdf_file.write_text(vdf_content, encoding="utf-8")
 
-        with patch("isimotor_rawudp_client.install.steam.get_steam_vdf_candidate_paths", return_value=[vdf_file]):
+        with patch("isimotor_pulse_client.install.steam.get_steam_vdf_candidate_paths", return_value=[vdf_file]):
             detected = detect_game_installations()
 
             # LMU was in registered Steam library -> detected

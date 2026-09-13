@@ -1,17 +1,15 @@
 """
 Unit Tests for Modular Python Client Architecture (SOLID, SRP, SLAP).
-Tests decoupled components: Codecs, Reassembler, StateStore, EventDispatcher, Transport, and Facade.
+Tests decoupled components: Codecs, StateStore, EventDispatcher, Transport, and Facade.
 """
 
-import struct
 import time
 import unittest
 
-from isimotor_rawudp_client import (
+from isimotor_pulse_client import (
     CompactScoring,
     ExtendedState,
     ForceFeedback,
-    FullScoringSession,
     IsiMotorClient,
     PhysicsOptions,
     SystemEvent,
@@ -19,17 +17,8 @@ from isimotor_rawudp_client import (
     TelemVect3,
     TelemWheel,
 )
-from isimotor_rawudp_client.constants import (
-    PKT_TYPE_FULL_SCORING,
-)
-from isimotor_rawudp_client.decoder import (
-    PacketDecoderRegistry,
-    decode_packet,
-    encode_header,
-)
-from isimotor_rawudp_client.dispatcher import EventDispatcher
-from isimotor_rawudp_client.reassembly import ChunkReassembler
-from isimotor_rawudp_client.state import StateStore
+from isimotor_pulse_client._internal.dispatcher import EventDispatcher
+from isimotor_pulse_client._internal.state import StateStore
 
 
 class TestModularArchitecture(unittest.TestCase):
@@ -87,7 +76,7 @@ class TestModularArchitecture(unittest.TestCase):
 
         t = TelemInfo(slot_id=7, engine_rpm=6500.0)
         now = time.time()
-        store.update(t, now)
+        store.update_telemetry(t, now)
 
         self.assertEqual(store.packet_count, 1)
         self.assertEqual(store.last_packet_time, now)
@@ -98,7 +87,7 @@ class TestModularArchitecture(unittest.TestCase):
 
         # Update scoring
         s = CompactScoring(track_name="Spa")
-        store.update(s, now + 0.1)
+        store.update_scoring(s, now + 0.1)
         self.assertEqual(store.packet_count, 2)
         self.assertEqual(store.get_scoring().track_name, "Spa")
         self.assertEqual(store.get_telemetry().slot_id, 7)
@@ -123,81 +112,27 @@ class TestModularArchitecture(unittest.TestCase):
         telem = TelemInfo(slot_id=42)
         scoring = CompactScoring(track_name="Monza")
 
-        dispatcher.dispatch(telem)
+        dispatcher.dispatch_telemetry(telem)
         self.assertEqual(len(received_telemetry), 1)
         self.assertEqual(len(received_any), 1)
         self.assertEqual(len(bus_telemetry), 1)
 
-        dispatcher.dispatch(scoring)
+        dispatcher.dispatch_scoring(scoring)
         self.assertEqual(len(received_telemetry), 1)
         self.assertEqual(len(received_any), 2)
         self.assertEqual(len(bus_telemetry), 1)
 
-    def test_packet_decoder_registry_extension(self):
-        """Tests Open/Closed capability of PacketDecoderRegistry for adding new custom decoders."""
-        registry = PacketDecoderRegistry()
-
-        # Define custom dummy packet and decoder
-        custom_pkt_type = 200
-
-        class CustomPacket:
-            def __init__(self, val: int):
-                self.val = val
-
-        def custom_decoder(payload: bytes):
-            val = struct.unpack("<i", payload[:4])[0]
-            return CustomPacket(val)
-
-        registry.register(custom_pkt_type, custom_decoder)
-
-        # Encode standard SIMP packet with custom type
-        hdr = encode_header(packet_type=custom_pkt_type, payload_size=4)
-        data = hdr + struct.pack("<i", 12345)
-
-        res = decode_packet(data, registry=registry)
-        self.assertIsInstance(res, CustomPacket)
-        self.assertEqual(res.val, 12345)
-
-    def test_chunk_reassembler_lifecycle_and_timeout(self):
-        """Tests ChunkReassembler with sequential chunks and timeout eviction."""
-        reassembler = ChunkReassembler(timeout_seconds=0.1, cleanup_interval_seconds=0.0)
-
-        # Create dummy 2-chunk packet (Full Scoring payload)
-        # 284 bytes session header
-        dummy_session = b"\x00" * 284
-        chunk0 = dummy_session[:150]
-        chunk1 = dummy_session[150:]
-
-        hdr0 = encode_header(PKT_TYPE_FULL_SCORING, len(chunk0), sequence_number=1, chunk_index=0, total_chunks=2)
-        hdr1 = encode_header(PKT_TYPE_FULL_SCORING, len(chunk1), sequence_number=1, chunk_index=1, total_chunks=2)
-
-        # Incomplete chunk
-        res0 = reassembler.process(hdr0 + chunk0, now=10.0)
-        self.assertIsNone(res0)
-
-        # Complete chunk
-        res1 = reassembler.process(hdr1 + chunk1, now=10.05)
-        self.assertIsInstance(res1, FullScoringSession)
-
-        # Stale chunk timeout
-        reassembler.process(hdr0 + chunk0, now=20.0)
-        self.assertEqual(len(reassembler._buffers), 1)
-
-        # Advance time past timeout
-        reassembler.cleanup_stale(now=20.2)
-        self.assertEqual(len(reassembler._buffers), 0)
-
     def test_client_facade_composition(self):
         """Tests IsiMotorClient facade high-level composition and getters."""
-        client = IsiMotorClient(host="127.0.0.1", port=5999)
+        client = IsiMotorClient(host="127.0.0.1", base_port=5999)
 
         received_packets = []
         client.on_telemetry = lambda t: received_packets.append(t)
 
         # Simulate receiving a datagram via internal ingestion pipeline (SLAP)
         t = TelemInfo(slot_id=99, engine_rpm=7200.0)
-        client._state.update(t, time.time())
-        client._dispatcher.dispatch(t)
+        client._state.update_telemetry(t, time.time())
+        client._dispatcher.dispatch_telemetry(t)
 
         self.assertEqual(client.get_latest_telemetry().slot_id, 99)
         self.assertEqual(len(received_packets), 1)

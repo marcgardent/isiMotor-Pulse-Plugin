@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-isiMotor-RawUDP-Plugin — Automated Version Bump & Git Release Tagger.
+isiMotor-Pulse-Plugin — Automated Version Bump & Git Release Tagger.
 Propagates semantic version numbers across all workspace packages,
 validates Git clean state preconditions, commits changes, and creates signed/annotated release tags.
 
@@ -86,42 +86,42 @@ def bump_all_files(root: Path, new_version: str) -> list[Path]:
     if update_file(root_pyproject, r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"', count=1):
         updated_files.append(root_pyproject)
 
-    # 2. isimotor-rawudp-client/pyproject.toml
-    client_pyproject = root / "isimotor-rawudp-client" / "pyproject.toml"
+    # 2. isimotor-pulse-client/pyproject.toml
+    client_pyproject = root / "isimotor-pulse-client" / "pyproject.toml"
     if update_file(client_pyproject, r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"', count=1):
         updated_files.append(client_pyproject)
 
-    # 3. isimotor-rawudp-client/isimotor_rawudp_client/__init__.py
-    client_init = root / "isimotor-rawudp-client" / "isimotor_rawudp_client" / "__init__.py"
+    # 3. isimotor-pulse-client/isimotor_pulse_client/__init__.py
+    client_init = root / "isimotor-pulse-client" / "isimotor_pulse_client" / "__init__.py"
     if update_file(client_init, r'(?m)^__version__\s*=\s*"[^"]+"', f'__version__ = "{new_version}"'):
         updated_files.append(client_init)
 
-    # 3b. isimotor-rawudp-types/pyproject.toml
-    types_pyproject = root / "isimotor-rawudp-types" / "pyproject.toml"
+    # 3b. binding/python/isimotor-pulse-types/pyproject.toml
+    types_pyproject = root / "binding" / "python" / "isimotor-pulse-types" / "pyproject.toml"
     if update_file(types_pyproject, r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"', count=1):
         updated_files.append(types_pyproject)
 
-    # 3c. isimotor-rawudp-types/isimotor_rawudp_types/__init__.py
-    types_init = root / "isimotor-rawudp-types" / "isimotor_rawudp_types" / "__init__.py"
+    # 3c. binding/python/isimotor-pulse-types/isimotor_pulse_types/__init__.py
+    types_init = root / "binding" / "python" / "isimotor-pulse-types" / "isimotor_pulse_types" / "__init__.py"
     if update_file(types_init, r'(?m)^__version__\s*=\s*"[^"]+"', f'__version__ = "{new_version}"'):
         updated_files.append(types_init)
 
-    # 4. isimotor-rawudp-manager/pyproject.toml (under [project] and [tool.briefcase])
-    manager_pyproject = root / "isimotor-rawudp-manager" / "pyproject.toml"
+    # 4. isimotor-pulse-manager/pyproject.toml (under [project] and [tool.briefcase])
+    manager_pyproject = root / "isimotor-pulse-manager" / "pyproject.toml"
     if update_file(manager_pyproject, r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"'):
         updated_files.append(manager_pyproject)
 
-    # 5. isimotor-rawudp-manager/isimotor_rawudp_manager/__init__.py
-    manager_init = root / "isimotor-rawudp-manager" / "isimotor_rawudp_manager" / "__init__.py"
+    # 5. isimotor-pulse-manager/isimotor_pulse_manager/__init__.py
+    manager_init = root / "isimotor-pulse-manager" / "isimotor_pulse_manager" / "__init__.py"
     if update_file(manager_init, r'(?m)^__version__\s*=\s*"[^"]+"', f'__version__ = "{new_version}"'):
         updated_files.append(manager_init)
 
-    # 6. isimotor-rawudp-plugin/CMakeLists.txt
-    cmake_file = root / "isimotor-rawudp-plugin" / "CMakeLists.txt"
+    # 6. isimotor-pulse-plugin/CMakeLists.txt
+    cmake_file = root / "isimotor-pulse-plugin" / "CMakeLists.txt"
     if update_file(
         cmake_file,
-        r"project\(isiMotor_RawUDP\s+(?:VERSION\s+[\d.]+\s+)?LANGUAGES\s+CXX\)",
-        f"project(isiMotor_RawUDP VERSION {cmake_version} LANGUAGES CXX)",
+        r"project\(isiMotor_Pulse\s+(?:VERSION\s+[\d.]+\s+)?LANGUAGES\s+CXX\)",
+        f"project(isiMotor_Pulse VERSION {cmake_version} LANGUAGES CXX)",
     ):
         updated_files.append(cmake_file)
 
@@ -162,7 +162,7 @@ def commit_and_tag(root: Path, target_version: str, files: list[Path]) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="isiMotor-RawUDP-Plugin — Version Bump & Release Tagger",
+        description="isiMotor-Pulse-Plugin — Version Bump & Release Tagger",
     )
     parser.add_argument("version", help="New semantic version number (e.g. 1.5.0, 2.0.0-rc1)")
     parser.add_argument(
@@ -194,7 +194,7 @@ def main() -> None:
         check_git_preconditions(root, clean_version, allow_dirty=args.allow_dirty)
 
     print("==================================================================")
-    print(f"  🏎️  isiMotor-RawUDP-Plugin — Version Bump to v{clean_version}")
+    print(f"  🏎️  isiMotor-Pulse-Plugin — Version Bump to v{clean_version}")
     print("==================================================================")
 
     # Update files

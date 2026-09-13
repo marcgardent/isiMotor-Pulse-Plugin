@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-isiMotor-RawUDP-Plugin — Workspace Version Consistency Validator.
+isiMotor-Pulse-Plugin — Workspace Version Consistency Validator.
 Verifies that all subpackages, CMake configurations, Python packages,
 and documentation reflect a single, consistent semantic version number.
 
@@ -42,32 +42,32 @@ def collect_file_versions(root: Path) -> dict[str, str | None]:
     versions["pyproject.toml (workspace)"] = extract_regex_first_group(root_pyproject, r'(?m)^version\s*=\s*"([^"]+)"')
 
     # 2. Client pyproject.toml
-    client_pyproject = root / "isimotor-rawudp-client" / "pyproject.toml"
-    versions["isimotor-rawudp-client/pyproject.toml"] = extract_regex_first_group(
+    client_pyproject = root / "isimotor-pulse-client" / "pyproject.toml"
+    versions["isimotor-pulse-client/pyproject.toml"] = extract_regex_first_group(
         client_pyproject, r'(?m)^version\s*=\s*"([^"]+)"'
     )
 
     # 3. Client __init__.py
-    client_init = root / "isimotor-rawudp-client" / "isimotor_rawudp_client" / "__init__.py"
-    versions["isimotor_rawudp_client/__init__.py"] = extract_regex_first_group(
+    client_init = root / "isimotor-pulse-client" / "isimotor_pulse_client" / "__init__.py"
+    versions["isimotor_pulse_client/__init__.py"] = extract_regex_first_group(
         client_init, r'(?m)^__version__\s*=\s*"([^"]+)"'
     )
 
     # 3b. Types pyproject.toml
-    types_pyproject = root / "isimotor-rawudp-types" / "pyproject.toml"
-    versions["isimotor-rawudp-types/pyproject.toml"] = extract_regex_first_group(
+    types_pyproject = root / "binding" / "python" / "isimotor-pulse-types" / "pyproject.toml"
+    versions["binding/python/isimotor-pulse-types/pyproject.toml"] = extract_regex_first_group(
         types_pyproject, r'(?m)^version\s*=\s*"([^"]+)"'
     )
 
     # 3c. Types __init__.py
-    types_init = root / "isimotor-rawudp-types" / "isimotor_rawudp_types" / "__init__.py"
-    versions["isimotor_rawudp_types/__init__.py"] = extract_regex_first_group(
+    types_init = root / "binding" / "python" / "isimotor-pulse-types" / "isimotor_pulse_types" / "__init__.py"
+    versions["isimotor_pulse_types/__init__.py"] = extract_regex_first_group(
         types_init, r'(?m)^__version__\s*=\s*"([^"]+)"'
     )
 
     # 4. Manager pyproject.toml (project.version)
-    manager_pyproject = root / "isimotor-rawudp-manager" / "pyproject.toml"
-    versions["isimotor-rawudp-manager/pyproject.toml [project]"] = extract_regex_first_group(
+    manager_pyproject = root / "isimotor-pulse-manager" / "pyproject.toml"
+    versions["isimotor-pulse-manager/pyproject.toml [project]"] = extract_regex_first_group(
         manager_pyproject, r'(?m)^version\s*=\s*"([^"]+)"'
     )
 
@@ -75,22 +75,22 @@ def collect_file_versions(root: Path) -> dict[str, str | None]:
     if manager_pyproject.exists():
         content = manager_pyproject.read_text(encoding="utf-8")
         briefcase_match = re.search(r'(?s)\[tool\.briefcase\].*?version\s*=\s*"([^"]+)"', content)
-        versions["isimotor-rawudp-manager/pyproject.toml [tool.briefcase]"] = (
+        versions["isimotor-pulse-manager/pyproject.toml [tool.briefcase]"] = (
             briefcase_match.group(1).strip() if briefcase_match else None
         )
     else:
-        versions["isimotor-rawudp-manager/pyproject.toml [tool.briefcase]"] = None
+        versions["isimotor-pulse-manager/pyproject.toml [tool.briefcase]"] = None
 
     # 6. Manager __init__.py
-    manager_init = root / "isimotor-rawudp-manager" / "isimotor_rawudp_manager" / "__init__.py"
-    versions["isimotor_rawudp_manager/__init__.py"] = extract_regex_first_group(
+    manager_init = root / "isimotor-pulse-manager" / "isimotor_pulse_manager" / "__init__.py"
+    versions["isimotor_pulse_manager/__init__.py"] = extract_regex_first_group(
         manager_init, r'(?m)^__version__\s*=\s*"([^"]+)"'
     )
 
     # 7. Plugin CMakeLists.txt
-    cmake_file = root / "isimotor-rawudp-plugin" / "CMakeLists.txt"
-    versions["isimotor-rawudp-plugin/CMakeLists.txt"] = extract_regex_first_group(
-        cmake_file, r"project\(isiMotor_RawUDP\s+VERSION\s+([\d.]+)\s+LANGUAGES\s+CXX\)"
+    cmake_file = root / "isimotor-pulse-plugin" / "CMakeLists.txt"
+    versions["isimotor-pulse-plugin/CMakeLists.txt"] = extract_regex_first_group(
+        cmake_file, r"project\(isiMotor_Pulse\s+VERSION\s+([\d.]+)\s+LANGUAGES\s+CXX\)"
     )
 
     # 8. USER_NOTICE.md
@@ -136,7 +136,7 @@ def verify_versions(root: Path, target_version: str | None = None) -> tuple[bool
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="isiMotor-RawUDP-Plugin — Workspace Version Consistency Validator",
+        description="isiMotor-Pulse-Plugin — Workspace Version Consistency Validator",
     )
     parser.add_argument(
         "target_version",
@@ -149,7 +149,7 @@ def main() -> None:
     root = get_project_root()
 
     print("==================================================================")
-    print("  🔍  isiMotor-RawUDP-Plugin — Version Consistency Check")
+    print("  🔍  isiMotor-Pulse-Plugin — Version Consistency Check")
     print("==================================================================")
 
     if args.target_version:

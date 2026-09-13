@@ -20,12 +20,18 @@
 #include <vector>
 #include <algorithm>
 
-// POSIX socket headers for Linux
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
+#include <zmq.hpp>
+
+#include "flatbuffers/flatbuffers.h"
+#include "system_event_generated.h"
+#include "force_feedback_generated.h"
+#include "inbound_command_generated.h"
+#include "compact_scoring_generated.h"
+#include "weather_generated.h"
+#include "extended_state_generated.h"
+#include "graphics_generated.h"
+#include "telemetry_generated.h"
+#include "full_scoring_generated.h"
 
 // Windows / isiMotor compatibility macros
 #define __cdecl
@@ -72,10 +78,7 @@ struct CompactScoringPacket {
     double bestLapTime;      // Player personal best lap time
 };
 
-struct SystemEventPacket {
-    uint8_t eventType;       // 1 = EnterRealtime, 2 = ExitRealtime, 3 = StartSession, 4 = EndSession
-    uint8_t pad;
-};
+// SystemEvent (Type 3) is now a FlatBuffer (schemas/system_event.fbs) - see build_golden_event_fbs().
 
 struct FullScoringSessionPacket {
     char          trackName[64];       // Track/circuit name
@@ -209,9 +212,7 @@ struct ExtendedStatePacket {
     float         currentPitSpeedLimit;      // Pit speed limit m/s
 };
 
-struct ForceFeedbackPacket {
-    double forceValue;                      // Steering shaft torque value
-};
+// ForceFeedback (Type 9) is now a FlatBuffer (schemas/force_feedback.fbs) - see build_golden_ffb_fbs().
 
 struct GraphicsPacket {
     TelemVect3 camPos;                      // Camera 3D world position
@@ -223,23 +224,9 @@ struct GraphicsPacket {
     int32_t    cameraType;                  // Camera viewpoint type
 };
 
-struct HWControlCommandPacket {
-    char          controlName[32];       // Control name (e.g. "PitMenuUp", "PitMenuSelect", "TCIncrease")
-    double        controlValue;          // 1.0 = press/on, 0.0 = release/off, or analog value
-    uint16_t      durationMs;            // Pulse duration in ms (e.g. 50ms)
-    uint8_t       pad[2];                // Explicit 4-byte struct padding
-};
-
-struct WeatherControlCommandPacket {
-    double        ambientTemp;           // Air temp in °C
-    double        trackTemp;             // Track surface temp in °C
-    double        darkCloud;             // 0.0 to 1.0
-    double        raining;               // 0.0 to 1.0
-    double        windSpeed;             // Wind speed in m/s
-    double        windDirection;         // Wind direction in radians
-    double        minPathWetness;        // 0.0 to 1.0
-    double        maxPathWetness;        // 0.0 to 1.0
-};
+// HWControl/WeatherControl (Types 100/101) are now a single InboundCommand
+// FlatBuffer with a CommandPayload union (schemas/inbound_command.fbs) - see
+// build_golden_hw_control_fbs() / build_golden_weather_control_fbs().
 
 #pragma pack(pop)
 
@@ -375,6 +362,9 @@ void populate_golden_telemetry(TelemInfoV01 &t) {
     }
 }
 
+// CompactScoring (Type 2) is a FlatBuffer now (schemas/compact_scoring.fbs).
+// The legacy struct is kept purely as a convenient internal staging area
+// (never sent raw); encode_scoring_fbs() converts it to the wire FlatBuffer.
 void populate_golden_scoring(CompactScoringPacket &s) {
     std::memset(&s, 0, sizeof(s));
     std::strncpy(s.trackName, "Circuit de la Sarthe - Le Mans", sizeof(s.trackName) - 1);
@@ -395,6 +385,23 @@ void populate_golden_scoring(CompactScoringPacket &s) {
     s.bestSector1 = 40.820;
     s.bestSector2 = 123.500;
     s.bestLapTime = 204.850;
+}
+
+std::vector<uint8_t> encode_scoring_fbs(const CompactScoringPacket &s) {
+    flatbuffers::FlatBufferBuilder builder;
+    auto trackName = builder.CreateString(s.trackName);
+    auto root = isimotor::fbs::CreateCompactScoring(
+        builder, trackName, s.session, s.currentET, s.lapDist, s.maxLaps, s.inRealtime,
+        s.totalLaps, s.sector, s.inGarageStall, s.countLapFlag, s.curSector1, s.curSector2,
+        s.lastSector1, s.lastSector2, s.lastLapTime, s.bestSector1, s.bestSector2, s.bestLapTime);
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
+}
+
+std::vector<uint8_t> build_golden_scoring_fbs() {
+    CompactScoringPacket s;
+    populate_golden_scoring(s);
+    return encode_scoring_fbs(s);
 }
 
 void populate_golden_full_scoring(FullScoringSessionPacket &sess, std::vector<VehicleScoringInfoV01> &vehicles) {
@@ -465,6 +472,158 @@ void populate_golden_full_scoring(FullScoringSessionPacket &sess, std::vector<Ve
     vehicles[2].mInPits = true;
     vehicles[2].mPitState = 3;
     vehicles[2].mTimeBehindLeader = 4.650;
+}
+
+// TelemInfo (Type 1) is a FlatBuffer now (schemas/telemetry.fbs); mirrors
+// isimotor-pulse-plugin/src/main.cpp's EncodeWheelFbs()/UpdateTelemetry().
+flatbuffers::Offset<isimotor::fbs::TelemWheel> encode_telem_wheel_fbs(
+        flatbuffers::FlatBufferBuilder &b, const TelemWheelV01 &w) {
+    auto lmu = isimotor::fbs::CreateLmuWheel(b, w.mLMUExtension.mCompoundType, w.mLMUExtension.mBrakeWear);
+    auto terrainName = b.CreateString(w.mTerrainName, strnlen(w.mTerrainName, sizeof(w.mTerrainName)));
+    double temperature[3] = {w.mTemperature[0], w.mTemperature[1], w.mTemperature[2]};
+    auto temperatureOffset = b.CreateVector<double>(temperature, 3);
+    double innerLayerTemp[3] = {
+        w.mTireInnerLayerTemperature[0], w.mTireInnerLayerTemperature[1], w.mTireInnerLayerTemperature[2]};
+    auto innerLayerTempOffset = b.CreateVector<double>(innerLayerTemp, 3);
+
+    return isimotor::fbs::CreateTelemWheel(
+        b, w.mSuspensionDeflection, w.mRideHeight, w.mSuspForce, w.mBrakeTemp, w.mBrakePressure,
+        w.mRotation, w.mLateralPatchVel, w.mLongitudinalPatchVel, w.mLateralGroundVel, w.mLongitudinalGroundVel,
+        w.mCamber, w.mLateralForce, w.mLongitudinalForce, w.mTireLoad, w.mGripFract, w.mPressure,
+        temperatureOffset, w.mWear, terrainName, w.mSurfaceType, w.mFlat, w.mDetached,
+        w.mStaticUndeflectedRadius, w.mVerticalTireDeflection, w.mWheelYLocation, w.mToe,
+        w.mTireCarcassTemperature, innerLayerTempOffset, lmu);
+}
+
+std::vector<uint8_t> encode_telemetry_fbs(const TelemInfoV01 &info) {
+    flatbuffers::FlatBufferBuilder b;
+
+    flatbuffers::Offset<isimotor::fbs::TelemWheel> wheelOffsets[4];
+    for (int i = 0; i < 4; ++i) {
+        wheelOffsets[i] = encode_telem_wheel_fbs(b, info.mWheel[i]);
+    }
+    auto wheelsVec = b.CreateVector(wheelOffsets, 4);
+
+    const LMUExtendedTelemetry &lmuSrc = info.mLMUExtension;
+    auto ecu = isimotor::fbs::CreateEcuRaw(
+        b, lmuSrc.mTC, lmuSrc.mTCMax, lmuSrc.mTCCut, lmuSrc.mTCCutMax, lmuSrc.mTCSlip, lmuSrc.mTCSlipMax,
+        lmuSrc.mABS, lmuSrc.mABSMax, lmuSrc.mTCActive, lmuSrc.mABSActive, lmuSrc.mMotorMap, lmuSrc.mMotorMapMax,
+        lmuSrc.mMigration, lmuSrc.mMigrationMax, lmuSrc.mFrontAntiSway, lmuSrc.mFrontAntiSwayMax,
+        lmuSrc.mRearAntiSway, lmuSrc.mRearAntiSwayMax, lmuSrc.mWiperState, lmuSrc.mLiftAndCoastProgress);
+    auto vehicleModel = b.CreateString(lmuSrc.mVehicleModel, strnlen(lmuSrc.mVehicleModel, sizeof(lmuSrc.mVehicleModel)));
+    auto lmu = isimotor::fbs::CreateLmuTelemetry(
+        b, ecu, lmuSrc.mVirtualEnergy, lmuSrc.mRegen, lmuSrc.mTrackLimitsSteps, vehicleModel);
+
+    auto vehicleName = b.CreateString(info.mVehicleName, strnlen(info.mVehicleName, sizeof(info.mVehicleName)));
+    auto trackName = b.CreateString(info.mTrackName, strnlen(info.mTrackName, sizeof(info.mTrackName)));
+    auto frontCompoundName = b.CreateString(
+        info.mFrontTireCompoundName, strnlen(info.mFrontTireCompoundName, sizeof(info.mFrontTireCompoundName)));
+    auto rearCompoundName = b.CreateString(
+        info.mRearTireCompoundName, strnlen(info.mRearTireCompoundName, sizeof(info.mRearTireCompoundName)));
+
+    uint8_t dentSeverity[8];
+    for (int i = 0; i < 8; ++i) dentSeverity[i] = info.mDentSeverity[i];
+    auto dentSeverityOffset = b.CreateVector<uint8_t>(dentSeverity, 8);
+
+    float p2g[3] = {info.mPhysicsToGraphicsOffset[0], info.mPhysicsToGraphicsOffset[1], info.mPhysicsToGraphicsOffset[2]};
+    auto p2gOffset = b.CreateVector<float>(p2g, 3);
+
+    isimotor::fbs::Vec3 pos(info.mPos.x, info.mPos.y, info.mPos.z);
+    isimotor::fbs::Vec3 localVel(info.mLocalVel.x, info.mLocalVel.y, info.mLocalVel.z);
+    isimotor::fbs::Vec3 localAccel(info.mLocalAccel.x, info.mLocalAccel.y, info.mLocalAccel.z);
+    isimotor::fbs::Vec3 ori0(info.mOri[0].x, info.mOri[0].y, info.mOri[0].z);
+    isimotor::fbs::Vec3 ori1(info.mOri[1].x, info.mOri[1].y, info.mOri[1].z);
+    isimotor::fbs::Vec3 ori2(info.mOri[2].x, info.mOri[2].y, info.mOri[2].z);
+    isimotor::fbs::Vec3 localRot(info.mLocalRot.x, info.mLocalRot.y, info.mLocalRot.z);
+    isimotor::fbs::Vec3 localRotAccel(info.mLocalRotAccel.x, info.mLocalRotAccel.y, info.mLocalRotAccel.z);
+    isimotor::fbs::Vec3 lastImpactPos(info.mLastImpactPos.x, info.mLastImpactPos.y, info.mLastImpactPos.z);
+
+    auto root = isimotor::fbs::CreateTelemInfo(
+        b, info.mID, info.mDeltaTime, info.mElapsedTime, info.mLapNumber, info.mLapStartET,
+        vehicleName, trackName, &pos, &localVel, &localAccel, &ori0, &ori1, &ori2, &localRot, &localRotAccel,
+        info.mGear, info.mEngineRPM, info.mEngineWaterTemp, info.mEngineOilTemp, info.mClutchRPM,
+        info.mUnfilteredThrottle, info.mUnfilteredBrake, info.mUnfilteredSteering, info.mUnfilteredClutch,
+        info.mFilteredThrottle, info.mFilteredBrake, info.mFilteredSteering, info.mFilteredClutch,
+        info.mSteeringShaftTorque, info.mFront3rdDeflection, info.mRear3rdDeflection,
+        info.mFrontWingHeight, info.mFrontRideHeight, info.mRearRideHeight, info.mDrag,
+        info.mFrontDownforce, info.mRearDownforce, info.mFuel, info.mEngineMaxRPM,
+        info.mScheduledStops, info.mOverheating, info.mDetached, info.mHeadlights, dentSeverityOffset,
+        info.mLastImpactET, info.mLastImpactMagnitude, &lastImpactPos, info.mEngineTorque, info.mCurrentSector,
+        info.mSpeedLimiter, info.mMaxGears, info.mFrontTireCompoundIndex, info.mRearTireCompoundIndex,
+        info.mFuelCapacity, info.mFrontFlapActivated, info.mRearFlapActivated, info.mRearFlapLegalStatus,
+        info.mIgnitionStarter, frontCompoundName, rearCompoundName, info.mSpeedLimiterAvailable,
+        info.mAntiStallActivated, info.mVisualSteeringWheelRange, info.mRearBrakeBias, info.mTurboBoostPressure,
+        p2gOffset, info.mPhysicalSteeringWheelRange, info.mBatteryChargeFraction,
+        info.mElectricBoostMotorTorque, info.mElectricBoostMotorRPM, info.mElectricBoostMotorTemperature,
+        info.mElectricBoostWaterTemperature, info.mElectricBoostMotorState, lmu, wheelsVec);
+    b.Finish(root);
+    return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+}
+
+// FullScoringSession (Type 4) is a FlatBuffer now (schemas/full_scoring.fbs);
+// mirrors main.cpp's EncodeVehicleScoringFbs()/UpdateScoring() full-scoring block.
+flatbuffers::Offset<isimotor::fbs::VehicleScoring> encode_vehicle_scoring_fbs(
+        flatbuffers::FlatBufferBuilder &b, const VehicleScoringInfoV01 &v) {
+    auto driverName = b.CreateString(v.mDriverName, strnlen(v.mDriverName, sizeof(v.mDriverName)));
+    auto vehicleName = b.CreateString(v.mVehicleName, strnlen(v.mVehicleName, sizeof(v.mVehicleName)));
+    auto vehicleClass = b.CreateString(v.mVehicleClass, strnlen(v.mVehicleClass, sizeof(v.mVehicleClass)));
+    auto pitGroup = b.CreateString(v.mPitGroup, strnlen(v.mPitGroup, sizeof(v.mPitGroup)));
+
+    isimotor::fbs::Vec3 pos(v.mPos.x, v.mPos.y, v.mPos.z);
+    isimotor::fbs::Vec3 localVel(v.mLocalVel.x, v.mLocalVel.y, v.mLocalVel.z);
+    isimotor::fbs::Vec3 localAccel(v.mLocalAccel.x, v.mLocalAccel.y, v.mLocalAccel.z);
+    isimotor::fbs::Vec3 ori0(v.mOri[0].x, v.mOri[0].y, v.mOri[0].z);
+    isimotor::fbs::Vec3 ori1(v.mOri[1].x, v.mOri[1].y, v.mOri[1].z);
+    isimotor::fbs::Vec3 ori2(v.mOri[2].x, v.mOri[2].y, v.mOri[2].z);
+    isimotor::fbs::Vec3 localRot(v.mLocalRot.x, v.mLocalRot.y, v.mLocalRot.z);
+    isimotor::fbs::Vec3 localRotAccel(v.mLocalRotAccel.x, v.mLocalRotAccel.y, v.mLocalRotAccel.z);
+
+    auto lmu = isimotor::fbs::CreateLmuVehicleScoring(
+        b, v.mLMUExtension.mFuelFraction / 255.0f, v.mLMUExtension.mTrackLimitsSteps);
+
+    return isimotor::fbs::CreateVehicleScoring(
+        b, v.mID, driverName, vehicleName, v.mTotalLaps, v.mSector, v.mFinishStatus, v.mLapDist,
+        v.mPathLateral, v.mTrackEdge, v.mBestSector1, v.mBestSector2, v.mBestLapTime, v.mLastSector1,
+        v.mLastSector2, v.mLastLapTime, v.mCurSector1, v.mCurSector2, v.mNumPitstops, v.mNumPenalties,
+        v.mIsPlayer, v.mControl, v.mInPits, v.mPlace, vehicleClass, v.mTimeBehindNext, v.mLapsBehindNext,
+        v.mTimeBehindLeader, v.mLapsBehindLeader, v.mLapStartET, &pos, &localVel, &localAccel,
+        &ori0, &ori1, &ori2, &localRot, &localRotAccel, v.mHeadlights, v.mPitState, v.mServerScored,
+        v.mIndividualPhase, v.mQualification, v.mTimeIntoLap, v.mEstimatedLapTime, pitGroup, v.mFlag,
+        v.mUnderYellow, v.mCountLapFlag, v.mInGarageStall, v.mPitLapDist, v.mBestLapSector1,
+        v.mBestLapSector2, lmu);
+}
+
+std::vector<uint8_t> encode_full_scoring_fbs(
+        const FullScoringSessionPacket &info, const std::vector<VehicleScoringInfoV01> &vehicles) {
+    flatbuffers::FlatBufferBuilder b;
+
+    std::vector<flatbuffers::Offset<isimotor::fbs::VehicleScoring>> vehicleOffsets;
+    vehicleOffsets.reserve(vehicles.size());
+    for (const auto &v : vehicles) {
+        vehicleOffsets.push_back(encode_vehicle_scoring_fbs(b, v));
+    }
+    auto vehiclesVec = b.CreateVector(vehicleOffsets);
+
+    // The mock's FullScoringSessionPacket has no mLMUExtension field (unlike
+    // the real ScoringInfoV01), so its LMU scoring session extension is
+    // encoded with defaults.
+    auto lmu = isimotor::fbs::CreateLmuScoringSession(b, 0, 0, 0, 0.0f);
+
+    auto trackName = b.CreateString(info.trackName, strnlen(info.trackName, sizeof(info.trackName)));
+    auto playerName = b.CreateString(info.playerName, strnlen(info.playerName, sizeof(info.playerName)));
+    auto plrFileName = b.CreateString(info.plrFileName, strnlen(info.plrFileName, sizeof(info.plrFileName)));
+
+    isimotor::fbs::Vec3 wind(info.wind.x, info.wind.y, info.wind.z);
+
+    auto root = isimotor::fbs::CreateFullScoringSession(
+        b, trackName, info.session, info.currentET, info.endET, info.maxLaps, info.lapDist,
+        static_cast<int32_t>(vehicles.size()), info.gamePhase, info.yellowFlagState,
+        info.sectorFlag[0], info.sectorFlag[1], info.sectorFlag[2], info.startLight,
+        info.numRedLights, info.inRealtime, playerName, plrFileName, info.darkCloud, info.raining,
+        info.ambientTemp, info.trackTemp, &wind, info.minPathWetness, info.maxPathWetness,
+        info.avgPathWetness, lmu, vehiclesVec);
+    b.Finish(root);
+    return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
 void populate_golden_track_rules(TrackRulesSessionPacket &rules, std::vector<TrackRulesParticipantPacket> &participants) {
@@ -553,6 +712,9 @@ void populate_golden_pit_menu(PitMenuPacket &p) {
     p.numChoices = 4;
 }
 
+// WeatherControl (Type 7) is a FlatBuffer now (schemas/weather.fbs). The
+// legacy struct is kept purely as a convenient internal staging area (the
+// live loop mutates it in place on inbound weather overrides); never sent raw.
 void populate_golden_weather(WeatherPacket &w) {
     std::memset(&w, 0, sizeof(w));
     w.et = 1250.456;
@@ -567,6 +729,29 @@ void populate_golden_weather(WeatherPacket &w) {
     w.applyCloudinessInstantly = false;
 }
 
+std::vector<uint8_t> encode_weather_fbs(const WeatherPacket &w) {
+    flatbuffers::FlatBufferBuilder builder;
+    double raining[9];
+    for (int r = 0; r < 3; ++r) {
+        for (int c = 0; c < 3; ++c) {
+            raining[r * 3 + c] = w.raining[r][c];
+        }
+    }
+    auto rainingOffset = builder.CreateVector<double>(raining, 9);
+    auto root = isimotor::fbs::CreateWeatherControl(
+        builder, w.et, rainingOffset, w.cloudiness, w.ambientTempK, w.windMaxSpeed, w.applyCloudinessInstantly);
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
+}
+
+std::vector<uint8_t> build_golden_weather_fbs() {
+    WeatherPacket w;
+    populate_golden_weather(w);
+    return encode_weather_fbs(w);
+}
+
+// ExtendedState (Type 8) is a FlatBuffer now (schemas/extended_state.fbs).
+// The legacy struct is kept purely as a convenient internal staging area.
 void populate_golden_extended(ExtendedStatePacket &ext) {
     std::memset(&ext, 0, sizeof(ext));
     ext.tractionControl = 2;          // Medium
@@ -606,11 +791,43 @@ void populate_golden_extended(ExtendedStatePacket &ext) {
     ext.currentPitSpeedLimit = 16.6667f; // 60 km/h
 }
 
-void populate_golden_ffb(ForceFeedbackPacket &ffb) {
-    std::memset(&ffb, 0, sizeof(ffb));
-    ffb.forceValue = 0.685;
+std::vector<uint8_t> encode_extended_fbs(const ExtendedStatePacket &ext) {
+    flatbuffers::FlatBufferBuilder builder;
+    auto physics = isimotor::fbs::CreatePhysicsOptions(
+        builder,
+        ext.tractionControl, ext.antiLockBrakes, ext.stabilityControl, ext.autoShift,
+        ext.autoClutch, ext.invulnerable, ext.oppositeLock, ext.steeringHelp,
+        ext.brakingHelp, ext.spinRecovery, ext.autoPit, ext.autoLift,
+        ext.autoBlip, ext.fuelMult, ext.tireMult, ext.mechFail,
+        ext.allowPitcrewPush, ext.repeatShifts, ext.holdClutch, ext.autoReverse,
+        ext.alternateNeutral, ext.aiControl, ext.manualShiftOverrideTime,
+        ext.autoShiftOverrideTime, ext.speedSensitiveSteering, ext.steerRatioSpeed);
+    auto root = isimotor::fbs::CreateExtendedState(
+        builder, physics, ext.maxImpactMagnitude, ext.accumulatedImpactMagnitude,
+        ext.inRealtimeFC, ext.sessionStarted, ext.session, ext.currentPitSpeedLimit);
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 }
 
+std::vector<uint8_t> build_golden_extended_fbs() {
+    ExtendedStatePacket ext;
+    populate_golden_extended(ext);
+    return encode_extended_fbs(ext);
+}
+
+// ForceFeedback (Type 9) is a FlatBuffer now; the "golden" value lives here
+// as a plain double, encoded on demand by build_golden_ffb_fbs().
+static const double kGoldenForceValue = 0.685;
+
+std::vector<uint8_t> build_golden_ffb_fbs() {
+    flatbuffers::FlatBufferBuilder builder;
+    auto root = isimotor::fbs::CreateForceFeedback(builder, kGoldenForceValue);
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
+}
+
+// Graphics (Type 10) is a FlatBuffer now (schemas/graphics.fbs). The legacy
+// struct is kept purely as a convenient internal staging area; never sent raw.
 void populate_golden_graphics(GraphicsPacket &gfx) {
     std::memset(&gfx, 0, sizeof(gfx));
     gfx.camPos.Set(-1250.5, 46.8, 3420.2);
@@ -624,30 +841,50 @@ void populate_golden_graphics(GraphicsPacket &gfx) {
     gfx.cameraType = 1; // Cockpit
 }
 
-void populate_golden_event(SystemEventPacket &ev, uint8_t type = 1) {
-    std::memset(&ev, 0, sizeof(ev));
-    ev.eventType = type;
-    ev.pad = 0;
+std::vector<uint8_t> encode_graphics_fbs(const GraphicsPacket &gfx) {
+    flatbuffers::FlatBufferBuilder builder;
+    isimotor::fbs::Vec3 camPos(gfx.camPos.x, gfx.camPos.y, gfx.camPos.z);
+    isimotor::fbs::Vec3 camOri0(gfx.camOri[0].x, gfx.camOri[0].y, gfx.camOri[0].z);
+    isimotor::fbs::Vec3 camOri1(gfx.camOri[1].x, gfx.camOri[1].y, gfx.camOri[1].z);
+    isimotor::fbs::Vec3 camOri2(gfx.camOri[2].x, gfx.camOri[2].y, gfx.camOri[2].z);
+    auto root = isimotor::fbs::CreateGraphics(
+        builder, &camPos, &camOri0, &camOri1, &camOri2,
+        gfx.ambientRed, gfx.ambientGreen, gfx.ambientBlue, gfx.slotId, gfx.cameraType);
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 }
 
-void populate_golden_hw_control(HWControlCommandPacket &hw) {
-    std::memset(&hw, 0, sizeof(hw));
-    std::strncpy(hw.controlName, "PitMenuNext", sizeof(hw.controlName) - 1);
-    hw.controlValue = 1.0;
-    hw.durationMs = 50;
-    hw.pad[0] = 0; hw.pad[1] = 0;
+std::vector<uint8_t> build_golden_graphics_fbs() {
+    GraphicsPacket gfx;
+    populate_golden_graphics(gfx);
+    return encode_graphics_fbs(gfx);
 }
 
-void populate_golden_weather_control(WeatherControlCommandPacket &w) {
-    std::memset(&w, 0, sizeof(w));
-    w.ambientTemp = 24.5;
-    w.trackTemp = 29.8;
-    w.darkCloud = 0.75;
-    w.raining = 0.45;
-    w.windSpeed = 4.2;
-    w.windDirection = 1.5708;
-    w.minPathWetness = 0.2;
-    w.maxPathWetness = 0.8;
+// SystemEvent (Type 3) is a FlatBuffer now; encoded on demand.
+std::vector<uint8_t> build_golden_event_fbs(uint8_t type = 1) {
+    flatbuffers::FlatBufferBuilder builder;
+    auto root = isimotor::fbs::CreateSystemEvent(builder, type);
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
+}
+
+// HWControl/WeatherControl (Types 100/101) are both wrapped in a single
+// InboundCommand FlatBuffer union now; encoded on demand.
+std::vector<uint8_t> build_golden_hw_control_fbs() {
+    flatbuffers::FlatBufferBuilder builder;
+    auto name = builder.CreateString("PitMenuNext");
+    auto hw = isimotor::fbs::CreateHWControlCommand(builder, name, 1.0, 50);
+    auto root = isimotor::fbs::CreateInboundCommand(builder, isimotor::fbs::CommandPayload_HWControlCommand, hw.Union());
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
+}
+
+std::vector<uint8_t> build_golden_weather_control_fbs() {
+    flatbuffers::FlatBufferBuilder builder;
+    auto wc = isimotor::fbs::CreateWeatherControlCommand(builder, 24.5, 29.8, 0.75, 0.45, 4.2, 1.5708, 0.2, 0.8);
+    auto root = isimotor::fbs::CreateInboundCommand(builder, isimotor::fbs::CommandPayload_WeatherControlCommand, wc.Union());
+    builder.Finish(root);
+    return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 }
 
 // ── JSON & Binary Dumper ──────────────────────────────────────────────────────
@@ -662,17 +899,17 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
                 const std::string &bin_ffb_path, const std::string &json_ffb_path,
                 const std::string &bin_gfx_path, const std::string &json_gfx_path,
                 const std::string &bin_event_path, const std::string &json_event_path) {
-    // 1. Telemetry
+    // 1. Telemetry - FlatBuffer (schemas/telemetry.fbs)
     TelemInfoV01 t;
     populate_golden_telemetry(t);
+    std::vector<uint8_t> telem_buf = encode_telemetry_fbs(t);
     std::ofstream fb_t(bin_telem_path, std::ios::binary);
-    fb_t.write(reinterpret_cast<const char*>(&t), sizeof(t));
+    fb_t.write(reinterpret_cast<const char*>(telem_buf.data()), static_cast<std::streamsize>(telem_buf.size()));
     fb_t.close();
 
     std::ofstream fj_t(json_telem_path);
     fj_t << std::setprecision(6) << std::fixed;
     fj_t << "{\n";
-    fj_t << "  \"struct_size\": " << sizeof(t) << ",\n";
     fj_t << "  \"slot_id\": " << t.mID << ",\n";
     fj_t << "  \"delta_time\": " << t.mDeltaTime << ",\n";
     fj_t << "  \"elapsed_time\": " << t.mElapsedTime << ",\n";
@@ -713,45 +950,42 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
     fj_t << "}\n";
     fj_t.close();
 
-    // 2. Compact Scoring
-    CompactScoringPacket s;
-    populate_golden_scoring(s);
+    // 2. Compact Scoring - FlatBuffer (schemas/compact_scoring.fbs)
+    std::vector<uint8_t> scoring_buf = build_golden_scoring_fbs();
     std::ofstream fb_s(bin_scoring_path, std::ios::binary);
-    fb_s.write(reinterpret_cast<const char*>(&s), sizeof(s));
+    fb_s.write(reinterpret_cast<const char*>(scoring_buf.data()), static_cast<std::streamsize>(scoring_buf.size()));
     fb_s.close();
 
     std::ofstream fj_s(json_scoring_path);
     fj_s << std::setprecision(6) << std::fixed;
     fj_s << "{\n";
-    fj_s << "  \"struct_size\": " << sizeof(s) << ",\n";
-    fj_s << "  \"track_name\": \"" << s.trackName << "\",\n";
-    fj_s << "  \"session\": " << s.session << ",\n";
-    fj_s << "  \"current_et\": " << s.currentET << ",\n";
-    fj_s << "  \"lap_dist\": " << s.lapDist << ",\n";
-    fj_s << "  \"max_laps\": " << s.maxLaps << ",\n";
-    fj_s << "  \"in_realtime\": " << (s.inRealtime ? "true" : "false") << ",\n";
-    fj_s << "  \"total_laps\": " << s.totalLaps << ",\n";
-    fj_s << "  \"sector\": " << static_cast<int>(s.sector) << ",\n";
-    fj_s << "  \"last_lap_time\": " << s.lastLapTime << ",\n";
-    fj_s << "  \"best_lap_time\": " << s.bestLapTime << "\n";
+    fj_s << "  \"track_name\": \"Circuit de la Sarthe - Le Mans\",\n";
+    fj_s << "  \"session\": 10,\n";
+    fj_s << "  \"current_et\": 1250.456,\n";
+    fj_s << "  \"lap_dist\": 13626.0,\n";
+    fj_s << "  \"max_laps\": 24,\n";
+    fj_s << "  \"in_realtime\": true,\n";
+    fj_s << "  \"total_laps\": 8,\n";
+    fj_s << "  \"sector\": 2,\n";
+    fj_s << "  \"last_lap_time\": 205.420,\n";
+    fj_s << "  \"best_lap_time\": 204.850\n";
     fj_s << "}\n";
     fj_s.close();
 
-    // 3. Full Scoring (Session Header + 3 Vehicles)
+    // 3. Full Scoring (Session + 3 Vehicles) - FlatBuffer (schemas/full_scoring.fbs)
     FullScoringSessionPacket fs_sess;
     std::vector<VehicleScoringInfoV01> fs_vehs;
     populate_golden_full_scoring(fs_sess, fs_vehs);
 
+    std::vector<uint8_t> full_scoring_fbs_buf = encode_full_scoring_fbs(fs_sess, fs_vehs);
     std::ofstream fb_fs(bin_full_scoring_path, std::ios::binary);
-    fb_fs.write(reinterpret_cast<const char*>(&fs_sess), sizeof(fs_sess));
-    fb_fs.write(reinterpret_cast<const char*>(fs_vehs.data()), fs_vehs.size() * sizeof(VehicleScoringInfoV01));
+    fb_fs.write(reinterpret_cast<const char*>(full_scoring_fbs_buf.data()),
+                static_cast<std::streamsize>(full_scoring_fbs_buf.size()));
     fb_fs.close();
 
     std::ofstream fj_fs(json_full_scoring_path);
     fj_fs << std::setprecision(6) << std::fixed;
     fj_fs << "{\n";
-    fj_fs << "  \"session_header_size\": " << sizeof(fs_sess) << ",\n";
-    fj_fs << "  \"vehicle_struct_size\": " << sizeof(VehicleScoringInfoV01) << ",\n";
     fj_fs << "  \"track_name\": \"" << fs_sess.trackName << "\",\n";
     fj_fs << "  \"session\": " << fs_sess.session << ",\n";
     fj_fs << "  \"current_et\": " << fs_sess.currentET << ",\n";
@@ -842,146 +1076,140 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
     fj_pm << "}\n";
     fj_pm.close();
 
-    // 6. Weather
-    WeatherPacket wp;
-    populate_golden_weather(wp);
+    // 6. Weather - FlatBuffer (schemas/weather.fbs)
+    std::vector<uint8_t> weather_buf = build_golden_weather_fbs();
     std::ofstream fb_wp(bin_weather_path, std::ios::binary);
-    fb_wp.write(reinterpret_cast<const char*>(&wp), sizeof(wp));
+    fb_wp.write(reinterpret_cast<const char*>(weather_buf.data()), static_cast<std::streamsize>(weather_buf.size()));
     fb_wp.close();
 
     std::ofstream fj_wp(json_weather_path);
     fj_wp << std::setprecision(6) << std::fixed;
     fj_wp << "{\n";
-    fj_wp << "  \"struct_size\": " << sizeof(wp) << ",\n";
-    fj_wp << "  \"et\": " << wp.et << ",\n";
-    fj_wp << "  \"cloudiness\": " << wp.cloudiness << ",\n";
-    fj_wp << "  \"ambient_temp_k\": " << wp.ambientTempK << ",\n";
-    fj_wp << "  \"ambient_temp_c\": " << (wp.ambientTempK - 273.15) << ",\n";
-    fj_wp << "  \"wind_max_speed\": " << wp.windMaxSpeed << ",\n";
-    fj_wp << "  \"origin_raining\": " << wp.raining[1][1] << "\n";
+    fj_wp << "  \"et\": 1250.456,\n";
+    fj_wp << "  \"cloudiness\": 0.25,\n";
+    fj_wp << "  \"ambient_temp_k\": 297.65,\n";
+    fj_wp << "  \"ambient_temp_c\": " << (297.65 - 273.15) << ",\n";
+    fj_wp << "  \"wind_max_speed\": 4.5,\n";
+    fj_wp << "  \"origin_raining\": 0.05\n";
     fj_wp << "}\n";
     fj_wp.close();
 
-    // 7. Extended State (FR-05)
-    ExtendedStatePacket ext;
-    populate_golden_extended(ext);
+    // 7. Extended State (FR-05) - FlatBuffer (schemas/extended_state.fbs)
+    std::vector<uint8_t> ext_buf = build_golden_extended_fbs();
     std::ofstream fb_ext(bin_ext_path, std::ios::binary);
-    fb_ext.write(reinterpret_cast<const char*>(&ext), sizeof(ext));
+    fb_ext.write(reinterpret_cast<const char*>(ext_buf.data()), static_cast<std::streamsize>(ext_buf.size()));
     fb_ext.close();
 
     std::ofstream fj_ext(json_ext_path);
     fj_ext << std::setprecision(6) << std::fixed;
     fj_ext << "{\n";
-    fj_ext << "  \"struct_size\": " << sizeof(ext) << ",\n";
-    fj_ext << "  \"traction_control\": " << static_cast<int>(ext.tractionControl) << ",\n";
-    fj_ext << "  \"anti_lock_brakes\": " << static_cast<int>(ext.antiLockBrakes) << ",\n";
-    fj_ext << "  \"auto_clutch\": " << static_cast<int>(ext.autoClutch) << ",\n";
-    fj_ext << "  \"auto_blip\": " << static_cast<int>(ext.autoBlip) << ",\n";
-    fj_ext << "  \"tire_mult\": " << static_cast<int>(ext.tireMult) << ",\n";
-    fj_ext << "  \"max_impact_magnitude\": " << ext.maxImpactMagnitude << ",\n";
-    fj_ext << "  \"accumulated_impact_magnitude\": " << ext.accumulatedImpactMagnitude << ",\n";
-    fj_ext << "  \"in_realtime_fc\": " << (ext.inRealtimeFC ? "true" : "false") << ",\n";
-    fj_ext << "  \"session_started\": " << (ext.sessionStarted ? "true" : "false") << ",\n";
-    fj_ext << "  \"session\": " << ext.session << ",\n";
-    fj_ext << "  \"current_pit_speed_limit\": " << ext.currentPitSpeedLimit << "\n";
+    fj_ext << "  \"traction_control\": 2,\n";
+    fj_ext << "  \"anti_lock_brakes\": 1,\n";
+    fj_ext << "  \"auto_clutch\": 1,\n";
+    fj_ext << "  \"auto_blip\": 1,\n";
+    fj_ext << "  \"tire_mult\": 2,\n";
+    fj_ext << "  \"max_impact_magnitude\": 1845.50,\n";
+    fj_ext << "  \"accumulated_impact_magnitude\": 3250.75,\n";
+    fj_ext << "  \"in_realtime_fc\": true,\n";
+    fj_ext << "  \"session_started\": true,\n";
+    fj_ext << "  \"session\": 10,\n";
+    fj_ext << "  \"current_pit_speed_limit\": 16.6667\n";
     fj_ext << "}\n";
     fj_ext.close();
 
-    // 8. Force Feedback (FR-06)
-    ForceFeedbackPacket ffb;
-    populate_golden_ffb(ffb);
+    // 8. Force Feedback (FR-06) - FlatBuffer (schemas/force_feedback.fbs)
+    std::vector<uint8_t> ffb_buf = build_golden_ffb_fbs();
     std::ofstream fb_ffb(bin_ffb_path, std::ios::binary);
-    fb_ffb.write(reinterpret_cast<const char*>(&ffb), sizeof(ffb));
+    fb_ffb.write(reinterpret_cast<const char*>(ffb_buf.data()), static_cast<std::streamsize>(ffb_buf.size()));
     fb_ffb.close();
 
     std::ofstream fj_ffb(json_ffb_path);
     fj_ffb << std::setprecision(6) << std::fixed;
     fj_ffb << "{\n";
-    fj_ffb << "  \"struct_size\": " << sizeof(ffb) << ",\n";
-    fj_ffb << "  \"force_value\": " << ffb.forceValue << "\n";
+    fj_ffb << "  \"force_value\": " << kGoldenForceValue << "\n";
     fj_ffb << "}\n";
     fj_ffb.close();
 
-    // 9. Graphics (FR-06)
-    GraphicsPacket gfx;
-    populate_golden_graphics(gfx);
+    // 9. Graphics (FR-06) - FlatBuffer (schemas/graphics.fbs)
+    std::vector<uint8_t> gfx_buf = build_golden_graphics_fbs();
     std::ofstream fb_gfx(bin_gfx_path, std::ios::binary);
-    fb_gfx.write(reinterpret_cast<const char*>(&gfx), sizeof(gfx));
+    fb_gfx.write(reinterpret_cast<const char*>(gfx_buf.data()), static_cast<std::streamsize>(gfx_buf.size()));
     fb_gfx.close();
 
     std::ofstream fj_gfx(json_gfx_path);
     fj_gfx << std::setprecision(6) << std::fixed;
     fj_gfx << "{\n";
-    fj_gfx << "  \"struct_size\": " << sizeof(gfx) << ",\n";
-    fj_gfx << "  \"cam_pos\": [" << gfx.camPos.x << ", " << gfx.camPos.y << ", " << gfx.camPos.z << "],\n";
-    fj_gfx << "  \"ambient_rgb\": [" << gfx.ambientRed << ", " << gfx.ambientGreen << ", " << gfx.ambientBlue << "],\n";
-    fj_gfx << "  \"slot_id\": " << gfx.slotId << ",\n";
-    fj_gfx << "  \"camera_type\": " << gfx.cameraType << "\n";
+    fj_gfx << "  \"cam_pos\": [-1250.5, 46.8, 3420.2],\n";
+    fj_gfx << "  \"ambient_rgb\": [0.85, 0.88, 0.92],\n";
+    fj_gfx << "  \"slot_id\": 42,\n";
+    fj_gfx << "  \"camera_type\": 1\n";
     fj_gfx << "}\n";
     fj_gfx.close();
 
-    // 10. System Event
-    SystemEventPacket ev;
-    populate_golden_event(ev, 1);
+    // 10. System Event - FlatBuffer (schemas/system_event.fbs)
+    std::vector<uint8_t> ev_buf = build_golden_event_fbs(1);
     std::ofstream fb_e(bin_event_path, std::ios::binary);
-    fb_e.write(reinterpret_cast<const char*>(&ev), sizeof(ev));
+    fb_e.write(reinterpret_cast<const char*>(ev_buf.data()), static_cast<std::streamsize>(ev_buf.size()));
     fb_e.close();
 
     std::ofstream fj_e(json_event_path);
     fj_e << "{\n";
-    fj_e << "  \"struct_size\": " << sizeof(ev) << ",\n";
-    fj_e << "  \"event_id\": " << static_cast<int>(ev.eventType) << ",\n";
+    fj_e << "  \"event_id\": 1,\n";
     fj_e << "  \"name\": \"EnterRealtime\"\n";
     fj_e << "}\n";
     fj_e.close();
 
-    // 11. Hardware Control Inbound (FR-07, Type 100)
-    HWControlCommandPacket hw;
-    populate_golden_hw_control(hw);
+    // 11. Hardware Control Inbound (FR-07, Type 100) - FlatBuffer (schemas/inbound_command.fbs)
+    std::vector<uint8_t> hw_buf = build_golden_hw_control_fbs();
     std::string bin_hw_path = bin_event_path.substr(0, bin_event_path.find_last_of('/')) + "/hw_control_golden.bin";
     std::string json_hw_path = json_event_path.substr(0, json_event_path.find_last_of('/')) + "/hw_control_golden.json";
     std::ofstream fb_hw(bin_hw_path, std::ios::binary);
-    fb_hw.write(reinterpret_cast<const char*>(&hw), sizeof(hw));
+    fb_hw.write(reinterpret_cast<const char*>(hw_buf.data()), static_cast<std::streamsize>(hw_buf.size()));
     fb_hw.close();
 
     std::ofstream fj_hw(json_hw_path);
     fj_hw << std::setprecision(6) << std::fixed;
     fj_hw << "{\n";
-    fj_hw << "  \"struct_size\": " << sizeof(hw) << ",\n";
-    fj_hw << "  \"control_name\": \"" << hw.controlName << "\",\n";
-    fj_hw << "  \"control_value\": " << hw.controlValue << ",\n";
-    fj_hw << "  \"duration_ms\": " << hw.durationMs << "\n";
+    fj_hw << "  \"control_name\": \"PitMenuNext\",\n";
+    fj_hw << "  \"control_value\": 1.0,\n";
+    fj_hw << "  \"duration_ms\": 50\n";
     fj_hw << "}\n";
     fj_hw.close();
 
-    // 12. Weather Control Inbound (FR-07, Type 101)
-    WeatherControlCommandPacket wc;
-    populate_golden_weather_control(wc);
+    // 12. Weather Control Inbound (FR-07, Type 101) - FlatBuffer (schemas/inbound_command.fbs)
+    std::vector<uint8_t> wc_buf = build_golden_weather_control_fbs();
     std::string bin_wc_path = bin_event_path.substr(0, bin_event_path.find_last_of('/')) + "/weather_control_golden.bin";
     std::string json_wc_path = json_event_path.substr(0, json_event_path.find_last_of('/')) + "/weather_control_golden.json";
     std::ofstream fb_wc(bin_wc_path, std::ios::binary);
-    fb_wc.write(reinterpret_cast<const char*>(&wc), sizeof(wc));
+    fb_wc.write(reinterpret_cast<const char*>(wc_buf.data()), static_cast<std::streamsize>(wc_buf.size()));
     fb_wc.close();
 
     std::ofstream fj_wc(json_wc_path);
     fj_wc << std::setprecision(6) << std::fixed;
     fj_wc << "{\n";
-    fj_wc << "  \"struct_size\": " << sizeof(wc) << ",\n";
-    fj_wc << "  \"ambient_temp\": " << wc.ambientTemp << ",\n";
-    fj_wc << "  \"track_temp\": " << wc.trackTemp << ",\n";
-    fj_wc << "  \"dark_cloud\": " << wc.darkCloud << ",\n";
-    fj_wc << "  \"raining\": " << wc.raining << ",\n";
-    fj_wc << "  \"wind_speed\": " << wc.windSpeed << ",\n";
-    fj_wc << "  \"wind_direction\": " << wc.windDirection << ",\n";
-    fj_wc << "  \"min_path_wetness\": " << wc.minPathWetness << ",\n";
-    fj_wc << "  \"max_path_wetness\": " << wc.maxPathWetness << "\n";
+    fj_wc << "  \"ambient_temp\": 24.5,\n";
+    fj_wc << "  \"track_temp\": 29.8,\n";
+    fj_wc << "  \"dark_cloud\": 0.75,\n";
+    fj_wc << "  \"raining\": 0.45,\n";
+    fj_wc << "  \"wind_speed\": 4.2,\n";
+    fj_wc << "  \"wind_direction\": 1.5708,\n";
+    fj_wc << "  \"min_path_wetness\": 0.2,\n";
+    fj_wc << "  \"max_path_wetness\": 0.8\n";
     fj_wc << "}\n";
     fj_wc.close();
 }
 
-// ── Live UDP Server Mock ──────────────────────────────────────────────────────
+// ── Live ZeroMQ PUB/SUB Server Mock ────────────────────────────────────────────
 
-void send_sliced_udp_mock(int sock, const sockaddr_in &dest, unsigned char packetType, unsigned short subId, const void* payload, size_t totalPayloadSize, double sessionET, unsigned int &seq) {
+// Outbound packet types emitted by the mock (mirrors the plugin's own list,
+// plus TrackRules(5)/PitMenu(6) which the mock also exercises for test
+// coverage even though the real plugin does not currently send them). Each
+// type is bound on its own port (basePort + packetType), same scheme as
+// isimotor-pulse-plugin/src/main.cpp's kOutboundPacketTypes.
+static const unsigned char kMockOutboundPacketTypes[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+static const int kMockMaxPacketType = 10;
+
+void send_sliced_udp_mock(zmq::socket_t &pub, unsigned char packetType, unsigned short subId, const void* payload, size_t totalPayloadSize, double sessionET, unsigned int &seq) {
     const size_t MAX_CHUNK = 1200;
     const char* src = reinterpret_cast<const char*>(payload);
     size_t offset = 0;
@@ -1008,38 +1236,70 @@ void send_sliced_udp_mock(int sock, const sockaddr_in &dest, unsigned char packe
 
         std::memcpy(buffer + sizeof(RawUdpHeader), src + offset, chunkSize);
 
-        sendto(sock, buffer, sizeof(RawUdpHeader) + chunkSize, 0,
-               reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+        try {
+            pub.send(zmq::buffer(buffer, sizeof(RawUdpHeader) + chunkSize), zmq::send_flags::dontwait);
+        } catch (const zmq::error_t&) {
+            // Best-effort, same semantics as the plugin's own PUB socket.
+        }
 
         offset += chunkSize;
     }
 }
 
-void run_live_udp_server(int port, int hz, int duration_sec) {
-    int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0) {
-        std::cerr << "Error creating UDP socket" << std::endl;
-        return;
+// Sends a pre-encoded FlatBuffer message as-is: no header, no chunking (the
+// message boundary already delimits it), matching the plugin's own SendFlatBuffer.
+void send_fbs_mock(zmq::socket_t &pub, const std::vector<uint8_t> &buf) {
+    try {
+        pub.send(zmq::buffer(buf.data(), buf.size()), zmq::send_flags::dontwait);
+    } catch (const zmq::error_t&) {
+        // Best-effort, same semantics as the plugin's own PUB socket.
+    }
+}
+
+void run_live_udp_server(int base_port, int hz, int duration_sec) {
+    zmq::context_t ctx(1);
+
+    // Outbound telemetry: one PUB socket per packet type, bound (mirrors the real
+    // plugin's role); clients (SUB) connect to only the port(s) they need.
+    zmq::socket_t pubSockets[kMockMaxPacketType + 1];
+    bool pubBound[kMockMaxPacketType + 1] = {};
+    for (unsigned char packetType : kMockOutboundPacketTypes) {
+        pubSockets[packetType] = zmq::socket_t(ctx, zmq::socket_type::pub);
+        pubSockets[packetType].set(zmq::sockopt::sndhwm, 1000);
+        pubSockets[packetType].set(zmq::sockopt::linger, 0);
+        char endpoint[64];
+        std::snprintf(endpoint, sizeof(endpoint), "tcp://127.0.0.1:%d", base_port + packetType);
+        try {
+            pubSockets[packetType].bind(endpoint);
+            pubBound[packetType] = true;
+        } catch (const zmq::error_t& e) {
+            std::cerr << "Error binding PUB socket for packet type " << static_cast<int>(packetType)
+                       << " on " << endpoint << ": " << e.what() << std::endl;
+            return;
+        }
     }
 
-    sockaddr_in dest{};
-    dest.sin_family = AF_INET;
-    dest.sin_port = htons(port);
-    inet_pton(AF_INET, "127.0.0.1", &dest.sin_addr);
-
-    // Inbound Socket for FR-07 Bi-Directional Input & Control
-    int inbound_port = port + 1;
-    int inbound_sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (inbound_sock >= 0) {
-        int reuse = 1;
-        setsockopt(inbound_sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-        fcntl(inbound_sock, F_SETFL, O_NONBLOCK);
-        sockaddr_in in_addr{};
-        in_addr.sin_family = AF_INET;
-        in_addr.sin_port = htons(inbound_port);
-        in_addr.sin_addr.s_addr = INADDR_ANY;
-        bind(inbound_sock, reinterpret_cast<sockaddr*>(&in_addr), sizeof(in_addr));
+    // Inbound commands (FR-07 Bi-Directional Input & Control): SUB socket, bound; clients (PUB) connect.
+    int inbound_port = base_port + 101;
+    zmq::socket_t inbound_sock(ctx, zmq::socket_type::sub);
+    inbound_sock.set(zmq::sockopt::subscribe, "");
+    inbound_sock.set(zmq::sockopt::linger, 0);
+    bool inbound_bound = false;
+    {
+        char inbound_endpoint[64];
+        std::snprintf(inbound_endpoint, sizeof(inbound_endpoint), "tcp://127.0.0.1:%d", inbound_port);
+        try {
+            inbound_sock.bind(inbound_endpoint);
+            inbound_bound = true;
+        } catch (const zmq::error_t& e) {
+            std::cerr << "Error binding inbound SUB socket on " << inbound_endpoint << ": " << e.what() << std::endl;
+        }
     }
+
+    // ZMQ_PUB requires its subscriber(s) to complete connection + subscription
+    // propagation before it will forward any message ("slow joiner"); give
+    // the test client time to connect before streaming starts.
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
     TelemInfoV01 telem;
     populate_golden_telemetry(telem);
@@ -1050,10 +1310,6 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
     FullScoringSessionPacket full_sess;
     std::vector<VehicleScoringInfoV01> full_vehs;
     populate_golden_full_scoring(full_sess, full_vehs);
-
-    std::vector<char> full_scoring_buf(sizeof(full_sess) + full_vehs.size() * sizeof(VehicleScoringInfoV01));
-    std::memcpy(full_scoring_buf.data(), &full_sess, sizeof(full_sess));
-    std::memcpy(full_scoring_buf.data() + sizeof(full_sess), full_vehs.data(), full_vehs.size() * sizeof(VehicleScoringInfoV01));
 
     TrackRulesSessionPacket rules_sess;
     std::vector<TrackRulesParticipantPacket> rules_parts;
@@ -1072,28 +1328,24 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
     ExtendedStatePacket ext_state;
     populate_golden_extended(ext_state);
 
-    ForceFeedbackPacket ffb;
-    populate_golden_ffb(ffb);
-
     GraphicsPacket gfx;
     populate_golden_graphics(gfx);
 
-    SystemEventPacket ev;
-    populate_golden_event(ev, 1);
+    flatbuffers::FlatBufferBuilder ffbBuilder;  // Reused (Clear()'d) for ForceFeedback, sent up to 400Hz.
 
-    unsigned int event_seq = 0;
-    unsigned int telem_seq = 0;
-    unsigned int scoring_seq = 0;
-    unsigned int full_scoring_seq = 0;
     unsigned int rules_seq = 0;
     unsigned int pit_seq = 0;
-    unsigned int weather_seq = 0;
-    unsigned int ext_seq = 0;
-    unsigned int ffb_seq = 0;
-    unsigned int gfx_seq = 0;
 
-    // Send initial system event (Type 3)
-    send_sliced_udp_mock(sock, dest, 3, 0, &ev, sizeof(ev), 0.0, event_seq);
+    // Send initial system event (Type 3) - FlatBuffer, no header/chunking.
+    {
+        flatbuffers::FlatBufferBuilder builder;
+        auto root = isimotor::fbs::CreateSystemEvent(builder, 1);
+        builder.Finish(root);
+        try {
+            pubSockets[3].send(zmq::buffer(builder.GetBufferPointer(), builder.GetSize()), zmq::send_flags::dontwait);
+        } catch (const zmq::error_t&) {
+        }
+    }
 
     int total_frames = hz * duration_sec;
     int scoring_divider = std::max(1, hz / 5);    // 5Hz scoring
@@ -1103,8 +1355,8 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
     int gfx_divider = std::max(1, hz / 60);       // 60Hz graphics
     auto frame_delay = std::chrono::microseconds(1000000 / hz);
 
-    std::cout << "[C++ Mock Host] Streaming UDP packets to 127.0.0.1:" << port
-              << " (Inbound listening on :" << inbound_port << ") @ "
+    std::cout << "[C++ Mock Host] Streaming ZeroMQ PUB packets on tcp://127.0.0.1:" << base_port
+              << "+type (Inbound SUB on :" << inbound_port << ") @ "
               << hz << "Hz for " << duration_sec << "s..." << std::endl;
 
     for (int frame = 0; frame < total_frames; ++frame) {
@@ -1114,92 +1366,104 @@ void run_live_udp_server(int port, int hz, int duration_sec) {
         telem.mSpeedLimiter = (frame % 200 < 50) ? 1 : 0;
 
         // Poll inbound commands (FR-07)
-        if (inbound_sock >= 0) {
-            char in_buf[512];
-            sockaddr_in from_addr{};
-            socklen_t from_len = sizeof(from_addr);
+        if (inbound_bound) {
+            zmq::message_t in_msg;
             while (true) {
-                int bytes = recvfrom(inbound_sock, in_buf, sizeof(in_buf), 0,
-                                     reinterpret_cast<sockaddr*>(&from_addr), &from_len);
-                if (bytes < static_cast<int>(sizeof(RawUdpHeader))) break;
+                zmq::recv_result_t result;
+                try {
+                    result = inbound_sock.recv(in_msg, zmq::recv_flags::dontwait);
+                } catch (const zmq::error_t&) {
+                    break;
+                }
+                if (!result.has_value()) break;
 
-                const RawUdpHeader* in_hdr = reinterpret_cast<const RawUdpHeader*>(in_buf);
-                if (std::memcmp(in_hdr->magic, "SIMP", 4) != 0) continue;
+                // No header/framing: the message IS an isimotor::fbs::InboundCommand
+                // FlatBuffer; its CommandPayload union tells HWControl from WeatherControl.
+                flatbuffers::Verifier verifier(static_cast<const uint8_t*>(in_msg.data()), in_msg.size());
+                if (!isimotor::fbs::VerifyInboundCommandBuffer(verifier)) continue;
+                const isimotor::fbs::InboundCommand* in_cmd = isimotor::fbs::GetInboundCommand(in_msg.data());
 
-                const char* in_payload = in_buf + sizeof(RawUdpHeader);
-                size_t in_size = static_cast<size_t>(bytes - sizeof(RawUdpHeader));
-
-                if (in_hdr->packetType == 100 && in_size >= sizeof(HWControlCommandPacket)) {
-                    const HWControlCommandPacket* cmd = reinterpret_cast<const HWControlCommandPacket*>(in_payload);
-                    std::cout << "[C++ Mock Host] Received HW Control Command: " << cmd->controlName
-                              << " (val=" << cmd->controlValue << ", dur=" << cmd->durationMs << "ms)" << std::endl;
-                    if (std::strcmp(cmd->controlName, "PitMenuDown") == 0) {
+                if (in_cmd->payload_type() == isimotor::fbs::CommandPayload_HWControlCommand) {
+                    const isimotor::fbs::HWControlCommand* cmd = in_cmd->payload_as_HWControlCommand();
+                    if (!cmd || !cmd->control_name()) continue;
+                    std::cout << "[C++ Mock Host] Received HW Control Command: " << cmd->control_name()->c_str()
+                              << " (val=" << cmd->control_value() << ", dur=" << cmd->duration_ms() << "ms)" << std::endl;
+                    if (std::strcmp(cmd->control_name()->c_str(), "PitMenuDown") == 0) {
                         pit_menu.choiceIndex = (pit_menu.choiceIndex + 1) % pit_menu.numChoices;
                     }
-                } else if (in_hdr->packetType == 101 && in_size >= sizeof(WeatherControlCommandPacket)) {
-                    const WeatherControlCommandPacket* cmd = reinterpret_cast<const WeatherControlCommandPacket*>(in_payload);
-                    std::cout << "[C++ Mock Host] Received Weather Control Command: Temp=" << cmd->ambientTemp
-                              << "C, Rain=" << cmd->raining << std::endl;
-                    weather.ambientTempK = cmd->ambientTemp + 273.15;
-                    weather.raining[1][1] = cmd->raining;
-                    weather.cloudiness = cmd->darkCloud;
-                    weather.windMaxSpeed = cmd->windSpeed;
-                    send_sliced_udp_mock(sock, dest, 7, 0, &weather, sizeof(weather), telem.mElapsedTime, weather_seq);
+                } else if (in_cmd->payload_type() == isimotor::fbs::CommandPayload_WeatherControlCommand) {
+                    const isimotor::fbs::WeatherControlCommand* cmd = in_cmd->payload_as_WeatherControlCommand();
+                    if (!cmd) continue;
+                    std::cout << "[C++ Mock Host] Received Weather Control Command: Temp=" << cmd->ambient_temp()
+                              << "C, Rain=" << cmd->raining() << std::endl;
+                    weather.ambientTempK = cmd->ambient_temp() + 273.15;
+                    weather.raining[1][1] = cmd->raining();
+                    weather.cloudiness = cmd->dark_cloud();
+                    weather.windMaxSpeed = cmd->wind_speed();
+                    send_fbs_mock(pubSockets[7], encode_weather_fbs(weather));
                 }
             }
         }
 
-        // 1. Send telemetry (Type 1, 1888 bytes)
-        send_sliced_udp_mock(sock, dest, 1, 0, &telem, sizeof(telem), telem.mElapsedTime, telem_seq);
+        // 1. Send telemetry (Type 1) - FlatBuffer, no header/chunking.
+        send_fbs_mock(pubSockets[1], encode_telemetry_fbs(telem));
 
         // 2. Send PitMenu (Type 6 @ 100Hz)
-        send_sliced_udp_mock(sock, dest, 6, 0, &pit_menu, sizeof(pit_menu), 0.0, pit_seq);
+        send_sliced_udp_mock(pubSockets[6], 6, 0, &pit_menu, sizeof(pit_menu), 0.0, pit_seq);
 
-        // 3. Send Force Feedback (Type 9 @ high frequency up to 400Hz)
-        ffb.forceValue = 0.65 + 0.3 * std::sin(sim_time * 25.0);
-        send_sliced_udp_mock(sock, dest, 9, 0, &ffb, sizeof(ffb), 0.0, ffb_seq);
+        // 3. Send Force Feedback (Type 9 @ high frequency up to 400Hz) - FlatBuffer, no header/chunking.
+        {
+            double forceValue = 0.65 + 0.3 * std::sin(sim_time * 25.0);
+            ffbBuilder.Clear();
+            auto root = isimotor::fbs::CreateForceFeedback(ffbBuilder, forceValue);
+            ffbBuilder.Finish(root);
+            try {
+                pubSockets[9].send(zmq::buffer(ffbBuilder.GetBufferPointer(), ffbBuilder.GetSize()), zmq::send_flags::dontwait);
+            } catch (const zmq::error_t&) {
+            }
+        }
 
         // 4. Send Graphics (Type 10 @ 60Hz)
         if (frame % gfx_divider == 0) {
-            send_sliced_udp_mock(sock, dest, 10, static_cast<unsigned short>(gfx.slotId), &gfx, sizeof(gfx), 0.0, gfx_seq);
+            send_fbs_mock(pubSockets[10], encode_graphics_fbs(gfx));
         }
 
         // 5. Send Scoring (Compact Type 2 + Full Sliced Type 4 @ 5Hz)
         if (frame % scoring_divider == 0) {
             scoring.currentET = 1250.0 + sim_time;
-            send_sliced_udp_mock(sock, dest, 2, 0, &scoring, sizeof(scoring), scoring.currentET, scoring_seq);
+            send_fbs_mock(pubSockets[2], encode_scoring_fbs(scoring));
 
             full_sess.currentET = 1250.0 + sim_time;
-            std::memcpy(full_scoring_buf.data(), &full_sess, sizeof(full_sess));
-            send_sliced_udp_mock(sock, dest, 4, static_cast<unsigned short>(full_vehs.size()),
-                                full_scoring_buf.data(), full_scoring_buf.size(), full_sess.currentET, full_scoring_seq);
+            send_fbs_mock(pubSockets[4], encode_full_scoring_fbs(full_sess, full_vehs));
         }
 
         // 6. Send TrackRules (Type 5 Sliced @ 3Hz)
         if (frame % rules_divider == 0) {
             rules_sess.currentET = 1250.0 + sim_time;
             std::memcpy(rules_buf.data(), &rules_sess, sizeof(rules_sess));
-            send_sliced_udp_mock(sock, dest, 5, static_cast<unsigned short>(rules_parts.size()),
+            send_sliced_udp_mock(pubSockets[5], 5, static_cast<unsigned short>(rules_parts.size()),
                                 rules_buf.data(), rules_buf.size(), rules_sess.currentET, rules_seq);
         }
 
         // 7. Send Extended State (Type 8 @ 5Hz)
         if (frame % ext_divider == 0) {
             ext_state.accumulatedImpactMagnitude = 3250.75 + sim_time * 10.0;
-            send_sliced_udp_mock(sock, dest, 8, 0, &ext_state, sizeof(ext_state), telem.mElapsedTime, ext_seq);
+            send_fbs_mock(pubSockets[8], encode_extended_fbs(ext_state));
         }
 
         // 8. Send Weather (Type 7 @ 1Hz)
         if (frame % weather_divider == 0) {
             weather.et = 1250.0 + sim_time;
-            send_sliced_udp_mock(sock, dest, 7, 0, &weather, sizeof(weather), weather.et, weather_seq);
+            send_fbs_mock(pubSockets[7], encode_weather_fbs(weather));
         }
 
         std::this_thread::sleep_for(frame_delay);
     }
 
-    if (inbound_sock >= 0) close(inbound_sock);
-    close(sock);
+    if (inbound_bound) inbound_sock.close();
+    for (unsigned char packetType : kMockOutboundPacketTypes) {
+        if (pubBound[packetType]) pubSockets[packetType].close();
+    }
     std::cout << "[C++ Mock Host] Stream completed (" << total_frames << " frames sent)." << std::endl;
 }
 
@@ -1226,11 +1490,8 @@ int main(int argc, char** argv) {
         std::cout << "PitMenuPacket: " << sizeof(PitMenuPacket) << " bytes" << std::endl;
         std::cout << "WeatherPacket: " << sizeof(WeatherPacket) << " bytes" << std::endl;
         std::cout << "ExtendedStatePacket: " << sizeof(ExtendedStatePacket) << " bytes" << std::endl;
-        std::cout << "ForceFeedbackPacket: " << sizeof(ForceFeedbackPacket) << " bytes" << std::endl;
         std::cout << "GraphicsPacket: " << sizeof(GraphicsPacket) << " bytes" << std::endl;
-        std::cout << "SystemEventPacket: " << sizeof(SystemEventPacket) << " bytes" << std::endl;
-        std::cout << "HWControlCommandPacket: " << sizeof(HWControlCommandPacket) << " bytes" << std::endl;
-        std::cout << "WeatherControlCommandPacket: " << sizeof(WeatherControlCommandPacket) << " bytes" << std::endl;
+        std::cout << "ForceFeedback/SystemEvent/HWControl/WeatherControl: FlatBuffers (schemas/*.fbs), variable size" << std::endl;
         return 0;
     }
 

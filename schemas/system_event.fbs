@@ -1,0 +1,14 @@
+// isiMotor Pulse - SystemEvent (outbound, packet type 3).
+// Published on its own ZeroMQ PUB port (TcpBasePort + 3); the message on
+// that port IS this FlatBuffer, with no outer framing/header.
+namespace isimotor.fbs;
+
+/// System state transition event.
+table SystemEvent {
+  /// SystemEventType: 1=EnterRealtime (entered cockpit/track), 2=ExitRealtime
+  /// (left cockpit/track to UI/monitor), 3=StartSession, 4=EndSession.
+  event_type: ubyte;
+}
+
+root_type SystemEvent;
+file_identifier "SEVT";

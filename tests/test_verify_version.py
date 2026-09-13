@@ -33,36 +33,36 @@ class TestVerifyVersion(unittest.TestCase):
         )
 
         # 2. Client
-        client_dir = tmp_root / "isimotor-rawudp-client" / "isimotor_rawudp_client"
+        client_dir = tmp_root / "isimotor-pulse-client" / "isimotor_pulse_client"
         client_dir.mkdir(parents=True, exist_ok=True)
-        (tmp_root / "isimotor-rawudp-client" / "pyproject.toml").write_text(
+        (tmp_root / "isimotor-pulse-client" / "pyproject.toml").write_text(
             f'[project]\nname = "client"\nversion = "{version}"\n', encoding="utf-8"
         )
         (client_dir / "__init__.py").write_text(f'__version__ = "{version}"\n', encoding="utf-8")
 
         # 2b. Types
-        types_dir = tmp_root / "isimotor-rawudp-types" / "isimotor_rawudp_types"
+        types_dir = tmp_root / "binding" / "python" / "isimotor-pulse-types" / "isimotor_pulse_types"
         types_dir.mkdir(parents=True, exist_ok=True)
-        (tmp_root / "isimotor-rawudp-types" / "pyproject.toml").write_text(
+        (tmp_root / "binding" / "python" / "isimotor-pulse-types" / "pyproject.toml").write_text(
             f'[project]\nname = "types"\nversion = "{version}"\n', encoding="utf-8"
         )
         (types_dir / "__init__.py").write_text(f'__version__ = "{version}"\n', encoding="utf-8")
 
         # 3. Manager
-        manager_dir = tmp_root / "isimotor-rawudp-manager" / "isimotor_rawudp_manager"
+        manager_dir = tmp_root / "isimotor-pulse-manager" / "isimotor_pulse_manager"
         manager_dir.mkdir(parents=True, exist_ok=True)
-        (tmp_root / "isimotor-rawudp-manager" / "pyproject.toml").write_text(
+        (tmp_root / "isimotor-pulse-manager" / "pyproject.toml").write_text(
             f'[project]\nname = "manager"\nversion = "{version}"\n\n[tool.briefcase]\nversion = "{version}"\n',
             encoding="utf-8",
         )
         (manager_dir / "__init__.py").write_text(f'__version__ = "{version}"\n', encoding="utf-8")
 
         # 4. Plugin CMakeLists.txt
-        plugin_dir = tmp_root / "isimotor-rawudp-plugin"
+        plugin_dir = tmp_root / "isimotor-pulse-plugin"
         plugin_dir.mkdir(parents=True, exist_ok=True)
         cmake_ver = version.split("-")[0]
         (plugin_dir / "CMakeLists.txt").write_text(
-            f"project(isiMotor_RawUDP VERSION {cmake_ver} LANGUAGES CXX)\n", encoding="utf-8"
+            f"project(isiMotor_Pulse VERSION {cmake_ver} LANGUAGES CXX)\n", encoding="utf-8"
         )
 
         # 5. USER_NOTICE.md
@@ -108,13 +108,13 @@ class TestVerifyVersion(unittest.TestCase):
             self._setup_mock_project(tmp_root, "1.5.0")
 
             # Desynchronize client pyproject.toml
-            (tmp_root / "isimotor-rawudp-client" / "pyproject.toml").write_text(
+            (tmp_root / "isimotor-pulse-client" / "pyproject.toml").write_text(
                 '[project]\nname = "client"\nversion = "1.4.0"\n', encoding="utf-8"
             )
 
             is_valid, _, file_versions = verify_versions(tmp_root)
             self.assertFalse(is_valid)
-            self.assertEqual(file_versions["isimotor-rawudp-client/pyproject.toml"], "1.4.0")
+            self.assertEqual(file_versions["isimotor-pulse-client/pyproject.toml"], "1.4.0")
 
     def test_verify_missing_file_detection(self) -> None:
         """Tests that missing required files are detected as invalid."""

@@ -1,0 +1,50 @@
+// isiMotor Pulse - inbound commands (hardware controls, weather overrides).
+// Sent grouped on a single ZeroMQ PUB->SUB port (InboundTcpPort): since the
+// port carries more than one command kind, the root table wraps a union so
+// the receiver can tell them apart without any extra framing/header.
+//
+// Named *Command to avoid clashing with the outbound WeatherControl table
+// (schemas/weather.fbs) - both live in the isimotor.fbs namespace, but this
+// one is the inbound override command, not the broadcasted weather state.
+namespace isimotor.fbs;
+
+/// Inbound hardware / button box / pit menu control command.
+table HWControlCommand {
+  /// Control name (e.g. "PitMenuUp", "PitMenuSelect", "TCIncrease").
+  control_name: string;
+  /// 1.0 = press/on, 0.0 = release/off, or an analog value.
+  control_value: double = 1.0;
+  /// Pulse duration in milliseconds (e.g. 50ms).
+  duration_ms: uint16 = 50;
+}
+
+/// Inbound weather control override command.
+table WeatherControlCommand {
+  /// Air temp in °C.
+  ambient_temp: double;
+  /// Track surface temp in °C.
+  track_temp: double;
+  /// 0.0 to 1.0.
+  dark_cloud: double;
+  /// 0.0 to 1.0.
+  raining: double;
+  /// Wind speed in m/s.
+  wind_speed: double;
+  /// Wind direction in radians.
+  wind_direction: double;
+  /// 0.0 to 1.0.
+  min_path_wetness: double;
+  /// 0.0 to 1.0.
+  max_path_wetness: double;
+}
+
+union CommandPayload { HWControlCommand, WeatherControlCommand }
+
+/// Wraps exactly one inbound command payload; the union's type tag discriminates
+/// which one was sent (HWControlCommand or WeatherControlCommand).
+table InboundCommand {
+  payload: CommandPayload;
+}
+
+root_type InboundCommand;
+file_identifier "ICMD";

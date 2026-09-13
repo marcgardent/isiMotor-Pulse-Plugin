@@ -1,28 +1,29 @@
 """
 Unit Tests for Le Mans Ultimate (LMU) Extended Telemetry & Scoring Data.
 Tests strict OOP separation, SOLID principles, and binary decoders for all LMU extension zones.
+
+End-to-end LMU-within-TelemInfo/FullScoringSession integration is covered by
+tests/test_golden_truth.py's telemetry/full_scoring tests, which decode real
+FlatBuffers produced by the C++ mock host (Types 1 and 4 are FlatBuffers now,
+not raw memcpy'd structs, so synthetic byte buffers can no longer stand in
+for them here).
 """
 
 import struct
 import unittest
 
-from isimotor_rawudp_client import (
+from isimotor_pulse_client import (
     LMUCompoundType,
     LMUScoringExtension,
     LMUTelemetryExtension,
     LMUVehicleScoringExtension,
     LMUWheelExtension,
-    decode_full_scoring,
+)
+from isimotor_pulse_client._internal.decoder import (
     decode_lmu_scoring_extension,
     decode_lmu_telemetry_extension,
     decode_lmu_vehicle_scoring_extension,
     decode_lmu_wheel_extension,
-    decode_telemetry,
-)
-from isimotor_rawudp_client.constants import (
-    FULL_SCORING_SESSION_SIZE,
-    TELEMINFO_SIZE,
-    VEHICLE_SCORING_SIZE,
 )
 
 
@@ -119,46 +120,6 @@ class TestLMUExtensions(unittest.TestCase):
 
         self.assertAlmostEqual(v_ext.fuel_fraction, 191 / 255.0, places=3)
         self.assertEqual(v_ext.track_limits_steps, 3)
-
-    def test_full_packets_lmu_integration(self):
-        """Validates end-to-end telemetry and full scoring decoding with LMU data attached."""
-        # 1. Telemetry integration
-        telem_buf = bytearray(TELEMINFO_SIZE)
-        struct.pack_into("<i", telem_buf, 0, 101)  # slot_id
-        # LMU extension at offset 737
-        struct.pack_into("<20B", telem_buf, 737, 4, 10, 0, 0, 0, 0, 2, 8, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 255)
-        struct.pack_into("<B3x2d32s", telem_buf, 737 + 20, 1, 0.92, 180.5, b"Porsche 963")
-        # Wheel extension at offset 848 + 236
-        struct.pack_into("<B3xd", telem_buf, 848 + 236, 2, 0.031)  # MEDIUM compound
-
-        telem = decode_telemetry(bytes(telem_buf))
-        self.assertIsNotNone(telem)
-        self.assertEqual(telem.slot_id, 101)
-        # Clear domain separation: base telemetry vs LMU extension
-        self.assertEqual(telem.lmu.vehicle_model, "Porsche 963")
-        self.assertAlmostEqual(telem.lmu.virtual_energy, 0.92)
-        self.assertAlmostEqual(telem.lmu.regen_kw, 180.5)
-        self.assertTrue(telem.lmu.ecu.tc_active)
-        self.assertTrue(telem.lmu.ecu.abs_active)
-        self.assertTrue(telem.ecu.tc_active)  # Shortcut works seamlessly
-        self.assertEqual(telem.fl_wheel.lmu.compound_type, LMUCompoundType.MEDIUM)
-        self.assertAlmostEqual(telem.fl_wheel.lmu.brake_wear_meters, 0.031)
-
-        # 2. Scoring integration
-        scoring_buf = bytearray(FULL_SCORING_SESSION_SIZE + VEHICLE_SCORING_SIZE)
-        struct.pack_into("<i", scoring_buf, 96, 1)  # num_vehicles = 1
-        # LMU session extension at offset 284
-        struct.pack_into("<3B1xf", scoring_buf, 284, 4, 2, 6, 72000.0)  # 20:00:00, Rubbered
-        # LMU vehicle scoring extension at offset 284 + VEHICLE_SCORING_SIZE (536 from vehicle base)
-        struct.pack_into("<2B", scoring_buf, FULL_SCORING_SESSION_SIZE + 536, 128, 2)
-
-        session = decode_full_scoring(bytes(scoring_buf))
-        self.assertIsNotNone(session)
-        self.assertEqual(session.lmu.time_of_day_str, "20:00:00")
-        self.assertAlmostEqual(session.lmu.grip_fraction, 0.90)
-        self.assertEqual(len(session.vehicles), 1)
-        self.assertAlmostEqual(session.vehicles[0].lmu.fuel_fraction, 128 / 255.0, places=3)
-        self.assertEqual(session.vehicles[0].lmu.track_limits_steps, 2)
 
 
 if __name__ == "__main__":

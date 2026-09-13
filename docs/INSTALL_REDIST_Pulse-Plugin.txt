@@ -1,0 +1,128 @@
+================================================================================
+  🏎️  isiMotor-Pulse-Plugin — Native Telemetry DLL Redistributable
+================================================================================
+
+Compatibility   : Le Mans Ultimate (LMU), rFactor 2 (rF2), isiMotor 2.5 / 3.0
+Binary          : isiMotor_Pulse.dll (Universal 64-bit MinGW Native DLL)
+Platforms       : Windows 10/11 (x64), Linux Proton / Wine, Steam Deck (SteamOS)
+GitHub Repo     : https://github.com/marcgardent/isiMotor-Pulse-Plugin
+Releases & Tools: https://github.com/marcgardent/isiMotor-Pulse-Plugin/releases
+
+--------------------------------------------------------------------------------
+⚖️ LICENSE & REDISTRIBUTION CONDITIONS
+--------------------------------------------------------------------------------
+
+Copyright 2026 Marc GARDENT.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Redistribution Terms:
+• You are free to redistribute, bundle, and package this binary ('isiMotor_Pulse.dll')
+  and documentation with your third-party telemetry tools, dashboards, overlays,
+  or hardware software, provided that:
+  1. This notice and copyright statement are retained.
+  2. The Apache License 2.0 terms are respected.
+• Unless required by applicable law or agreed to in writing, software distributed
+  under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+  CONDITIONS OF ANY KIND, either express or implied.
+
+
+--------------------------------------------------------------------------------
+📖 MANUAL INSTALLATION PROCEDURE
+--------------------------------------------------------------------------------
+
+Follow these 4 simple steps to install and enable the plugin manually:
+
+--------------------------------------------------------------------------------
+STEP 1: Copy the DLL into your game's Plugins directory
+--------------------------------------------------------------------------------
+Copy 'isiMotor_Pulse.dll' directly into the 'Plugins' subdirectory of your
+game installation:
+
+• Le Mans Ultimate :
+  <SteamLibrary>\steamapps\common\Le Mans Ultimate\Plugins\isiMotor_Pulse.dll
+
+• rFactor 2 :
+  <SteamLibrary>\steamapps\common\rFactor 2\Plugins\isiMotor_Pulse.dll
+
+(Note: If the 'Plugins' directory does not exist, create it inside the game root)
+
+
+--------------------------------------------------------------------------------
+STEP 2: Enable external plugins in Settings.JSON
+--------------------------------------------------------------------------------
+1. Open the following file in a text editor (e.g. Notepad) :
+   <GameRoot>\UserData\player\Settings.JSON
+
+2. Locate and set the following parameters :
+   "Enable external plugins": true,
+   "Plugin Mask": 255
+
+3. Save and close Settings.JSON.
+
+
+--------------------------------------------------------------------------------
+STEP 3: Configure Streaming Options in CustomPluginVariables.JSON
+--------------------------------------------------------------------------------
+The plugin settings are stored in :
+<GameRoot>\UserData\player\CustomPluginVariables.JSON
+
+Launch the game once to auto-generate the default profile, or edit the file to
+include the following configuration block:
+
+{
+  "isiMotor_Pulse": {
+    " Enabled": 1,
+    "EnableLogging": "Disabled",
+    "TargetIP": "127.0.0.1",
+    "TargetPort": "5000",
+    "InboundControl": "Enabled",
+    "InboundPort": "5001",
+    "PlayerTelemetryRate": "unlimited",
+    "OpponentTelemetryRate": "off",
+    "CompactScoringRate": "10Hz",
+    "FullScoringRate": "5Hz",
+    "WeatherRate": "1Hz",
+    "ExtendedStateRate": "5Hz",
+    "ForceFeedbackRate": "unlimited",
+    "GraphicsRate": "60Hz",
+    "SystemEvents": "Enabled",
+    "UnsubscribedBuffersMask": "0"
+  }
+}
+
+Common Configuration Adjustments:
+• Same PC (Local Dashboard / SimHub) : TargetIP = "127.0.0.1"
+• Wi-Fi Tablet / Secondary PC on LAN : TargetIP = "192.168.1.X" (IP of tablet)
+• Multicast Stream (Multi-device)    : TargetIP = "239.255.0.1"
+• Outgoing Telemetry UDP Port        : TargetPort = "5000"
+• Inbound Hardware & Pit Menu Port   : InboundPort = "5001"
+
+
+--------------------------------------------------------------------------------
+STEP 4: Firewall & Security Settings
+--------------------------------------------------------------------------------
+• Local loopback (127.0.0.1) requires no firewall configuration.
+• If streaming across your local network (LAN / Wi-Fi), ensure Windows Firewall
+  allows UDP Port 5000 (Outbound) and UDP Port 5001 (Inbound).
+• isiMotor_Pulse.dll contains zero external dependencies and only uses
+  standard Windows Winsock2 sockets.
+
+
+--------------------------------------------------------------------------------
+🎮 STEAM DECK & LINUX PROTON USERS
+--------------------------------------------------------------------------------
+No custom Wine configuration, WINEDLLOVERRIDES, or launch options are needed.
+The 64-bit game engine automatically loads isiMotor_Pulse.dll from the Plugins/
+folder upon starting the game from Steam.
+
+
+================================================================================
+  For graphical 1-click install and live telemetry diagnostics, download the
+  standalone 'isiMotor Pulse Manager' application from GitHub Releases:
+  https://github.com/marcgardent/isiMotor-Pulse-Plugin/releases
+================================================================================

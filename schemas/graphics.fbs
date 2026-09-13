@@ -1,0 +1,39 @@
+// isiMotor Pulse - Graphics (outbound, packet type 10).
+// Published on its own ZeroMQ PUB port (TcpBasePort + 10); the message on
+// that port IS this FlatBuffer, with no outer framing/header.
+namespace isimotor.fbs;
+
+/// Generic 3D vector, reused across schemas for position (meters), rotation
+/// rate (rad/s) or velocity (m/s) depending on the field it is used in.
+struct Vec3 {
+  x: double;
+  y: double;
+  z: double;
+}
+
+/// Graphics rendering, camera viewpoint & ambient lighting.
+table Graphics {
+  /// Camera world position (meters).
+  cam_pos: Vec3;
+  /// Camera orientation matrix row 0 (right vector).
+  cam_ori_0: Vec3;
+  /// Camera orientation matrix row 1 (up vector).
+  cam_ori_1: Vec3;
+  /// Camera orientation matrix row 2 (forward vector).
+  cam_ori_2: Vec3;
+  /// Ambient light red component (0.0-1.0).
+  ambient_red: double;
+  /// Ambient light green component (0.0-1.0).
+  ambient_green: double;
+  /// Ambient light blue component (0.0-1.0).
+  ambient_blue: double;
+  /// Slot ID of the vehicle currently being viewed (-1 if none).
+  slot_id: int32;
+  /// CameraType: 0=TvCockpit, 1=Cockpit, 2=Nose, 3=Swingman, 4=Trackside,
+  /// 5=Onboard (base index - values >= 5 are onboard camera slots, with the
+  /// slot number given by camera_type - 5).
+  camera_type: int32;
+}
+
+root_type Graphics;
+file_identifier "GRFX";

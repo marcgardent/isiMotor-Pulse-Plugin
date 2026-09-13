@@ -1,0 +1,296 @@
+// isiMotor Pulse - TelemInfo (outbound, packet type 1, 60-100Hz+).
+// Published on its own ZeroMQ PUB port (TcpBasePort + 1); the message on
+// that port IS this FlatBuffer, with no outer framing/header/chunking (a
+// ZeroMQ message is not limited by UDP's MTU, so the old chunk-slicing is
+// no longer needed here either).
+include "graphics.fbs";  // reuses isimotor.fbs.Vec3 (x, y, z doubles)
+
+namespace isimotor.fbs;
+
+/// Onboard vehicle electronics, ECU maps, and active driver aids. Every
+/// *_max field follows an "unavailable if max==0" convention: when a given
+/// *_max is 0, the sim doesn't expose that aid on this vehicle and the
+/// paired level field should be treated as -1/unknown rather than trusted.
+table EcuRaw {
+  /// TC level (0..tc_max); unavailable/off if tc_max==0.
+  tc: ubyte;
+  /// Maximum TC setting available (0 if TC unavailable on this vehicle).
+  tc_max: ubyte;
+  /// TC engine power cut level; unavailable if tc_cut_max==0.
+  tc_cut: ubyte;
+  /// Maximum TC cut setting.
+  tc_cut_max: ubyte;
+  /// TC slip angle allowance level; unavailable if tc_slip_max==0.
+  tc_slip: ubyte;
+  /// Maximum TC slip setting.
+  tc_slip_max: ubyte;
+  /// ABS level (0..abs_max); unavailable if abs_max==0.
+  abs_level: ubyte;
+  /// Maximum ABS setting available (0 if ABS unavailable on this vehicle).
+  abs_max: ubyte;
+  /// True (non-zero) if Traction Control is actively cutting/intervening
+  /// right now.
+  tc_active: ubyte;
+  /// True (non-zero) if Anti-lock Braking System is actively modulating
+  /// brake pressure right now.
+  abs_active: ubyte;
+  /// Engine / motor power map level; unavailable if motor_map_max==0.
+  motor_map: ubyte;
+  /// Maximum motor map setting.
+  motor_map_max: ubyte;
+  /// Dynamic brake migration level; unavailable if brake_migration_max==0.
+  brake_migration: ubyte;
+  /// Maximum brake migration setting.
+  brake_migration_max: ubyte;
+  /// Onboard adjustable front anti-roll bar level; unavailable if
+  /// front_arb_max==0.
+  front_arb: ubyte;
+  /// Maximum front ARB setting.
+  front_arb_max: ubyte;
+  /// Onboard adjustable rear anti-roll bar level; unavailable if
+  /// rear_arb_max==0.
+  rear_arb: ubyte;
+  /// Maximum rear ARB setting.
+  rear_arb_max: ubyte;
+  /// WiperState: 0=Off, 1=Auto, 2=Slow, 3=Fast.
+  wiper_state: ubyte;
+  /// Lift-and-coast target progress, packed as a byte (divide by 255.0 for
+  /// the 0.0-1.0 fraction).
+  lift_and_coast: ubyte;
+}
+
+/// Le Mans Ultimate-specific vehicle telemetry extensions: WEC Hypercar
+/// energy, live regen, track cuts, and ECU state.
+table LmuTelemetry {
+  ecu: EcuRaw;
+  /// Hypercar remaining virtual energy fraction (0.0-1.0).
+  virtual_energy: double;
+  /// Instantaneous electrical regeneration power in kW.
+  regen_kw: double;
+  /// Accumulated track limits infraction steps.
+  track_limits_steps: ubyte;
+  /// Specific chassis/model designation (e.g. "Ferrari 499P").
+  vehicle_model: string;
+}
+
+/// Le Mans Ultimate-specific wheel telemetry extensions.
+table LmuWheel {
+  /// LMUCompoundType: 0=Unknown, 1=Soft, 2=Medium, 3=Hard, 4=Wet,
+  /// 5=Intermediate.
+  compound_type: ubyte;
+  /// Residual pad/disc thickness in meters.
+  brake_wear_meters: double;
+}
+
+/// Wheel and tire telemetry for an individual wheel.
+table TelemWheel {
+  /// Meters.
+  suspension_deflection: double;
+  /// Meters.
+  ride_height: double;
+  /// Pushrod load in Newtons.
+  susp_force: double;
+  /// Celsius.
+  brake_temp: double;
+  /// 0.0 to 1.0 depending on input and brake balance.
+  brake_pressure: double;
+  /// Radians/sec.
+  rotation: double;
+  /// Lateral velocity at contact patch (m/s).
+  lateral_patch_vel: double;
+  /// Longitudinal velocity at contact patch (m/s).
+  longitudinal_patch_vel: double;
+  /// Lateral ground velocity at contact patch (m/s).
+  lateral_ground_vel: double;
+  /// Longitudinal ground velocity at contact patch (m/s).
+  longitudinal_ground_vel: double;
+  /// Radians (positive is left for left-side wheels, right for right-side
+  /// wheels).
+  camber: double;
+  /// Newtons.
+  lateral_force: double;
+  /// Newtons.
+  longitudinal_force: double;
+  /// Newtons.
+  tire_load: double;
+  /// An approximation of what fraction of the contact patch is sliding
+  /// (0.0-1.0).
+  grip_fraction: double;
+  /// kPa (tire pressure).
+  pressure: double;
+  /// Kelvin: left/center/right (not inside/center/outside!, 3 values).
+  /// Subtract 273.15 for Celsius.
+  temperature: [double];
+  /// Wear (0.0-1.0, fraction of maximum).
+  wear: double;
+  /// Material prefix from the TDF file (up to 16 chars).
+  terrain_name: string;
+  /// SurfaceType: 0=Dry, 1=Wet, 2=Grass, 3=Dirt, 4=Gravel, 5=Rumblestrip,
+  /// 6=Special.
+  surface_type: ubyte;
+  /// Whether tire is flat.
+  flat: bool;
+  /// Whether wheel is detached.
+  detached: bool;
+  /// Tire radius in centimeters.
+  static_undeflected_radius: ubyte;
+  /// Tire deflection from its speed-sensitive radius.
+  vertical_tire_deflection: double;
+  /// Wheel's y location relative to vehicle y location.
+  wheel_y_location: double;
+  /// Current toe angle w.r.t vehicle (radians).
+  toe: double;
+  /// Rough average temperature of carcass (Kelvin). Subtract 273.15 for
+  /// Celsius.
+  tire_carcass_temperature: double;
+  /// Kelvin: rubber layer before carcass (3 values, left/center/right).
+  tire_inner_layer_temperature: [double];
+  lmu: LmuWheel;
+}
+
+/// High-frequency raw physics and vehicle telemetry.
+table TelemInfo {
+  /// Vehicle slot ID.
+  slot_id: int32;
+  /// Time passed since last update.
+  delta_time: double;
+  /// Current session elapsed time.
+  elapsed_time: double;
+  /// Current lap number.
+  lap_number: int32;
+  /// Time at start of current lap.
+  lap_start_et: double;
+  /// Vehicle name (up to 64 chars).
+  vehicle_name: string;
+  /// Track name (up to 64 chars).
+  track_name: string;
+  /// World position (meters).
+  pos: Vec3;
+  /// Local velocity (m/s).
+  local_vel: Vec3;
+  /// Local acceleration (m/s^2).
+  local_accel: Vec3;
+  /// 3x3 orientation matrix row 0.
+  ori_0: Vec3;
+  /// 3x3 orientation matrix row 1.
+  ori_1: Vec3;
+  /// 3x3 orientation matrix row 2.
+  ori_2: Vec3;
+  /// Rotation (rad/s).
+  local_rot: Vec3;
+  /// Rotational acceleration (rad/s^2).
+  local_rot_accel: Vec3;
+  /// -1=Reverse, 0=Neutral, 1+ for forward gears.
+  gear: int32;
+  /// Engine RPM.
+  engine_rpm: double;
+  /// Celsius.
+  engine_water_temp: double;
+  /// Celsius.
+  engine_oil_temp: double;
+  /// Clutch RPM.
+  clutch_rpm: double;
+  /// 0.0-1.0 (raw input).
+  unfiltered_throttle: double;
+  /// 0.0-1.0 (raw input).
+  unfiltered_brake: double;
+  /// -1.0 (full left) to +1.0 (full right).
+  unfiltered_steering: double;
+  /// 0.0-1.0 (raw input).
+  unfiltered_clutch: double;
+  /// 0.0-1.0 (after driving aids).
+  filtered_throttle: double;
+  /// 0.0-1.0 (after driving aids).
+  filtered_brake: double;
+  /// -1.0 to +1.0 (after driving aids).
+  filtered_steering: double;
+  /// 0.0-1.0 (after driving aids).
+  filtered_clutch: double;
+  /// Torque on steering shaft (Nm).
+  steering_shaft_torque: double;
+  /// Front heave / 3rd element deflection (m).
+  front_3rd_deflection: double;
+  /// Rear heave / 3rd element deflection (m).
+  rear_3rd_deflection: double;
+  /// Front wing height (m).
+  front_wing_height: double;
+  /// Front ride height (m).
+  front_ride_height: double;
+  /// Rear ride height (m).
+  rear_ride_height: double;
+  /// Total aerodynamic drag (N).
+  drag: double;
+  /// Front aerodynamic downforce (N).
+  front_downforce: double;
+  /// Rear aerodynamic downforce (N).
+  rear_downforce: double;
+  /// Current fuel in liters.
+  fuel: double;
+  /// Rev limiter RPM.
+  engine_max_rpm: double;
+  /// Planned pit stops.
+  scheduled_stops: ubyte;
+  /// Engine overheating flag.
+  overheating: bool;
+  /// Severed component flag.
+  detached: bool;
+  /// Headlights active.
+  headlights: bool;
+  /// Dent severity per body sector (8 sectors).
+  dent_severity: [ubyte];
+  /// Time of most recent impact (seconds).
+  last_impact_et: double;
+  /// Impact magnitude (N).
+  last_impact_magnitude: double;
+  /// Impact location.
+  last_impact_pos: Vec3;
+  /// Current output torque (Nm).
+  engine_torque: double;
+  /// 1=Sector 1, 2=Sector 2, 3=Sector 3. Note this is a different numbering
+  /// than SectorId (used in CompactScoring/VehicleScoring, where
+  /// 0=Sector3, 1=Sector1, 2=Sector2) - here sectors are 1-based and
+  /// Sector 3 is 3, not 0.
+  current_sector: int32;
+  /// SpeedLimiterState (pit limiter): 0=Off, 1=On.
+  speed_limiter: ubyte;
+  /// Forward gear count.
+  max_gears: ubyte;
+  front_tire_compound_index: ubyte;
+  rear_tire_compound_index: ubyte;
+  /// Fuel tank max capacity (liters).
+  fuel_capacity: double;
+  front_flap_activated: ubyte;
+  /// DRS / active aero.
+  rear_flap_activated: ubyte;
+  /// RearFlapLegalStatus (DRS): 0=Disallowed, 1=Detected, 2=Allowed.
+  rear_flap_legal_status: ubyte;
+  /// IgnitionStarterState: 0=Off, 1=Ignition, 2=IgnitionAndStarter.
+  ignition_starter: ubyte;
+  front_tire_compound_name: string;
+  rear_tire_compound_name: string;
+  speed_limiter_available: ubyte;
+  anti_stall_activated: ubyte;
+  visual_steering_wheel_range: float;
+  /// Fraction of brake force on rear.
+  rear_brake_bias: double;
+  turbo_boost_pressure: double;
+  /// Physics-to-graphics position offset (3 values, x/y/z).
+  physics_to_graphics_offset: [float];
+  physical_steering_wheel_range: float;
+  /// Hybrid battery state (0.0-1.0).
+  battery_charge_fraction: double;
+  /// Electric boost motor (Hypercar / Hybrid / Formula E) torque.
+  electric_boost_motor_torque: double;
+  electric_boost_motor_rpm: double;
+  electric_boost_motor_temperature: double;
+  electric_boost_water_temperature: double;
+  /// ElectricBoostMotorState: 0=Unavailable, 1=Inactive, 2=Propulsion,
+  /// 3=Regeneration.
+  electric_boost_motor_state: ubyte;
+  lmu: LmuTelemetry;
+  /// front-left, front-right, rear-left, rear-right (4)
+  wheels: [TelemWheel];
+}
+
+root_type TelemInfo;
+file_identifier "TELE";

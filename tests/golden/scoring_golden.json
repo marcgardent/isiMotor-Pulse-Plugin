@@ -1,13 +1,12 @@
 {
-  "struct_size": 160,
   "track_name": "Circuit de la Sarthe - Le Mans",
   "session": 10,
-  "current_et": 1250.456000,
-  "lap_dist": 13626.000000,
+  "current_et": 1250.456,
+  "lap_dist": 13626.0,
   "max_laps": 24,
   "in_realtime": true,
   "total_laps": 8,
   "sector": 2,
-  "last_lap_time": 205.420000,
-  "best_lap_time": 204.850000
+  "last_lap_time": 205.420,
+  "best_lap_time": 204.850
 }

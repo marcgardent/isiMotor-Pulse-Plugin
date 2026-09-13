@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-isiMotor-RawUDP-Plugin — French Language Drift Scanner.
+isiMotor-Pulse-Plugin — French Language Drift Scanner.
 Scans the codebase for common French keywords, grammatical patterns, contractions,
 and accented characters to identify files subject to language drift.
 
@@ -198,7 +198,7 @@ def scan_repository(
 def print_detailed_report(reports: list[FileDriftReport]) -> None:
     """Prints a structured breakdown of French language drift."""
     print("==================================================================")
-    print("  🔍 isiMotor-RawUDP — French Language Drift Report")
+    print("  🔍 isiMotor-Pulse — French Language Drift Report")
     print("==================================================================")
 
     if not reports:
@@ -232,7 +232,7 @@ def print_detailed_report(reports: list[FileDriftReport]) -> None:
 def print_summary_report(reports: list[FileDriftReport]) -> None:
     """Prints a concise summary table of files affected by drift."""
     print("==================================================================")
-    print("  📋 isiMotor-RawUDP — French Language Drift Summary")
+    print("  📋 isiMotor-Pulse — French Language Drift Summary")
     print("==================================================================")
 
     if not reports:
@@ -253,7 +253,7 @@ def print_summary_report(reports: list[FileDriftReport]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="isiMotor-RawUDP-Plugin — French Language Drift Scanner",
+        description="isiMotor-Pulse-Plugin — French Language Drift Scanner",
     )
     parser.add_argument(
         "--root",

@@ -62,20 +62,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mingw-w64 cmake ninja-build
 
-      - name: Build Universal isiMotor_RawUDP.dll
+      - name: Build Universal isiMotor_Pulse.dll
         run: |
           make cross
 
       - name: Verify Built DLL
         run: |
-          test -f build/isiMotor_RawUDP.dll
-          ls -lh build/isiMotor_RawUDP.dll
+          test -f build/isiMotor_Pulse.dll
+          ls -lh build/isiMotor_Pulse.dll
 
       - name: Upload Universal DLL Artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-universal-dll
-          path: build/isiMotor_RawUDP.dll
+          path: build/isiMotor_Pulse.dll
 
   # --- 3. Build Standalone Manager for Windows (.exe) ---
   build-manager-windows:
@@ -95,9 +95,9 @@ jobs:
       - name: Sync DLL into Manager Package Resources
         shell: bash
         run: |
-          mkdir -p isimotor-rawudp-manager/isimotor_rawudp_manager/resources isimotor-rawudp-manager/resources
-          cp staging/isiMotor_RawUDP.dll isimotor-rawudp-manager/isimotor_rawudp_manager/resources/
-          cp staging/isiMotor_RawUDP.dll isimotor-rawudp-manager/resources/
+          mkdir -p isimotor-pulse-manager/isimotor_pulse_manager/resources isimotor-pulse-manager/resources
+          cp staging/isiMotor_Pulse.dll isimotor-pulse-manager/isimotor_pulse_manager/resources/
+          cp staging/isiMotor_Pulse.dll isimotor-pulse-manager/resources/
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
@@ -110,13 +110,13 @@ jobs:
       - name: Build Standalone Windows EXE with PyInstaller
         shell: bash
         run: |
-          PYTHONPATH="isimotor-rawudp-client:isimotor-rawudp-manager" uv run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_RawUDP_Manager" --add-data "isimotor-rawudp-manager/isimotor_rawudp_manager/resources;isimotor_rawudp_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client scripts/entrypoint_manager.py
+          PYTHONPATH="isimotor-pulse-client:isimotor-pulse-manager" uv run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_Pulse_Manager" --add-data "isimotor-pulse-manager/isimotor_pulse_manager/resources;isimotor_pulse_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client scripts/entrypoint_manager.py
 
       - name: Upload Windows Manager Executable
         uses: actions/upload-artifact@v4
         with:
           name: release-manager-windows
-          path: dist/isiMotor_RawUDP_Manager.exe
+          path: dist/isiMotor_Pulse_Manager.exe
 
   # --- 4. Build Standalone Manager for Linux (x86_64) ---
   build-manager-linux:
@@ -135,9 +135,9 @@ jobs:
 
       - name: Sync DLL into Manager Package Resources
         run: |
-          mkdir -p isimotor-rawudp-manager/isimotor_rawudp_manager/resources isimotor-rawudp-manager/resources
-          cp staging/isiMotor_RawUDP.dll isimotor-rawudp-manager/isimotor_rawudp_manager/resources/
-          cp staging/isiMotor_RawUDP.dll isimotor-rawudp-manager/resources/
+          mkdir -p isimotor-pulse-manager/isimotor_pulse_manager/resources isimotor-pulse-manager/resources
+          cp staging/isiMotor_Pulse.dll isimotor-pulse-manager/isimotor_pulse_manager/resources/
+          cp staging/isiMotor_Pulse.dll isimotor-pulse-manager/resources/
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
@@ -149,13 +149,13 @@ jobs:
 
       - name: Build Standalone Linux Binary with PyInstaller
         run: |
-          PYTHONPATH="isimotor-rawudp-client:isimotor-rawudp-manager" uv run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-RawUDP-Manager-x86_64" --add-data "isimotor-rawudp-manager/isimotor_rawudp_manager/resources:isimotor_rawudp_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client scripts/entrypoint_manager.py
+          PYTHONPATH="isimotor-pulse-client:isimotor-pulse-manager" uv run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-Pulse-Manager-x86_64" --add-data "isimotor-pulse-manager/isimotor_pulse_manager/resources:isimotor_pulse_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client scripts/entrypoint_manager.py
 
       - name: Upload Linux Manager Executable
         uses: actions/upload-artifact@v4
         with:
           name: release-manager-linux
-          path: dist/isiMotor-RawUDP-Manager-x86_64
+          path: dist/isiMotor-Pulse-Manager-x86_64
 
   # --- 5. Package Python SDKs (types + client) ---
   package-python:
@@ -185,10 +185,10 @@ jobs:
 
       - name: Build Types Package
         run: |
-          uv run --with build python -m build isimotor-rawudp-types
+          uv run --with build python -m build binding/python/isimotor-pulse-types
 
       - name: Point Client Dependency at the Release Wheel URL
-        # The client depends on isimotor-rawudp-types, which isn't published to any
+        # The client depends on isimotor-pulse-types, which isn't published to any
         # index (PyPI, etc.) -- only attached as a GitHub Release asset. Without this,
         # `pip install`/`uv add` of the client wheel can't resolve that dependency.
         # Rewrite it to a direct https:// URL dependency (PEP 508) pointing at this
@@ -198,34 +198,53 @@ jobs:
           TAG="${{ steps.vars.outputs.TAG }}"
           VERSION="${TAG#v}"
           REPO_URL="${{ github.server_url }}/${{ github.repository }}"
-          TYPES_WHEEL_URL="${REPO_URL}/releases/download/${TAG}/isimotor_rawudp_types-${VERSION}-py3-none-any.whl"
+          TYPES_WHEEL_URL="${REPO_URL}/releases/download/${TAG}/isimotor_pulse_types-${VERSION}-py3-none-any.whl"
 
-          sed -i "s|\"isimotor-rawudp-types\",|\"isimotor-rawudp-types @ ${TYPES_WHEEL_URL}\",|" \
-            isimotor-rawudp-client/pyproject.toml
+          sed -i "s|\"isimotor-pulse-types\",|\"isimotor-pulse-types @ ${TYPES_WHEEL_URL}\",|" \
+            isimotor-pulse-client/pyproject.toml
 
-          grep -n "isimotor-rawudp-types" isimotor-rawudp-client/pyproject.toml
+          grep -n "isimotor-pulse-types" isimotor-pulse-client/pyproject.toml
 
       - name: Build Client Package
         run: |
-          uv run --with build python -m build isimotor-rawudp-client
+          uv run --with build python -m build isimotor-pulse-client
 
       - name: Validate Distributions
         run: |
-          uv run --with twine twine check isimotor-rawudp-types/dist/* isimotor-rawudp-client/dist/*
+          uv run --with twine twine check binding/python/isimotor-pulse-types/dist/* isimotor-pulse-client/dist/*
 
       - name: Upload Python Dists
         uses: actions/upload-artifact@v4
         with:
           name: release-python-dist
           path: |
-            isimotor-rawudp-types/dist/*
-            isimotor-rawudp-client/dist/*
+            binding/python/isimotor-pulse-types/dist/*
+            isimotor-pulse-client/dist/*
 
-  # --- 6. Publish Release Assets ---
+  # --- 6. Package Raw FlatBuffers Schemas ---
+  package-schemas:
+    name: Package Raw Schemas
+    runs-on: ubuntu-latest
+    needs: [run-tests]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Package schemas/*.fbs into a tarball
+        run: |
+          make package-schemas
+
+      - name: Upload Schemas Tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-schemas
+          path: build/isimotor-pulse-schemas.tar.gz
+
+  # --- 7. Publish Release Assets ---
   publish-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [build-dll, build-manager-windows, build-manager-linux, package-python]
+    needs: [build-dll, build-manager-windows, build-manager-linux, package-python, package-schemas]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -263,24 +282,31 @@ jobs:
           name: release-python-dist
           path: dist/
 
+      - name: Download Schemas Tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: release-schemas
+          path: staging_schemas/
+
       - name: Prepare Release Package & Assets
         run: |
           TAG="${{ steps.vars.outputs.TAG }}"
           mkdir -p staging_redist
-          cp staging/isiMotor_RawUDP.dll staging_redist/
-          cp docs/INSTALL_REDIST_RawUDP-Plugin.txt staging_redist/
+          cp staging/isiMotor_Pulse.dll staging_redist/
+          cp docs/INSTALL_REDIST_Pulse-Plugin.txt staging_redist/
           cp LICENSE staging_redist/
           cp README.md staging_redist/
 
           # Package redistributable release zip for Windows x64 (MinGW-w64)
           cd staging_redist
-          zip -r "../isiMotor-RawUDP-Plugin-${TAG}-Windows-x64-MinGW-w64.zip" .
+          zip -r "../isiMotor-Pulse-Plugin-${TAG}-Windows-x64-MinGW-w64.zip" .
           cd ..
 
           mkdir -p release_assets
-          cp "isiMotor-RawUDP-Plugin-${TAG}-Windows-x64-MinGW-w64.zip" release_assets/
-          cp staging_manager_win/isiMotor_RawUDP_Manager.exe release_assets/
-          cp staging_manager_linux/isiMotor-RawUDP-Manager-x86_64 release_assets/
+          cp "isiMotor-Pulse-Plugin-${TAG}-Windows-x64-MinGW-w64.zip" release_assets/
+          cp staging_manager_win/isiMotor_Pulse_Manager.exe release_assets/
+          cp staging_manager_linux/isiMotor-Pulse-Manager-x86_64 release_assets/
+          cp staging_schemas/isimotor-pulse-schemas.tar.gz "release_assets/isimotor-pulse-schemas-${TAG}.tar.gz"
           find dist -type f -exec cp {} release_assets/ \;
           ls -lh release_assets/
 
@@ -304,8 +330,8 @@ jobs:
           #### 🖥️ Standalone Manager (1-Click Install & Live Telemetry TUI)
           | Platform | File | Description |
           |----------|------|-------------|
-          | **Windows (x64)** | `isiMotor_RawUDP_Manager.exe` | Standalone portable executable (No Python required) |
-          | **Linux / Steam Deck** | `isiMotor-RawUDP-Manager-x86_64` | Standalone 64-bit binary (No Python required) |
+          | **Windows (x64)** | `isiMotor_Pulse_Manager.exe` | Standalone portable executable (No Python required) |
+          | **Linux / Steam Deck** | `isiMotor-Pulse-Manager-x86_64` | Standalone 64-bit binary (No Python required) |
 
           👉 **User Guide**: [USER_NOTICE.md](${REPO_URL}/blob/${TAG}/USER_NOTICE.md)
 
@@ -314,40 +340,49 @@ jobs:
           #### 🔧 Native Plugin (Windows x64 / MinGW-w64)
           | File | Description |
           |------|-------------|
-          | `isiMotor-RawUDP-Plugin-${TAG}-Windows-x64-MinGW-w64.zip` | Standalone native 64-bit DLL (MinGW-w64) + installation instructions + license |
+          | `isiMotor-Pulse-Plugin-${TAG}-Windows-x64-MinGW-w64.zip` | Standalone native 64-bit DLL (MinGW-w64) + installation instructions + license |
 
-          👉 **Install Guide**: [docs/INSTALL_REDIST_RawUDP-Plugin.txt](${REPO_URL}/blob/${TAG}/docs/INSTALL_REDIST_RawUDP-Plugin.txt)
+          👉 **Install Guide**: [docs/INSTALL_REDIST_Pulse-Plugin.txt](${REPO_URL}/blob/${TAG}/docs/INSTALL_REDIST_Pulse-Plugin.txt)
 
           ---
 
-          #### 🐍 Python SDK (`isimotor_rawudp_types` + `isimotor_rawudp_client`)
+          #### 🐍 Python SDK (`isimotor_pulse_types` + `isimotor_pulse_client`)
           | Package | Description |
           |---------|-------------|
-          | `isimotor_rawudp_types` | Shared dataclasses & enums for raw UDP telemetry packets |
-          | `isimotor_rawudp_client` | Low-level Python UDP client & binary packet decoders |
+          | `isimotor_pulse_types` | Shared dataclasses & enums for raw UDP telemetry packets |
+          | `isimotor_pulse_client` | ZeroMQ telemetry/scoring client - full fan-in (`IsiMotorClient`) or single-packet-type (`Raw`/`Domain`/`Dto`) |
 
           **How to install and consume wheels from this release:**
 
-          `isimotor_rawudp_client` depends on `isimotor_rawudp_types` via a direct URL
+          `isimotor_pulse_client` depends on `isimotor_pulse_types` via a direct URL
           pointing at this same release, so installing the client alone pulls the types
           package in automatically — no separate install step needed.
 
           *Option 1 — Direct remote install via pip with release wheel URL:*
           ```bash
-          pip install "${REPO_URL}/releases/download/${TAG}/isimotor_rawudp_client-${VERSION}-py3-none-any.whl"
+          pip install "${REPO_URL}/releases/download/${TAG}/isimotor_pulse_client-${VERSION}-py3-none-any.whl"
           ```
 
           *Option 2 — Install a locally downloaded .whl file:*
           ```bash
-          pip install isimotor_rawudp_client-${VERSION}-py3-none-any.whl
+          pip install isimotor_pulse_client-${VERSION}-py3-none-any.whl
           ```
 
-          *Installing `isimotor_rawudp_types` on its own:*
+          *Installing `isimotor_pulse_types` on its own:*
           ```bash
-          pip install "${REPO_URL}/releases/download/${TAG}/isimotor_rawudp_types-${VERSION}-py3-none-any.whl"
+          pip install "${REPO_URL}/releases/download/${TAG}/isimotor_pulse_types-${VERSION}-py3-none-any.whl"
           ```
 
-          👉 **Client README & Examples**: [isimotor-rawudp-client/README.md](${REPO_URL}/blob/${TAG}/isimotor-rawudp-client/README.md)
+          👉 **Client README & Examples**: [isimotor-pulse-client/README.md](${REPO_URL}/blob/${TAG}/isimotor-pulse-client/README.md)
+
+          ---
+
+          #### 📐 Raw FlatBuffers Schemas
+          | File | Description |
+          |------|-------------|
+          | `isimotor-pulse-schemas-${TAG}.tar.gz` | Raw \`schemas/*.fbs\` sources (no generated bindings) - compile with your own \`flatc\` for any FlatBuffers-supported language. Each root table carries a native 4-char \`file_identifier\` ("magic value") for wire-format versioning. |
+
+          👉 **Schema Sources**: [schemas/](${REPO_URL}/tree/${TAG}/schemas)
 
           ---
 

@@ -1,0 +1,23 @@
+// isiMotor Pulse - WeatherControl (outbound, packet type 7).
+// Published on its own ZeroMQ PUB port (TcpBasePort + 7); the message on
+// that port IS this FlatBuffer, with no outer framing/header.
+namespace isimotor.fbs;
+
+/// Environmental conditions & weather node grid.
+table WeatherControl {
+  /// Effective session ET.
+  et: double;
+  /// 3x3 rain intensity grid, row-major (9 values, 0.0-1.0 each); node [1][1]
+  /// (index 4) is the origin/player node.
+  raining: [double];
+  /// 0.0 (clear) to 1.0 (dark overcast).
+  cloudiness: double;
+  /// Air temperature in Kelvin (subtract 273.15 for Celsius).
+  ambient_temp_k: double;
+  /// Wind speed in m/s.
+  wind_max_speed: double;
+  apply_cloudiness_instantly: bool;
+}
+
+root_type WeatherControl;
+file_identifier "WTHR";

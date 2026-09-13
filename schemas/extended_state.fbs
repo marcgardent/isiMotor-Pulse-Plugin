@@ -1,0 +1,80 @@
+// isiMotor Pulse - ExtendedState (outbound, packet type 8).
+// Published on its own ZeroMQ PUB port (TcpBasePort + 8); the message on
+// that port IS this FlatBuffer, with no outer framing/header.
+namespace isimotor.fbs;
+
+/// Active driving aids, physics rules & multipliers.
+table PhysicsOptions {
+  /// TractionControl: 0=Off, 1=Low, 2=Medium, 3=High.
+  traction_control: ubyte;
+  /// AntiLockBrakes: 0=Off, 1=Low, 2=High.
+  anti_lock_brakes: ubyte;
+  /// StabilityControl: 0=Off, 1=Low, 2=Medium, 3=High.
+  stability_control: ubyte;
+  /// AutoShift: 0=Manual, 1=AutoUp, 2=AutoDown, 3=FullAuto.
+  auto_shift: ubyte;
+  /// 0=off, 1=on.
+  auto_clutch: ubyte;
+  /// 0=off, 1=on.
+  invulnerable: ubyte;
+  /// 0=off, 1=on.
+  opposite_lock: ubyte;
+  /// 0 (off) to 3 (high).
+  steering_help: ubyte;
+  /// 0 (off) to 2 (high).
+  braking_help: ubyte;
+  /// 0=off, 1=on.
+  spin_recovery: ubyte;
+  /// 0=off, 1=on.
+  auto_pit: ubyte;
+  /// 0=off, 1=on.
+  auto_lift: ubyte;
+  /// 0=off, 1=on.
+  auto_blip: ubyte;
+  /// Fuel usage multiplier (0x-7x).
+  fuel_mult: ubyte;
+  /// Tire wear multiplier (0x-7x).
+  tire_mult: ubyte;
+  /// MechFailure: 0=Off, 1=Normal, 2=Timescaled.
+  mech_fail: ubyte;
+  /// 0=off, 1=on.
+  allow_pitcrew_push: ubyte;
+  /// Accidental repeat shift prevention (0=off, 1=on).
+  repeat_shifts: ubyte;
+  /// Auto-shifters at start of race (0=off, 1=on).
+  hold_clutch: ubyte;
+  /// 0=off, 1=on.
+  auto_reverse: ubyte;
+  /// 0=off, 1=on.
+  alternate_neutral: ubyte;
+  /// 0=player driving, 1=AI driving.
+  ai_control: ubyte;
+  manual_shift_override_time: float;
+  auto_shift_override_time: float;
+  /// 0.0 (off) to 1.0.
+  speed_sensitive_steering: float;
+  /// Speed in m/s under which steering lock gets expanded.
+  steer_ratio_speed: float;
+}
+
+/// Extended game state, driving aids, accumulated damage & session
+/// transitions.
+table ExtendedState {
+  physics: PhysicsOptions;
+  /// Max collision impact magnitude recorded in session.
+  max_impact_magnitude: double;
+  /// Cumulative collision damage energy.
+  accumulated_impact_magnitude: double;
+  /// True if currently in cockpit/track vs UI monitor.
+  in_realtime_fc: bool;
+  /// Session started event state.
+  session_started: bool;
+  /// SessionType, same encoding as CompactScoring.session / FullScoringSession.session:
+  /// 0=TestDay, 1-4=Practice1-4, 5-8=Qualifying1-4, 9=Warmup, 10-13=Race1-4.
+  session: int32;
+  /// Pit lane speed limit in m/s (multiply by 3.6 for km/h).
+  current_pit_speed_limit: float;
+}
+
+root_type ExtendedState;
+file_identifier "EXST";
