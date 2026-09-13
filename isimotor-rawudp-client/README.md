@@ -169,6 +169,61 @@ with IsiMotorClient(port=5000) as client:
 
 ---
 
+## 🎯 Single-Packet-Type Clients
+
+`IsiMotorClient` fans every outbound packet type into one shared client (one
+ZeroMQ SUB socket per type, e.g. 8 sockets). If you only care about **one**
+stream — say, just telemetry — connect to that one type alone instead, at
+three levels of representation:
+
+| Class | Factory | Yields |
+|---|---|---|
+| `RawSinglePacketClient` | `RawSinglePacketClientFactory` | undecoded message bytes |
+| `DomainSinglePacketClient[T]` | `DomainSinglePacketClientFactory` | this package's business dataclass (`TelemInfo`, `CompactScoring`, ...) — same objects `IsiMotorClient` hands you |
+| `DtoSinglePacketClient[F]` | `DtoSinglePacketClientFactory` | the parsed FlatBuffer root accessor directly, zero-copy, no dataclass conversion |
+
+Each factory exposes one method per outbound packet type: `telemetry()`,
+`scoring()`, `system_event()`, `full_scoring()`, `weather()`,
+`extended_state()`, `force_feedback()`, `graphics()`.
+
+```python
+from isimotor_rawudp_client import DomainSinglePacketClientFactory
+
+# Only opens a socket on base_port + telemetry's packet type - not the other 7.
+with DomainSinglePacketClientFactory.telemetry(base_port=5000) as client:
+    client.on_packet = lambda t: print(f"Speed: {t.speed_kmh:.1f} km/h")
+    # ...or poll instead of using a callback:
+    telem = client.get_latest()
+```
+
+`RawSinglePacketClient` is the lowest level — no decoding at all — useful to
+record/replay a stream, or decode with something other than this package's
+codecs:
+
+```python
+from isimotor_rawudp_client import RawSinglePacketClientFactory
+
+with RawSinglePacketClientFactory.telemetry() as client:
+    client.on_packet = lambda raw_bytes: my_own_decoder(raw_bytes)
+```
+
+`DtoSinglePacketClient` is for latency-sensitive consumers who want the raw
+FlatBuffer accessor (lazy field access, no dataclass allocation) and accept
+the resulting coupling to that encoding:
+
+```python
+from isimotor_rawudp_client import DtoSinglePacketClientFactory
+
+with DtoSinglePacketClientFactory.telemetry() as client:
+    client.on_packet = lambda root: print(root.EngineRpm())  # FlatBuffer accessor
+```
+
+> [!NOTE]
+> `decode_*`/`encode_*` codec functions are intentionally not part of the
+> public API — the client types above already decode for you.
+
+---
+
 ## 📦 Installer API (`isimotor_rawudp_client.install`)
 
 The package also bundles the compiled `isiMotor_RawUDP.dll` and exposes a public API to detect Steam installations of Le Mans Ultimate / rFactor 2, install or remove the plugin DLL, and read/write its `CustomPluginVariables.JSON` / `Settings.JSON` configuration — no need for the Manager TUI to automate a setup flow.

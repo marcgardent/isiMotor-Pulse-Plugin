@@ -324,7 +324,7 @@ jobs:
           | Package | Description |
           |---------|-------------|
           | `isimotor_rawudp_types` | Shared dataclasses & enums for raw UDP telemetry packets |
-          | `isimotor_rawudp_client` | Low-level Python UDP client & binary packet decoders |
+          | `isimotor_rawudp_client` | ZeroMQ telemetry/scoring client - full fan-in (`IsiMotorClient`) or single-packet-type (`Raw`/`Domain`/`Dto`) |
 
           **How to install and consume wheels from this release:**
 
