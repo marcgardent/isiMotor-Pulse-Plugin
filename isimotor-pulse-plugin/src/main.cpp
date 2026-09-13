@@ -450,6 +450,10 @@ public:
 // future service registry that will allocate them dynamically.
 static const unsigned char kOutboundPacketTypes[] = {1, 2, 3, 4, 7, 8, 9, 10};
 static const int kMaxPacketType = 10;
+// PacketType.SYSTEM_EVENT - the one outbound stream that is a discrete event
+// rather than a continuously-superseded state/telemetry sample; see its use
+// below for why it's excluded from CONFLATE.
+static const unsigned char kSystemEventPacketType = 3;
 
 class IsiMotorPulsePlugin : public InternalsPluginV06 {
 private:
@@ -900,11 +904,16 @@ public:
             try {
                 pubSockets[packetType] = zmq::socket_t(zmqContext, zmq::socket_type::pub);
                 pubSockets[packetType].set(zmq::sockopt::sndhwm, 10);  // Drop rather than buffer if no subscriber keeps up.
-                // Keep only the single latest message queued: a stale telemetry/FFB
-                // frame is worthless once a newer one exists, so conflating avoids
-                // the jitter/latency of ever draining a backlog after a subscriber
-                // stall - freshness beats completeness for live streams.
-                pubSockets[packetType].set(zmq::sockopt::conflate, 1);
+                if (packetType != kSystemEventPacketType) {
+                    // Keep only the single latest message queued: a stale telemetry/
+                    // FFB frame is worthless once a newer one exists, so conflating
+                    // avoids the jitter/latency of ever draining a backlog after a
+                    // subscriber stall - freshness beats completeness for live
+                    // streams. Not applied to SystemEvent: it's a discrete state
+                    // transition, not a continuously-superseded stream - conflating
+                    // could silently drop one if two fire close together.
+                    pubSockets[packetType].set(zmq::sockopt::conflate, 1);
+                }
                 pubSockets[packetType].set(zmq::sockopt::linger, 0);
                 char endpoint[96];
                 BuildTcpEndpoint(config.tcpHost, config.tcpBasePort + packetType, endpoint, sizeof(endpoint));
@@ -922,7 +931,10 @@ public:
             try {
                 inboundSocket = zmq::socket_t(zmqContext, zmq::socket_type::sub);
                 inboundSocket.set(zmq::sockopt::subscribe, "");
-                inboundSocket.set(zmq::sockopt::conflate, 1);
+                // No CONFLATE here: unlike telemetry, inbound commands (button
+                // presses, weather overrides) are discrete one-shot events, not
+                // a continuously-superseded stream - conflating could silently
+                // drop one if two are sent close together.
                 inboundSocket.set(zmq::sockopt::linger, 0);
                 char inboundEndpoint[96];
                 BuildTcpEndpoint(config.inboundTcpHost, config.inboundTcpPort, inboundEndpoint, sizeof(inboundEndpoint));

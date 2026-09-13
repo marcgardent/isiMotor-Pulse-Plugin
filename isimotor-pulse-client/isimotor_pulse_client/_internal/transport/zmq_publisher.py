@@ -44,10 +44,10 @@ class ZmqPublisher:
                     pass
             self._socket = self._context.socket(zmq.PUB)
             self._socket.setsockopt(zmq.LINGER, 0)
-            # Keep only the single latest queued command: matches the plugin's
-            # inbound SUB socket, which also sets CONFLATE (required on both
-            # ends of the connection for it to take effect).
-            self._socket.setsockopt(zmq.CONFLATE, 1)
+            # No CONFLATE here: unlike telemetry, inbound commands (button
+            # presses, weather overrides) are discrete one-shot events, not a
+            # continuously-superseded stream - conflating could silently drop
+            # one if two are sent close together (e.g. two quick button taps).
             self._socket.connect(endpoint)
             self._connected_endpoint = endpoint
             # Mitigates the ZeroMQ PUB/SUB "slow joiner" syndrome: give the

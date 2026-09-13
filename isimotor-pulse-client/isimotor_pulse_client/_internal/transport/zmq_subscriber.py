@@ -26,6 +26,11 @@ DataReceivedCallback = Callable[[int, bytes, float], None]
 # its own port (base_port + packet_type).
 OUTBOUND_PACKET_TYPES: tuple[int, ...] = (1, 2, 3, 4, 7, 8, 9, 10)
 
+# PacketType.SYSTEM_EVENT - the one outbound stream that is a discrete event
+# rather than a continuously-superseded state/telemetry sample; see its use
+# below for why it's excluded from CONFLATE.
+SYSTEM_EVENT_PACKET_TYPE = 3
+
 
 class ZmqSubscriber:
     """
@@ -75,12 +80,19 @@ class ZmqSubscriber:
             sock = self._context.socket(zmq.SUB)
             sock.setsockopt(zmq.SUBSCRIBE, b"")
             sock.setsockopt(zmq.LINGER, 0)
-            # Keep only the single latest queued frame: matches the plugin's
-            # PUB socket, which also sets CONFLATE (required on both ends of
-            # the connection for it to take effect) - a stale telemetry/FFB
-            # frame left behind after a brief stall is worthless once a
-            # newer one exists, so drop it instead of draining a backlog.
-            sock.setsockopt(zmq.CONFLATE, 1)
+            if packet_type != SYSTEM_EVENT_PACKET_TYPE:
+                # Keep only the single latest queued frame: matches the plugin's
+                # PUB socket, which also sets CONFLATE (required on both ends of
+                # the connection for it to take effect) - a stale telemetry/FFB
+                # frame left behind after a brief stall is worthless once a
+                # newer one exists, so drop it instead of draining a backlog.
+                # Not applied to SystemEvent: it's a discrete state transition
+                # (EnterRealtime/ExitRealtime/StartSession/EndSession), not a
+                # continuously-superseded stream - conflating could silently
+                # drop one if two fire close together (e.g. StartSession then
+                # EnterRealtime), unlike a stale telemetry sample which really
+                # is worthless once superseded.
+                sock.setsockopt(zmq.CONFLATE, 1)
             sock.connect(self.endpoint_for(packet_type))
             self._poller.register(sock, zmq.POLLIN)
             self._sockets.append((packet_type, sock))
