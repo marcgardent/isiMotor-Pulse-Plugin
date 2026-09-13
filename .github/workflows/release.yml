@@ -380,9 +380,24 @@ jobs:
           #### 📐 Raw FlatBuffers Schemas
           | File | Description |
           |------|-------------|
-          | `isimotor-pulse-schemas-${TAG}.tar.gz` | Raw \`schemas/*.fbs\` sources (no generated bindings) - compile with your own \`flatc\` for any FlatBuffers-supported language. Each root table carries a native 4-char \`file_identifier\` ("magic value") for wire-format versioning. |
+          | `isimotor-pulse-schemas-${TAG}.tar.gz` | Raw `schemas/*.fbs` sources (no generated bindings) - compile with your own `flatc` for any FlatBuffers-supported language. Each root table carries a native 4-char `file_identifier` ("magic value") for wire-format versioning. |
 
           👉 **Schema Sources**: [schemas/](${REPO_URL}/tree/${TAG}/schemas)
+
+          ---
+
+          #### 🦀 Rust Bindings (`isimotor-pulse-schemas`)
+
+          Not published as a release asset - consumed directly as a Git dependency pinned to
+          this tag (bindings are generated from `schemas/*.fbs` at build time via `build.rs`,
+          no `flatc` required):
+
+          ```toml
+          [dependencies]
+          isimotor-pulse-schemas = { git = "${REPO_URL}", tag = "${TAG}" }
+          ```
+
+          👉 **Crate Source & Usage**: [binding/rust/isimotor-pulse-schemas/README.md](${REPO_URL}/blob/${TAG}/binding/rust/isimotor-pulse-schemas/README.md)
 
           ---
 
