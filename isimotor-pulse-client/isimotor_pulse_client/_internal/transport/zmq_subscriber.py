@@ -75,6 +75,12 @@ class ZmqSubscriber:
             sock = self._context.socket(zmq.SUB)
             sock.setsockopt(zmq.SUBSCRIBE, b"")
             sock.setsockopt(zmq.LINGER, 0)
+            # Keep only the single latest queued frame: matches the plugin's
+            # PUB socket, which also sets CONFLATE (required on both ends of
+            # the connection for it to take effect) - a stale telemetry/FFB
+            # frame left behind after a brief stall is worthless once a
+            # newer one exists, so drop it instead of draining a backlog.
+            sock.setsockopt(zmq.CONFLATE, 1)
             sock.connect(self.endpoint_for(packet_type))
             self._poller.register(sock, zmq.POLLIN)
             self._sockets.append((packet_type, sock))

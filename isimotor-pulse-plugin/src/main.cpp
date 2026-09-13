@@ -900,6 +900,11 @@ public:
             try {
                 pubSockets[packetType] = zmq::socket_t(zmqContext, zmq::socket_type::pub);
                 pubSockets[packetType].set(zmq::sockopt::sndhwm, 10);  // Drop rather than buffer if no subscriber keeps up.
+                // Keep only the single latest message queued: a stale telemetry/FFB
+                // frame is worthless once a newer one exists, so conflating avoids
+                // the jitter/latency of ever draining a backlog after a subscriber
+                // stall - freshness beats completeness for live streams.
+                pubSockets[packetType].set(zmq::sockopt::conflate, 1);
                 pubSockets[packetType].set(zmq::sockopt::linger, 0);
                 char endpoint[96];
                 BuildTcpEndpoint(config.tcpHost, config.tcpBasePort + packetType, endpoint, sizeof(endpoint));
@@ -917,6 +922,7 @@ public:
             try {
                 inboundSocket = zmq::socket_t(zmqContext, zmq::socket_type::sub);
                 inboundSocket.set(zmq::sockopt::subscribe, "");
+                inboundSocket.set(zmq::sockopt::conflate, 1);
                 inboundSocket.set(zmq::sockopt::linger, 0);
                 char inboundEndpoint[96];
                 BuildTcpEndpoint(config.inboundTcpHost, config.inboundTcpPort, inboundEndpoint, sizeof(inboundEndpoint));
