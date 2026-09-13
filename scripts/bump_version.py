@@ -130,6 +130,11 @@ def bump_all_files(root: Path, new_version: str) -> list[Path]:
     if update_file(user_notice, r"(?m)^>\s*\*\*Version\*\*:\s*.*$", f"> **Version**: {new_version}  "):
         updated_files.append(user_notice)
 
+    # 7b. binding/rust/isimotor-pulse-schemas/Cargo.toml
+    rust_schemas_cargo = root / "binding" / "rust" / "isimotor-pulse-schemas" / "Cargo.toml"
+    if update_file(rust_schemas_cargo, r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"', count=1):
+        updated_files.append(rust_schemas_cargo)
+
     # 8. Update uv.lock if uv is available
     uv_bin = shutil.which("uv")
     if uv_bin:

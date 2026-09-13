@@ -97,6 +97,12 @@ def collect_file_versions(root: Path) -> dict[str, str | None]:
     user_notice = root / "USER_NOTICE.md"
     versions["USER_NOTICE.md"] = extract_regex_first_group(user_notice, r"(?m)^>\s*\*\*Version\*\*:\s*([^\s]+)")
 
+    # 9. binding/rust/isimotor-pulse-schemas/Cargo.toml
+    rust_schemas_cargo = root / "binding" / "rust" / "isimotor-pulse-schemas" / "Cargo.toml"
+    versions["binding/rust/isimotor-pulse-schemas/Cargo.toml"] = extract_regex_first_group(
+        rust_schemas_cargo, r'(?m)^version\s*=\s*"([^"]+)"'
+    )
+
     return versions
 
 

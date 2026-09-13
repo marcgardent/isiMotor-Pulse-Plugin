@@ -72,6 +72,14 @@ class TestBumpVersion(unittest.TestCase):
             user_notice = tmp_root / "USER_NOTICE.md"
             user_notice.write_text("# Notice\n> **Version**: 1.4.0  \n", encoding="utf-8")
 
+            # 6. binding/rust/isimotor-pulse-schemas/Cargo.toml
+            rust_schemas_dir = tmp_root / "binding" / "rust" / "isimotor-pulse-schemas"
+            rust_schemas_dir.mkdir(parents=True)
+            rust_schemas_cargo = rust_schemas_dir / "Cargo.toml"
+            rust_schemas_cargo.write_text(
+                '[package]\nname = "isimotor-pulse-schemas"\nversion = "1.4.0"\n', encoding="utf-8"
+            )
+
             # Run bump
             updated = bump_all_files(tmp_root, "2.0.0")
 
@@ -83,6 +91,7 @@ class TestBumpVersion(unittest.TestCase):
             self.assertIn(manager_dir / "__init__.py", updated)
             self.assertIn(plugin_dir / "CMakeLists.txt", updated)
             self.assertIn(user_notice, updated)
+            self.assertIn(rust_schemas_cargo, updated)
 
             # Check contents
             self.assertIn('version = "2.0.0"', root_pyproject.read_text(encoding="utf-8"))
@@ -97,6 +106,7 @@ class TestBumpVersion(unittest.TestCase):
                 (plugin_dir / "CMakeLists.txt").read_text(encoding="utf-8"),
             )
             self.assertIn("> **Version**: 2.0.0", user_notice.read_text(encoding="utf-8"))
+            self.assertIn('version = "2.0.0"', rust_schemas_cargo.read_text(encoding="utf-8"))
 
     def test_update_file_helper(self) -> None:
         """Tests update_file regex helper behavior on existing and missing files."""

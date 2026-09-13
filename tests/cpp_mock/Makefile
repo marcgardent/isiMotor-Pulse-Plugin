@@ -1,5 +1,5 @@
 CXX ?= g++
-CXXFLAGS ?= -O3 -std=c++17 -Wall -Wextra -Icompat -Izmq-headers -Ifbs-headers -I../../isimotor-pulse-plugin/include -I../../isimotor-pulse-plugin/include/generated
+CXXFLAGS ?= -O3 -std=c++17 -Wall -Wextra -Icompat -Izmq-headers -Ifbs-headers -I../../isimotor-pulse-plugin/include -I../../binding/cpp/isimotor-pulse-schemas/include
 
 TARGET = isi_mock_host
 SRCS = isi_mock_host.cpp
@@ -16,8 +16,9 @@ ZMQ_LIBS ?= $(shell pkg-config --libs libzmq 2>/dev/null || echo -l:libzmq.so.5)
 
 # FlatBuffers: header-only C++ runtime, vendored the same way (pinned to the
 # same tag as the plugin's CMake FetchContent). Only the runtime headers are
-# needed - message schemas are pre-generated into isimotor-pulse-plugin's
-# include/generated/ (see schemas/*.fbs and `make generate-schemas`).
+# needed - message schemas are pre-generated into
+# binding/cpp/isimotor-pulse-schemas/include/ (see schemas/*.fbs and
+# `make generate-schemas`).
 FBS_TAG = v23.5.26
 FBS_STAMP = fbs-headers/.stamp-$(FBS_TAG)
 
