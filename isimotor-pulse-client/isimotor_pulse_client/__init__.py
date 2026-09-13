@@ -46,7 +46,7 @@ from .domain_single_packet_client_factory import DomainSinglePacketClientFactory
 from .dto_single_packet_client_factory import DtoSinglePacketClientFactory
 from .raw_single_packet_client_factory import RawSinglePacketClientFactory
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __all__ = [
     "CompactScoring",
     "DomainSinglePacketClient",
