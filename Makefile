@@ -71,7 +71,8 @@ test:
 	@make -C tests/cpp_mock --silent
 	@./tests/cpp_mock/isi_mock_host --dump-truth tests/golden
 	@if command -v $(UV) >/dev/null 2>&1; then \
-		PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --with textual --with rich python -m unittest discover -s tests -p "test_*.py" -v; \
+		$(UV) sync --all-packages --quiet && \
+		PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --no-sync python -m unittest discover -s tests -p "test_*.py" -v; \
 	else \
 		PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v; \
 	fi
@@ -135,11 +136,13 @@ briefcase-build: sync-resources briefcase-wheels
 
 standalone-linux: sync-resources
 	@echo "==> Building standalone Linux manager binary with PyInstaller..."
-	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-Pulse-Manager-x86_64" --add-data "isimotor-pulse-client/isimotor_pulse_client/resources:isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
+	@$(UV) sync --all-packages --quiet
+	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --no-sync --with pyinstaller pyinstaller --onefile --clean --name "isiMotor-Pulse-Manager-x86_64" --add-data "isimotor-pulse-client/isimotor_pulse_client/resources:isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
 
 standalone-windows: sync-resources
 	@echo "==> Building standalone Windows manager binary with PyInstaller..."
-	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_Pulse_Manager" --add-data "isimotor-pulse-client/isimotor_pulse_client/resources;isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
+	@$(UV) sync --all-packages --quiet
+	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --no-sync --with pyinstaller pyinstaller --onefile --clean --name "isiMotor_Pulse_Manager" --add-data "isimotor-pulse-client/isimotor_pulse_client/resources;isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
 
 install:
 	@PYTHONPATH=isimotor-pulse-client:binding/python/isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli
