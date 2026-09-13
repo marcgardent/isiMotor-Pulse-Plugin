@@ -110,7 +110,14 @@ jobs:
       - name: Build Standalone Windows EXE with PyInstaller
         shell: bash
         run: |
-          PYTHONPATH="isimotor-pulse-client:isimotor-pulse-manager" uv run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_Pulse_Manager" --add-data "isimotor-pulse-manager/isimotor_pulse_manager/resources;isimotor_pulse_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client scripts/entrypoint_manager.py
+          # `uv run --with X` at this (dependency-less) workspace root only installs
+          # X, not the workspace members' own deps (pyzmq, flatbuffers) - `uv sync
+          # --all-packages` first installs every member into the shared venv, so
+          # --collect-all can actually import and bundle isimotor_pulse_client/
+          # isimotor_pulse_manager/isimotor_pulse_types instead of just warning
+          # and silently producing a broken executable.
+          uv sync --all-packages --quiet
+          PYTHONPATH="isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types" uv run --no-sync --with pyinstaller pyinstaller --onefile --clean --name "isiMotor_Pulse_Manager" --add-data "isimotor-pulse-manager/isimotor_pulse_manager/resources;isimotor_pulse_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
 
       - name: Upload Windows Manager Executable
         uses: actions/upload-artifact@v4
@@ -149,7 +156,11 @@ jobs:
 
       - name: Build Standalone Linux Binary with PyInstaller
         run: |
-          PYTHONPATH="isimotor-pulse-client:isimotor-pulse-manager" uv run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-Pulse-Manager-x86_64" --add-data "isimotor-pulse-manager/isimotor_pulse_manager/resources:isimotor_pulse_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client scripts/entrypoint_manager.py
+          # See the Windows job's equivalent step for why `uv sync --all-packages`
+          # is required first (otherwise pyzmq/flatbuffers never get installed and
+          # --collect-all silently produces a broken executable).
+          uv sync --all-packages --quiet
+          PYTHONPATH="isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types" uv run --no-sync --with pyinstaller pyinstaller --onefile --clean --name "isiMotor-Pulse-Manager-x86_64" --add-data "isimotor-pulse-manager/isimotor_pulse_manager/resources:isimotor_pulse_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
 
       - name: Upload Linux Manager Executable
         uses: actions/upload-artifact@v4
