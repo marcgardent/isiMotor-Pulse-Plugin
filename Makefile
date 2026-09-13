@@ -4,7 +4,7 @@ BUILD_DIR = build
 BIN_DIR   = bin
 
 # Autonomous Python & UV resolution
-VENV_PYTHON = $(shell if [ -x isimotor-rawudp-manager/.venv/bin/python ]; then echo "isimotor-rawudp-manager/.venv/bin/python"; \
+VENV_PYTHON = $(shell if [ -x isimotor-pulse-manager/.venv/bin/python ]; then echo "isimotor-pulse-manager/.venv/bin/python"; \
                elif [ -x .venv/bin/python ]; then echo ".venv/bin/python"; \
                elif command -v python >/dev/null 2>&1; then echo "python"; \
                else echo "python3"; fi)
@@ -13,7 +13,7 @@ UV ?= $(shell which uv 2>/dev/null || if [ -x $$HOME/.local/bin/uv ]; then echo 
 
 help:
 	@echo "=================================================================="
-	@echo "  🏎️  isiMotor-RawUDP-Plugin — Build & Tooling Menu"
+	@echo "  🏎️  isiMotor-Pulse-Plugin — Build & Tooling Menu"
 	@echo "=================================================================="
 	@echo "  make                - Display this help menu"
 	@echo "  make lint           - Run Ruff fast static linter"
@@ -69,9 +69,9 @@ test:
 	@make -C tests/cpp_mock --silent
 	@./tests/cpp_mock/isi_mock_host --dump-truth tests/golden
 	@if command -v $(UV) >/dev/null 2>&1; then \
-		PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager:isimotor-rawudp-types $(UV) run --with textual --with rich python -m unittest discover -s tests -p "test_*.py" -v; \
+		PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:isimotor-pulse-types $(UV) run --with textual --with rich python -m unittest discover -s tests -p "test_*.py" -v; \
 	else \
-		PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager:isimotor-rawudp-types $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v; \
+		PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:isimotor-pulse-types $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v; \
 	fi
 
 cross:
@@ -85,68 +85,68 @@ cross:
 		echo "" && \
 		exit 1 \
 	)
-	@echo "==> Cross-compiling standard isiMotor_RawUDP.dll with MinGW..."
+	@echo "==> Cross-compiling standard isiMotor_Pulse.dll with MinGW..."
 	@mkdir -p $(BUILD_DIR)
-	cmake -S isimotor-rawudp-plugin -B $(BUILD_DIR) -DCMAKE_TOOLCHAIN_FILE=$(CURDIR)/isimotor-rawudp-plugin/toolchain.cmake -DCMAKE_BUILD_TYPE=Release
+	cmake -S isimotor-pulse-plugin -B $(BUILD_DIR) -DCMAKE_TOOLCHAIN_FILE=$(CURDIR)/isimotor-pulse-plugin/toolchain.cmake -DCMAKE_BUILD_TYPE=Release
 	cmake --build $(BUILD_DIR) --config Release
-	@echo "==> Build complete: $(BUILD_DIR)/isiMotor_RawUDP.dll"
+	@echo "==> Build complete: $(BUILD_DIR)/isiMotor_Pulse.dll"
 
 build: cross
 
 manager:
-	@echo "==> Launching isiMotor-RawUDP-Manager on UDP port 5000..."
-	@$(PYTHON) isimotor-rawudp-manager/sniffer.py
+	@echo "==> Launching isiMotor-Pulse-Manager on UDP port 5000..."
+	@$(PYTHON) isimotor-pulse-manager/sniffer.py
 
 benchmark: manager
 
 sync-resources:
 	@echo "==> Syncing compiled DLL and resources into Client package..."
-	@mkdir -p isimotor-rawudp-client/isimotor_rawudp_client/resources
-	@if [ -f $(BUILD_DIR)/isiMotor_RawUDP.dll ]; then \
-		cp $(BUILD_DIR)/isiMotor_RawUDP.dll isimotor-rawudp-client/isimotor_rawudp_client/resources/; \
-		echo "  ✓ Copied $(BUILD_DIR)/isiMotor_RawUDP.dll to client resources"; \
-	elif [ -f $(BIN_DIR)/isiMotor_RawUDP.dll ]; then \
-		cp $(BIN_DIR)/isiMotor_RawUDP.dll isimotor-rawudp-client/isimotor_rawudp_client/resources/; \
-		echo "  ✓ Copied $(BIN_DIR)/isiMotor_RawUDP.dll to client resources"; \
-	elif [ -f isiMotor_RawUDP.dll ]; then \
-		cp isiMotor_RawUDP.dll isimotor-rawudp-client/isimotor_rawudp_client/resources/; \
-		echo "  ✓ Copied isiMotor_RawUDP.dll to client resources"; \
+	@mkdir -p isimotor-pulse-client/isimotor_pulse_client/resources
+	@if [ -f $(BUILD_DIR)/isiMotor_Pulse.dll ]; then \
+		cp $(BUILD_DIR)/isiMotor_Pulse.dll isimotor-pulse-client/isimotor_pulse_client/resources/; \
+		echo "  ✓ Copied $(BUILD_DIR)/isiMotor_Pulse.dll to client resources"; \
+	elif [ -f $(BIN_DIR)/isiMotor_Pulse.dll ]; then \
+		cp $(BIN_DIR)/isiMotor_Pulse.dll isimotor-pulse-client/isimotor_pulse_client/resources/; \
+		echo "  ✓ Copied $(BIN_DIR)/isiMotor_Pulse.dll to client resources"; \
+	elif [ -f isiMotor_Pulse.dll ]; then \
+		cp isiMotor_Pulse.dll isimotor-pulse-client/isimotor_pulse_client/resources/; \
+		echo "  ✓ Copied isiMotor_Pulse.dll to client resources"; \
 	fi
 
 briefcase-wheels:
-	@echo "==> Building local wheels for Briefcase (isimotor-rawudp-client/types aren't on PyPI)..."
-	@rm -rf isimotor-rawudp-manager/.briefcase-wheels
-	@$(UV) build --package isimotor-rawudp-types --wheel -o isimotor-rawudp-manager/.briefcase-wheels --clear
-	@$(UV) build --package isimotor-rawudp-client --wheel -o isimotor-rawudp-manager/.briefcase-wheels
+	@echo "==> Building local wheels for Briefcase (isimotor-pulse-client/types aren't on PyPI)..."
+	@rm -rf isimotor-pulse-manager/.briefcase-wheels
+	@$(UV) build --package isimotor-pulse-types --wheel -o isimotor-pulse-manager/.briefcase-wheels --clear
+	@$(UV) build --package isimotor-pulse-client --wheel -o isimotor-pulse-manager/.briefcase-wheels
 
 package: sync-resources briefcase-wheels
-	@echo "==> Packaging isiMotor-RawUDP-Manager with Briefcase..."
-	@cd isimotor-rawudp-manager && $(UV) run --with briefcase briefcase package --no-input
+	@echo "==> Packaging isiMotor-Pulse-Manager with Briefcase..."
+	@cd isimotor-pulse-manager && $(UV) run --with briefcase briefcase package --no-input
 
 briefcase-dev: briefcase-wheels
-	@echo "==> Running isiMotor-RawUDP-Manager in Briefcase dev mode..."
-	@cd isimotor-rawudp-manager && $(UV) run --with briefcase briefcase dev
+	@echo "==> Running isiMotor-Pulse-Manager in Briefcase dev mode..."
+	@cd isimotor-pulse-manager && $(UV) run --with briefcase briefcase dev
 
 briefcase-build: sync-resources briefcase-wheels
-	@echo "==> Building isiMotor-RawUDP-Manager with Briefcase..."
-	@cd isimotor-rawudp-manager && $(UV) run --with briefcase briefcase build --no-input
+	@echo "==> Building isiMotor-Pulse-Manager with Briefcase..."
+	@cd isimotor-pulse-manager && $(UV) run --with briefcase briefcase build --no-input
 
 standalone-linux: sync-resources
 	@echo "==> Building standalone Linux manager binary with PyInstaller..."
-	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager:isimotor-rawudp-types $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-RawUDP-Manager-x86_64" --add-data "isimotor-rawudp-client/isimotor_rawudp_client/resources:isimotor_rawudp_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client --collect-all isimotor_rawudp_types scripts/entrypoint_manager.py
+	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:isimotor-pulse-types $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-Pulse-Manager-x86_64" --add-data "isimotor-pulse-client/isimotor_pulse_client/resources:isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
 
 standalone-windows: sync-resources
 	@echo "==> Building standalone Windows manager binary with PyInstaller..."
-	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-manager:isimotor-rawudp-types $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_RawUDP_Manager" --add-data "isimotor-rawudp-client/isimotor_rawudp_client/resources;isimotor_rawudp_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_rawudp_manager --collect-all isimotor_rawudp_client --collect-all isimotor_rawudp_types scripts/entrypoint_manager.py
+	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:isimotor-pulse-types $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_Pulse_Manager" --add-data "isimotor-pulse-client/isimotor_pulse_client/resources;isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
 
 install:
-	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-types $(PYTHON) -m isimotor_rawudp_client.install.cli
+	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli
 
 uninstall:
-	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-types $(PYTHON) -m isimotor_rawudp_client.install.cli --uninstall
+	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli --uninstall
 
 status:
-	@PYTHONPATH=isimotor-rawudp-client:isimotor-rawudp-types $(PYTHON) -m isimotor_rawudp_client.install.cli --status
+	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli --status
 
 info:
 	@echo "=================================================================="
@@ -190,7 +190,7 @@ drift: french-drift
 
 # Regenerates the checked-in FlatBuffers bindings from schemas/*.fbs.
 # Requires `flatc` (the FlatBuffers schema compiler, NOT a build-time
-# dependency otherwise — see isimotor-rawudp-plugin/CMakeLists.txt and
+# dependency otherwise — see isimotor-pulse-plugin/CMakeLists.txt and
 # tests/cpp_mock/Makefile, which only vendor the header-only runtime):
 #   • Ubuntu / Debian : sudo apt install flatbuffers-compiler
 #   • Or download a prebuilt binary from the flatbuffers GitHub releases page.
@@ -203,18 +203,18 @@ generate-schemas:
 		echo "" && \
 		exit 1 \
 	)
-	@echo "==> Generating C++ bindings into isimotor-rawudp-plugin/include/generated/..."
-	@flatc --cpp --gen-object-api -o isimotor-rawudp-plugin/include/generated schemas/*.fbs
-	@echo "==> Generating Python bindings into isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated/..."
-	@rm -rf isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated/isimotor
-	@flatc --python -o isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated schemas/*.fbs
-	@touch isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated/__init__.py
-	@touch isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated/isimotor/__init__.py
+	@echo "==> Generating C++ bindings into isimotor-pulse-plugin/include/generated/..."
+	@flatc --cpp --gen-object-api -o isimotor-pulse-plugin/include/generated schemas/*.fbs
+	@echo "==> Generating Python bindings into isimotor-pulse-types/isimotor_pulse_types/fbs_generated/..."
+	@rm -rf isimotor-pulse-types/isimotor_pulse_types/fbs_generated/isimotor
+	@flatc --python -o isimotor-pulse-types/isimotor_pulse_types/fbs_generated schemas/*.fbs
+	@touch isimotor-pulse-types/isimotor_pulse_types/fbs_generated/__init__.py
+	@touch isimotor-pulse-types/isimotor_pulse_types/fbs_generated/isimotor/__init__.py
 	@echo "==> Fixing cross-file imports (flatc emits 'from isimotor.fbs.X import X', which"
-	@echo "    only resolves if isimotor_rawudp_types/fbs_generated/ is put on sys.path;"
+	@echo "    only resolves if isimotor_pulse_types/fbs_generated/ is put on sys.path;"
 	@echo "    rewrite to the fully-qualified package path instead)..."
-	@grep -rl "from isimotor\.fbs\." isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated/ 2>/dev/null | \
-		xargs -r sed -i 's/from isimotor\.fbs\./from isimotor_rawudp_types.fbs_generated.isimotor.fbs./'
+	@grep -rl "from isimotor\.fbs\." isimotor-pulse-types/isimotor_pulse_types/fbs_generated/ 2>/dev/null | \
+		xargs -r sed -i 's/from isimotor\.fbs\./from isimotor_pulse_types.fbs_generated.isimotor.fbs./'
 	@echo "==> Schema generation complete. Review the diff before committing."
 
 clean:

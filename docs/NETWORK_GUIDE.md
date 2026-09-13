@@ -1,6 +1,6 @@
 # 🌐 isiMotor ZeroMQ Network Architecture & Routing Guide
 
-This guide explains how to route **isiMotor-RawUDP-Plugin** telemetry streams across different network topologies using its **ZeroMQ PUB/SUB transport over TCP**: **Local Loopback**, **LAN**, **Multiple Simultaneous Consumers**, and **Public IP / Internet (Remote Pit-Wall / Telemetry Engineers)**.
+This guide explains how to route **isiMotor-Pulse-Plugin** telemetry streams across different network topologies using its **ZeroMQ PUB/SUB transport over TCP**: **Local Loopback**, **LAN**, **Multiple Simultaneous Consumers**, and **Public IP / Internet (Remote Pit-Wall / Telemetry Engineers)**.
 
 ---
 
@@ -47,7 +47,7 @@ For dashboards, overlays, or SimHub-style apps running on the same PC as the gam
 
 ```json
 {
-  "isiMotor_RawUDP": {
+  "isiMotor_Pulse": {
     "TcpHost": "127.0.0.1",
     "TcpBasePort": "5000"
   }
@@ -57,7 +57,7 @@ For dashboards, overlays, or SimHub-style apps running on the same PC as the gam
 Zero further configuration required. Any local Python client just does:
 
 ```python
-from isimotor_rawudp_client import IsiMotorClient
+from isimotor_pulse_client import IsiMotorClient
 
 client = IsiMotorClient(host="127.0.0.1", base_port=5000)
 client.start()
@@ -71,7 +71,7 @@ To let a device elsewhere on the LAN (a tablet, a second PC) connect to the tele
 
 ```json
 {
-  "isiMotor_RawUDP": {
+  "isiMotor_Pulse": {
     "TcpHost": "0.0.0.0",
     "TcpBasePort": "5000"
   }
@@ -95,7 +95,7 @@ Because the plugin's telemetry socket is a ZeroMQ **PUB**, any number of SUB cli
 
 ```json
 {
-  "isiMotor_RawUDP": {
+  "isiMotor_Pulse": {
     "TcpHost": "0.0.0.0",
     "TcpBasePort": "5000"
   }
@@ -122,7 +122,7 @@ The safest and simplest option for a remote pit-wall or coach setup: install [Ta
 
 ```json
 {
-  "isiMotor_RawUDP": {
+  "isiMotor_Pulse": {
     "TcpHost": "0.0.0.0",
     "TcpBasePort": "5000"
   }

@@ -475,7 +475,7 @@ void populate_golden_full_scoring(FullScoringSessionPacket &sess, std::vector<Ve
 }
 
 // TelemInfo (Type 1) is a FlatBuffer now (schemas/telemetry.fbs); mirrors
-// isimotor-rawudp-plugin/src/main.cpp's EncodeWheelFbs()/UpdateTelemetry().
+// isimotor-pulse-plugin/src/main.cpp's EncodeWheelFbs()/UpdateTelemetry().
 flatbuffers::Offset<isimotor::fbs::TelemWheel> encode_telem_wheel_fbs(
         flatbuffers::FlatBufferBuilder &b, const TelemWheelV01 &w) {
     auto lmu = isimotor::fbs::CreateLmuWheel(b, w.mLMUExtension.mCompoundType, w.mLMUExtension.mBrakeWear);
@@ -1205,7 +1205,7 @@ void dump_truth(const std::string &bin_telem_path, const std::string &json_telem
 // plus TrackRules(5)/PitMenu(6) which the mock also exercises for test
 // coverage even though the real plugin does not currently send them). Each
 // type is bound on its own port (basePort + packetType), same scheme as
-// isimotor-rawudp-plugin/src/main.cpp's kOutboundPacketTypes.
+// isimotor-pulse-plugin/src/main.cpp's kOutboundPacketTypes.
 static const unsigned char kMockOutboundPacketTypes[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 static const int kMockMaxPacketType = 10;
 

@@ -1,6 +1,6 @@
 # 🐧 Linux / Proton Telemetry Benchmark & Force Feedback Analysis
 
-This document presents performance metrics and an architectural diagnostic for the **isiMotor-RawUDP-Plugin** running under a **Linux / Steam Proton** environment (tested with *rFactor 2* / *Le Mans Ultimate*).
+This document presents performance metrics and an architectural diagnostic for the **isiMotor-Pulse-Plugin** running under a **Linux / Steam Proton** environment (tested with *rFactor 2* / *Le Mans Ultimate*).
 
 ---
 
@@ -43,7 +43,7 @@ flowchart TD
         FFB --> WineDinput["winebus.sys / dinput8.dll\nFallback keep-alive timer: 125 ms (8 Hz)"]
     end
 
-    subgraph Output["RawUDP Plugin Streams"]
+    subgraph Output["Pulse Plugin Streams"]
         UpdateTelem --> UDPTelem["UDP Type 1 (Physics Telemetry @ 219.5 Hz) ✅"]
         WineDinput --> UDPFFB["UDP Type 9 (Force Feedback @ 8.13 Hz) ⚠️"]
     end

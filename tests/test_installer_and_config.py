@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from isimotor_rawudp_client.install import (
+from isimotor_pulse_client.install import (
     DEFAULT_PLUGIN_VARIABLES,
     configure_game_json,
 )
@@ -50,18 +50,18 @@ class TestInstallerAndConfig(unittest.TestCase):
         game_dir = self.test_dir / "Game"
         game_dir.mkdir(parents=True)
 
-        success = configure_game_json(game_dir, "isiMotor_RawUDP.dll")
+        success = configure_game_json(game_dir, "isiMotor_Pulse.dll")
         self.assertTrue(success)
 
         json_path = game_dir / "UserData" / "player" / "CustomPluginVariables.JSON"
         self.assertTrue(json_path.exists(), "CustomPluginVariables.JSON was not created")
 
         data = json.loads(json_path.read_text(encoding="utf-8"))
-        self.assertIn("isiMotor_RawUDP.dll", data)
-        self.assertNotIn("isiMotor_RawUDP", data)
-        self.assertNotIn("isiMotor-RawUDP", data)
+        self.assertIn("isiMotor_Pulse.dll", data)
+        self.assertNotIn("isiMotor_Pulse", data)
+        self.assertNotIn("isiMotor-Pulse", data)
 
-        entry = data["isiMotor_RawUDP.dll"]
+        entry = data["isiMotor_Pulse.dll"]
         self.assertEqual(entry[" Enabled"], 1)
         self.assertEqual(entry["TcpHost"], "127.0.0.1")
         self.assertEqual(entry["TcpBasePort"], "5000")
@@ -79,7 +79,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         player_dir.mkdir(parents=True)
 
         existing_data = {
-            "isiMotor_RawUDP": {
+            "isiMotor_Pulse": {
                 " Enabled": 1,
                 "TcpHost": "192.168.1.20",  # User customized host
                 "TcpBasePort": "9000",  # User customized to Port 9000
@@ -89,13 +89,13 @@ class TestInstallerAndConfig(unittest.TestCase):
         json_path = player_dir / "CustomPluginVariables.JSON"
         json_path.write_text(json.dumps(existing_data), encoding="utf-8")
 
-        success = configure_game_json(game_dir, "isiMotor_RawUDP.dll")
+        success = configure_game_json(game_dir, "isiMotor_Pulse.dll")
         self.assertTrue(success)
 
         data = json.loads(json_path.read_text(encoding="utf-8"))
-        self.assertIn("isiMotor_RawUDP.dll", data)
-        self.assertNotIn("isiMotor_RawUDP", data)
-        entry = data["isiMotor_RawUDP.dll"]
+        self.assertIn("isiMotor_Pulse.dll", data)
+        self.assertNotIn("isiMotor_Pulse", data)
+        entry = data["isiMotor_Pulse.dll"]
         # Custom values preserved
         self.assertEqual(entry["TcpHost"], "192.168.1.20")
         self.assertEqual(entry["TcpBasePort"], "9000")
@@ -106,12 +106,12 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertEqual(entry["WeatherRate"], "1Hz")
 
     def test_get_configuration_overview_and_extract_rows(self):
-        from isimotor_rawudp_client.install import (
+        from isimotor_pulse_client.install import (
             copy_and_install_dll,
             get_configuration_overview,
             read_plugin_json_variables,
         )
-        from isimotor_rawudp_manager.sniffer import extract_config_rows
+        from isimotor_pulse_manager.sniffer import extract_config_rows
 
         # 1. Test read_plugin_json_variables on non-existent file returns defaults
         non_existent = self.test_dir / "does_not_exist.json"
@@ -122,7 +122,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         # 2. Setup mock game directory and fake source DLL
         game_dir = self.test_dir / "MockGame"
         game_dir.mkdir(parents=True)
-        fake_dll = self.test_dir / "isiMotor_RawUDP.dll"
+        fake_dll = self.test_dir / "isiMotor_Pulse.dll"
         fake_dll.write_bytes(b"MZ_MOCK_DLL_BINARY")
 
         # 3. Test copy_and_install_dll with custom dll and target
@@ -134,7 +134,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertGreaterEqual(len(installed_paths), 1)
 
         # Check files were copied
-        dest_plugin_dll = game_dir / "Plugins" / "isiMotor_RawUDP.dll"
+        dest_plugin_dll = game_dir / "Plugins" / "isiMotor_Pulse.dll"
         self.assertTrue(dest_plugin_dll.exists())
         self.assertEqual(dest_plugin_dll.read_bytes(), b"MZ_MOCK_DLL_BINARY")
 
@@ -161,8 +161,8 @@ class TestInstallerAndConfig(unittest.TestCase):
         self.assertIn("hotreload.architecture", row_keys)
 
     def test_home_summary_renderers_and_app_navigation(self):
-        from isimotor_rawudp_client.install import get_configuration_overview
-        from isimotor_rawudp_manager.sniffer import (
+        from isimotor_pulse_client.install import get_configuration_overview
+        from isimotor_pulse_manager.sniffer import (
             NAV_HOME,
             TAB_TELEM,
             IsiMotorBenchmarkApp,
@@ -200,7 +200,7 @@ class TestInstallerAndConfig(unittest.TestCase):
     def test_app_async_pilot_navigation(self):
         import asyncio
 
-        from isimotor_rawudp_manager.sniffer import (
+        from isimotor_pulse_manager.sniffer import (
             NAV_COMMANDS,
             NAV_EXPLORER,
             NAV_HOME,
@@ -289,7 +289,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         asyncio.run(_run())
 
     def test_write_and_save_plugin_variables(self):
-        from isimotor_rawudp_client.install import (
+        from isimotor_pulse_client.install import (
             DEFAULT_PLUGIN_VARIABLES,
             read_plugin_json_variables,
             save_configuration_to_all_games,
@@ -326,7 +326,7 @@ class TestInstallerAndConfig(unittest.TestCase):
 
     def test_parse_vdf_library_paths(self):
         """Tests parsing modern and legacy Steam libraryfolders.vdf structures."""
-        from isimotor_rawudp_client.install import parse_vdf_library_paths
+        from isimotor_pulse_client.install import parse_vdf_library_paths
 
         steam_root = self.test_dir / "SteamRoot"
         secondary_lib = self.test_dir / "SecondaryLib"
@@ -371,7 +371,7 @@ class TestInstallerAndConfig(unittest.TestCase):
         """Tests that game detection strictly queries libraries registered in libraryfolders.vdf."""
         from unittest.mock import patch
 
-        from isimotor_rawudp_client.install import detect_game_installations
+        from isimotor_pulse_client.install import detect_game_installations
 
         steam_root = self.test_dir / "Steam"
         steam_root.mkdir(parents=True)
@@ -397,7 +397,7 @@ class TestInstallerAndConfig(unittest.TestCase):
 }}'''
         vdf_file.write_text(vdf_content, encoding="utf-8")
 
-        with patch("isimotor_rawudp_client.install.steam.get_steam_vdf_candidate_paths", return_value=[vdf_file]):
+        with patch("isimotor_pulse_client.install.steam.get_steam_vdf_candidate_paths", return_value=[vdf_file]):
             detected = detect_game_installations()
 
             # LMU was in registered Steam library -> detected

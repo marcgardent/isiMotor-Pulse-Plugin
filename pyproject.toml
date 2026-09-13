@@ -1,5 +1,5 @@
 [project]
-name = "isimotor-rawudp-workspace"
+name = "isimotor-pulse-workspace"
 version = "0.6.2"
 description = "High-performance zero-overhead UDP telemetry & scoring plugin for isiMotor (Le Mans Ultimate & rFactor 2) with Python SDK and Textual Manager"
 readme = "README.md"
@@ -10,9 +10,9 @@ dependencies = []
 
 [tool.uv.workspace]
 members = [
-    "isimotor-rawudp-client",
-    "isimotor-rawudp-manager",
-    "isimotor-rawudp-types",
+    "isimotor-pulse-client",
+    "isimotor-pulse-manager",
+    "isimotor-pulse-types",
 ]
 
 [tool.ruff]
@@ -24,9 +24,9 @@ exclude = [
     ".briefcase",
     "build",
     "bin",
-    "isimotor-rawudp-plugin",
+    "isimotor-pulse-plugin",
     "tests/cpp_mock",
-    "isimotor-rawudp-types/isimotor_rawudp_types/fbs_generated",
+    "isimotor-pulse-types/isimotor_pulse_types/fbs_generated",
     "__pycache__",
     "*.egg-info",
     "*.dist-info",
@@ -55,15 +55,15 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["isimotor_rawudp_client", "isimotor_rawudp_manager", "isimotor_rawudp_types", "scripts", "sniffer"]
+known-first-party = ["isimotor_pulse_client", "isimotor_pulse_manager", "isimotor_pulse_types", "scripts", "sniffer"]
 
 [tool.mypy]
 python_version = "3.10"
-mypy_path = "isimotor-rawudp-client:isimotor-rawudp-types"
+mypy_path = "isimotor-pulse-client:isimotor-pulse-types"
 files = [
-    "isimotor-rawudp-client/isimotor_rawudp_client",
-    "isimotor-rawudp-manager/isimotor_rawudp_manager",
-    "isimotor-rawudp-types/isimotor_rawudp_types",
+    "isimotor-pulse-client/isimotor_pulse_client",
+    "isimotor-pulse-manager/isimotor_pulse_manager",
+    "isimotor-pulse-types/isimotor_pulse_types",
     "scripts/bump_version.py",
     "scripts/french_drift.py",
     "scripts/verify_version.py",
@@ -73,23 +73,23 @@ warn_unused_configs = true
 warn_unused_ignores = true
 check_untyped_defs = true
 ignore_missing_imports = true
-exclude = "isimotor_rawudp_types/fbs_generated/"
+exclude = "isimotor_pulse_types/fbs_generated/"
 
 [[tool.mypy.overrides]]
-module = "isimotor_rawudp_types.fbs_generated.*"
+module = "isimotor_pulse_types.fbs_generated.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "isimotor_rawudp_client.*"
+module = "isimotor_pulse_client.*"
 disallow_untyped_defs = true
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = "isimotor_rawudp_types.*"
+module = "isimotor_pulse_types.*"
 disallow_untyped_defs = true
 check_untyped_defs = true
 
 [tool.pytest.ini_options]
-pythonpath = ["isimotor-rawudp-client", "isimotor-rawudp-manager", "isimotor-rawudp-types"]
+pythonpath = ["isimotor-pulse-client", "isimotor-pulse-manager", "isimotor-pulse-types"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

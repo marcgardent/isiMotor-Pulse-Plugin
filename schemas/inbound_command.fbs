@@ -1,4 +1,4 @@
-// isiMotor RawUDP - inbound commands (hardware controls, weather overrides).
+// isiMotor Pulse - inbound commands (hardware controls, weather overrides).
 // Sent grouped on a single ZeroMQ PUB->SUB port (InboundTcpPort): since the
 // port carries more than one command kind, the root table wraps a union so
 // the receiver can tell them apart without any extra framing/header.

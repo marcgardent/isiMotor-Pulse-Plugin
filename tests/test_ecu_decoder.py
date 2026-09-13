@@ -12,8 +12,8 @@ stand in for one here).
 import struct
 import unittest
 
-from isimotor_rawudp_client import EcuState
-from isimotor_rawudp_client._internal.decoder import decode_ecu_state
+from isimotor_pulse_client import EcuState
+from isimotor_pulse_client._internal.decoder import decode_ecu_state
 
 
 class TestEcuDecoder(unittest.TestCase):

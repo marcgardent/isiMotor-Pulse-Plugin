@@ -1,4 +1,4 @@
-// isiMotor RawUDP - ExtendedState (outbound, packet type 8).
+// isiMotor Pulse - ExtendedState (outbound, packet type 8).
 // Published on its own ZeroMQ PUB port (TcpBasePort + 8); the message on
 // that port IS this FlatBuffer, with no outer framing/header.
 namespace isimotor.fbs;

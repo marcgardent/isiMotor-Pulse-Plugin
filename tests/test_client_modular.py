@@ -6,7 +6,7 @@ Tests decoupled components: Codecs, StateStore, EventDispatcher, Transport, and 
 import time
 import unittest
 
-from isimotor_rawudp_client import (
+from isimotor_pulse_client import (
     CompactScoring,
     ExtendedState,
     ForceFeedback,
@@ -17,8 +17,8 @@ from isimotor_rawudp_client import (
     TelemVect3,
     TelemWheel,
 )
-from isimotor_rawudp_client._internal.dispatcher import EventDispatcher
-from isimotor_rawudp_client._internal.state import StateStore
+from isimotor_pulse_client._internal.dispatcher import EventDispatcher
+from isimotor_pulse_client._internal.state import StateStore
 
 
 class TestModularArchitecture(unittest.TestCase):

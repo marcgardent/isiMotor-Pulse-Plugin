@@ -1,4 +1,4 @@
-# 🏎️ isiMotor RawUDP Manager — User Guide
+# 🏎️ isiMotor Pulse Manager — User Guide
 
 > **Version**: 0.6.2  
 > **Supported Simulators**: Le Mans Ultimate (LMU), rFactor 2 (rF2)  
@@ -8,7 +8,7 @@
 
 ## 📖 1. Overview
 
-**isiMotor RawUDP Manager** is a standalone desktop application designed to easily install, configure, inspect, and test the **isiMotor-RawUDP-Plugin** across your simulation games.
+**isiMotor Pulse Manager** is a standalone desktop application designed to easily install, configure, inspect, and test the **isiMotor-Pulse-Plugin** across your simulation games.
 
 ### 🌟 Key Highlights
 - **Portable & Standalone**: Single executable file. No Python environment, external runtimes, or dependencies required.
@@ -21,13 +21,13 @@
 ## 🚀 2. Getting Started
 
 ### Download
-Download the latest standalone executable from the [GitHub Releases](https://github.com/marcgardent/isiMotor-RawUDP-Plugin/releases) page:
-- **Windows**: `isiMotor_RawUDP_Manager.exe`
-- **Linux & Steam Deck**: `isiMotor-RawUDP-Manager-x86_64.AppImage`
+Download the latest standalone executable from the [GitHub Releases](https://github.com/marcgardent/isiMotor-Pulse-Plugin/releases) page:
+- **Windows**: `isiMotor_Pulse_Manager.exe`
+- **Linux & Steam Deck**: `isiMotor-Pulse-Manager-x86_64.AppImage`
 
 ### Launching the Application
-- **Windows**: Double-click `isiMotor_RawUDP_Manager.exe`.
-- **Linux / Steam Deck**: Double-click `isiMotor-RawUDP-Manager-x86_64.AppImage` to open the graphical manager.
+- **Windows**: Double-click `isiMotor_Pulse_Manager.exe`.
+- **Linux / Steam Deck**: Double-click `isiMotor-Pulse-Manager-x86_64.AppImage` to open the graphical manager.
 
 ### Interface Navigation
 
@@ -50,7 +50,7 @@ The Manager features a top navigation bar with 4 dedicated views:
    - Detected game installations for **Le Mans Ultimate** and **rFactor 2** are displayed in the status table.
 3. **One-Click Installation**:
    - Click the **`[ 📦 Copy DLL ]`** button (or press `k`).
-   - The Manager installs the embedded universal `isiMotor_RawUDP.dll` into the `Plugins/` directory of all detected games.
+   - The Manager installs the embedded universal `isiMotor_Pulse.dll` into the `Plugins/` directory of all detected games.
    - It enables external plugins in `<GameRoot>/UserData/player/Settings.JSON` (`"Enable external plugins": true`).
    - It initializes `CustomPluginVariables.JSON` with optimized default settings.
 4. **Configuring Streaming Options**:

@@ -1,15 +1,15 @@
 """
-Unit and SOLID architecture tests for isimotor_rawudp_manager modular refactor.
+Unit and SOLID architecture tests for isimotor_pulse_manager modular refactor.
 """
 
 import unittest
 
-from isimotor_rawudp_client._internal.constants import TELEMINFO_SIZE
-from isimotor_rawudp_manager.constants import (
+from isimotor_pulse_client._internal.constants import TELEMINFO_SIZE
+from isimotor_pulse_manager.constants import (
     PKT_RAW_TELEMETRY,
 )
-from isimotor_rawudp_manager.engine import PacketStats, TelemetryEngine
-from isimotor_rawudp_manager.extractors import (
+from isimotor_pulse_manager.engine import PacketStats, TelemetryEngine
+from isimotor_pulse_manager.extractors import (
     BaseExtractor,
     ConfigExtractor,
     EventExtractor,
@@ -22,11 +22,11 @@ from isimotor_rawudp_manager.extractors import (
     TelemetryExtractor,
     WeatherExtractor,
 )
-from isimotor_rawudp_manager.ui import (
+from isimotor_pulse_manager.ui import (
     format_mode_and_hz_to_rate,
     parse_rate_to_mode_and_hz,
 )
-from isimotor_rawudp_types import (
+from isimotor_pulse_types import (
     CompactScoring,
     ExtendedState,
     ForceFeedback,
@@ -183,8 +183,8 @@ class TestManagerSolidArchitecture(unittest.TestCase):
         self.assertEqual(format_mode_and_hz_to_rate("limited", "120"), "120Hz")
 
     def test_facade_backward_compatibility(self):
-        """Ensures that importing from isimotor_rawudp_manager.sniffer gives identical API."""
-        from isimotor_rawudp_manager import sniffer
+        """Ensures that importing from isimotor_pulse_manager.sniffer gives identical API."""
+        from isimotor_pulse_manager import sniffer
 
         self.assertTrue(hasattr(sniffer, "IsiMotorBenchmarkApp"))
         self.assertTrue(hasattr(sniffer, "TelemetryEngine"))

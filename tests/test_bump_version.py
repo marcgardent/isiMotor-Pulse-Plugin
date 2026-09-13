@@ -45,27 +45,27 @@ class TestBumpVersion(unittest.TestCase):
             root_pyproject.write_text('[project]\nname = "workspace"\nversion = "1.4.0"\n', encoding="utf-8")
 
             # 2. Client pyproject.toml and __init__.py
-            client_dir = tmp_root / "isimotor-rawudp-client" / "isimotor_rawudp_client"
+            client_dir = tmp_root / "isimotor-pulse-client" / "isimotor_pulse_client"
             client_dir.mkdir(parents=True)
-            (tmp_root / "isimotor-rawudp-client" / "pyproject.toml").write_text(
+            (tmp_root / "isimotor-pulse-client" / "pyproject.toml").write_text(
                 '[project]\nname = "client"\nversion = "1.4.0"\n', encoding="utf-8"
             )
             (client_dir / "__init__.py").write_text('__version__ = "1.4.0"\n', encoding="utf-8")
 
             # 3. Manager pyproject.toml and __init__.py
-            manager_dir = tmp_root / "isimotor-rawudp-manager" / "isimotor_rawudp_manager"
+            manager_dir = tmp_root / "isimotor-pulse-manager" / "isimotor_pulse_manager"
             manager_dir.mkdir(parents=True)
-            (tmp_root / "isimotor-rawudp-manager" / "pyproject.toml").write_text(
+            (tmp_root / "isimotor-pulse-manager" / "pyproject.toml").write_text(
                 '[project]\nname = "manager"\nversion = "1.4.0"\n\n[tool.briefcase]\nversion = "1.4.0"\n',
                 encoding="utf-8",
             )
             (manager_dir / "__init__.py").write_text('__version__ = "1.4.0"\n', encoding="utf-8")
 
             # 4. Plugin CMakeLists.txt
-            plugin_dir = tmp_root / "isimotor-rawudp-plugin"
+            plugin_dir = tmp_root / "isimotor-pulse-plugin"
             plugin_dir.mkdir(parents=True)
             (plugin_dir / "CMakeLists.txt").write_text(
-                "project(isiMotor_RawUDP VERSION 1.4.0 LANGUAGES CXX)\n", encoding="utf-8"
+                "project(isiMotor_Pulse VERSION 1.4.0 LANGUAGES CXX)\n", encoding="utf-8"
             )
 
             # 5. USER_NOTICE.md
@@ -77,9 +77,9 @@ class TestBumpVersion(unittest.TestCase):
 
             # Verify files were updated
             self.assertIn(root_pyproject, updated)
-            self.assertIn(tmp_root / "isimotor-rawudp-client" / "pyproject.toml", updated)
+            self.assertIn(tmp_root / "isimotor-pulse-client" / "pyproject.toml", updated)
             self.assertIn(client_dir / "__init__.py", updated)
-            self.assertIn(tmp_root / "isimotor-rawudp-manager" / "pyproject.toml", updated)
+            self.assertIn(tmp_root / "isimotor-pulse-manager" / "pyproject.toml", updated)
             self.assertIn(manager_dir / "__init__.py", updated)
             self.assertIn(plugin_dir / "CMakeLists.txt", updated)
             self.assertIn(user_notice, updated)
@@ -88,12 +88,12 @@ class TestBumpVersion(unittest.TestCase):
             self.assertIn('version = "2.0.0"', root_pyproject.read_text(encoding="utf-8"))
             self.assertIn(
                 'version = "2.0.0"',
-                (tmp_root / "isimotor-rawudp-client" / "pyproject.toml").read_text(encoding="utf-8"),
+                (tmp_root / "isimotor-pulse-client" / "pyproject.toml").read_text(encoding="utf-8"),
             )
             self.assertIn('__version__ = "2.0.0"', (client_dir / "__init__.py").read_text(encoding="utf-8"))
             self.assertIn('__version__ = "2.0.0"', (manager_dir / "__init__.py").read_text(encoding="utf-8"))
             self.assertIn(
-                "project(isiMotor_RawUDP VERSION 2.0.0 LANGUAGES CXX)",
+                "project(isiMotor_Pulse VERSION 2.0.0 LANGUAGES CXX)",
                 (plugin_dir / "CMakeLists.txt").read_text(encoding="utf-8"),
             )
             self.assertIn("> **Version**: 2.0.0", user_notice.read_text(encoding="utf-8"))

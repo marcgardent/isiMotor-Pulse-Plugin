@@ -1,4 +1,4 @@
-// isiMotor RawUDP - FullScoringSession (outbound, packet type 4, ~5Hz).
+// isiMotor Pulse - FullScoringSession (outbound, packet type 4, ~5Hz).
 // Published on its own ZeroMQ PUB port (TcpBasePort + 4); the message on
 // that port IS this FlatBuffer, with no outer framing/header/chunking (a
 // ZeroMQ message is not limited by UDP's MTU, so the old chunk-slicing

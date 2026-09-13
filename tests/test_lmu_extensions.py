@@ -12,14 +12,14 @@ for them here).
 import struct
 import unittest
 
-from isimotor_rawudp_client import (
+from isimotor_pulse_client import (
     LMUCompoundType,
     LMUScoringExtension,
     LMUTelemetryExtension,
     LMUVehicleScoringExtension,
     LMUWheelExtension,
 )
-from isimotor_rawudp_client._internal.decoder import (
+from isimotor_pulse_client._internal.decoder import (
     decode_lmu_scoring_extension,
     decode_lmu_telemetry_extension,
     decode_lmu_vehicle_scoring_extension,

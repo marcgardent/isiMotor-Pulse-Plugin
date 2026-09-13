@@ -9,7 +9,7 @@ keep tests fast and deterministic.
 import time
 import unittest
 
-from isimotor_rawudp_client import (
+from isimotor_pulse_client import (
     DomainSinglePacketClient,
     DomainSinglePacketClientFactory,
     DtoSinglePacketClient,
@@ -18,8 +18,8 @@ from isimotor_rawudp_client import (
     RawSinglePacketClientFactory,
     TelemInfo,
 )
-from isimotor_rawudp_client._internal.constants import PKT_TYPE_COMPACT_SCORING, PKT_TYPE_TELEMETRY
-from isimotor_rawudp_client._internal.decoder import decode_telemetry
+from isimotor_pulse_client._internal.constants import PKT_TYPE_COMPACT_SCORING, PKT_TYPE_TELEMETRY
+from isimotor_pulse_client._internal.decoder import decode_telemetry
 
 
 class TestRawSinglePacketClient(unittest.TestCase):

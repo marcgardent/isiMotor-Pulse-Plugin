@@ -9,8 +9,8 @@ import subprocess
 import time
 import unittest
 
-from isimotor_rawudp_client._internal.transport import ZmqSubscriber
-from isimotor_rawudp_client.client import IsiMotorClient
+from isimotor_pulse_client._internal.transport import ZmqSubscriber
+from isimotor_pulse_client.client import IsiMotorClient
 
 MOCK_BIN = os.path.join(os.path.dirname(__file__), "cpp_mock", "isi_mock_host")
 TEST_PORT = 5066

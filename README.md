@@ -1,12 +1,12 @@
-# isiMotor-RawUDP-Plugin
+# isiMotor-Pulse-Plugin
 
-High-performance, zero-overhead telemetry and scoring plugin for **Le Mans Ultimate** and **rFactor 2** (isiMotor technology), accompanied by its dedicated Python subproject **`isimotor-rawudp-client`** and interactive TUI benchmark tool.
+High-performance, zero-overhead telemetry and scoring plugin for **Le Mans Ultimate** and **rFactor 2** (isiMotor technology), accompanied by its dedicated Python subproject **`isimotor-pulse-client`** and interactive TUI benchmark tool.
 
 * **100% Native Binary Protocol over ZeroMQ**: Zero dynamic memory allocations; a single pinned dependency (libzmq, statically linked) replaces raw sockets with a proper PUB/SUB transport.
 * **Le Mans Ultimate (LMU) & WEC Native Extensions**: Full support for WEC Hypercar Virtual Energy, Live Regeneration (kW), Onboard ECU driver aids (TC, TC Cut/Slip, ABS, Engine Maps, ARBs, active TC/ABS interventions), Tire Compound Enums, Dynamic Track Grip, and Opponent Fuel Fraction.
 * **Live Hot-Reload**: Edit `CustomPluginVariables.JSON` while driving — rates, network target, logging and all flags apply instantly without restarting the simulator (event-based Win32 file watcher, zero polling).
 * **ZeroMQ PUB/SUB over TCP**: The plugin binds a telemetry PUB and an inbound commands SUB socket; any number of local or remote consumers connect to them (local `127.0.0.1`, LAN, or remote via Tailscale/WireGuard).
-* **Python Client Library**: `isimotor-rawudp-client` — ready to use out-of-the-box for custom dashboards, data loggers, and hardware integrations.
+* **Python Client Library**: `isimotor-pulse-client` — ready to use out-of-the-box for custom dashboards, data loggers, and hardware integrations.
 * **Linux / Steam Deck / Proton**: Zero-config — the DLL loads natively, no Wine overrides or launch options required.
 
 ---
@@ -14,12 +14,12 @@ High-performance, zero-overhead telemetry and scoring plugin for **Le Mans Ultim
 ## 📁 Repository Structure
 
 ```
-isiMotor-RawUDP-Plugin/
+isiMotor-Pulse-Plugin/
 ├── Makefile                    # Makefile shortcuts (make cross, make build, make benchmark)
 ├── README.md                   # Plugin documentation
 ├── LICENSE                     # Apache License 2.0
 ├── .gitignore                  # Git ignore rules
-├── isimotor-rawudp-plugin/     # 🏎️ C++ Native Plugin subproject
+├── isimotor-pulse-plugin/     # 🏎️ C++ Native Plugin subproject
 │   ├── CMakeLists.txt          # Standalone C++ build definitions
 │   ├── toolchain.cmake         # MinGW-w64 toolchain definition for Linux
 │   ├── src/                    # C++ Plugin source (main.cpp)
@@ -27,20 +27,20 @@ isiMotor-RawUDP-Plugin/
 │   └── include/                # isiMotor Internals SDK headers (V07) + LMU Extensions
 │       ├── InternalsPlugin.hpp
 │       └── PluginObjects.hpp
-├── isimotor-rawudp-client/     # 🐍 Dedicated Python client subproject
+├── isimotor-pulse-client/     # 🐍 Dedicated Python client subproject
 │   ├── pyproject.toml          # PEP 517/621 Python package configuration
 │   ├── README.md               # Python client documentation
-│   └── isimotor_rawudp_client/ # Package source (models, decoders, client)
+│   └── isimotor_pulse_client/ # Package source (models, decoders, client)
 │       ├── models/             # Domain dataclasses (base isiMotor + .lmu models)
 │       ├── decoder/            # Binary decoders (telemetry, scoring, LMU extensions)
 │       ├── install/            # Public installer API: Steam discovery, DLL install, JSON config
-│       ├── resources/          # Bundled isiMotor_RawUDP.dll shipped with the pip package
+│       ├── resources/          # Bundled isiMotor_Pulse.dll shipped with the pip package
 │       └── client.py           # High-level client facade
-└── isimotor-rawudp-manager/    # 📊 Manager & Telemetry Diagnostics (Textual TUI / Briefcase)
+└── isimotor-pulse-manager/    # 📊 Manager & Telemetry Diagnostics (Textual TUI / Briefcase)
     ├── pyproject.toml          # Package and Briefcase configuration
     ├── README.md
-    └── isimotor_rawudp_manager/
-        ├── ui/                 # Textual modern UI views & widgets (consumes isimotor_rawudp_client.install)
+    └── isimotor_pulse_manager/
+        ├── ui/                 # Textual modern UI views & widgets (consumes isimotor_pulse_client.install)
         ├── engine/             # Realtime statistics & telemetry engine
         └── extractors/         # SOLID data extractors & table renderers
 ```
@@ -49,7 +49,7 @@ isiMotor-RawUDP-Plugin/
 
 ## 📊 Raw Telemetry Explorer & Manager (`Textual` TUI)
 
-An interactive terminal raw data inspector & management app is provided in [`isimotor-rawudp-manager/`](isimotor-rawudp-manager) to explore raw binary packets (`Key`, `Value`, `Description`), filter fields in real-time, copy data to clipboard (JSON/TSV), install DLLs in 1-click, and benchmark stream frequencies (Hz):
+An interactive terminal raw data inspector & management app is provided in [`isimotor-pulse-manager/`](isimotor-pulse-manager) to explore raw binary packets (`Key`, `Value`, `Description`), filter fields in real-time, copy data to clipboard (JSON/TSV), install DLLs in 1-click, and benchmark stream frequencies (Hz):
 
 ```bash
 # Launch live manager / telemetry explorer on default UDP port 5000:
@@ -60,23 +60,23 @@ make benchmark
 
 ---
 
-## 🐍 Python Client Installation (`isimotor-rawudp-client`)
+## 🐍 Python Client Installation (`isimotor-pulse-client`)
 
 The Python subproject can be installed directly from GitHub:
 
 ```bash
 # Install directly via Git URL:
-pip install "git+https://github.com/<username>/isiMotor-RawUDP-Plugin.git#subdirectory=isimotor-rawudp-client"
+pip install "git+https://github.com/<username>/isiMotor-Pulse-Plugin.git#subdirectory=isimotor-pulse-client"
 
 # Or install locally in editable mode:
-cd isiMotor-RawUDP-Plugin/isimotor-rawudp-client
+cd isiMotor-Pulse-Plugin/isimotor-pulse-client
 pip install -e .
 ```
 
 ### Python Quick Start
 
 ```python
-from isimotor_rawudp_client import IsiMotorClient, TelemInfo, FullScoringSession
+from isimotor_pulse_client import IsiMotorClient, TelemInfo, FullScoringSession
 
 client = IsiMotorClient(host="127.0.0.1", base_port=5000)
 
@@ -115,14 +115,14 @@ client.start()
 
 ## 🛠️ Building the Plugin DLL
 
-The project standardizes on **MinGW-w64 cross-compilation**, producing a single universal standalone binary (`isiMotor_RawUDP.dll`) compatible with both native Windows and Linux Proton / Steam Deck:
+The project standardizes on **MinGW-w64 cross-compilation**, producing a single universal standalone binary (`isiMotor_Pulse.dll`) compatible with both native Windows and Linux Proton / Steam Deck:
 
 ```bash
 # Standard build (MinGW-w64 cross-compilation):
 make cross
 # Or alias:
 make build
-# Generates build/isiMotor_RawUDP.dll
+# Generates build/isiMotor_Pulse.dll
 ```
 
 ---
@@ -130,9 +130,9 @@ make build
 ## ⚡ Automated Game Installation & Configuration
 
 ### Option A — Standalone Manager AppImage / Exe (Recommended)
-Download the standalone executable from [GitHub Releases](https://github.com/marcgardent/isiMotor-RawUDP-Plugin/releases) (no Python environment required):
-- **Windows**: Double-click `isiMotor_RawUDP_Manager.exe` -> Open the **`[ 📦 Install ]`** tab and click **`[ 📦 Copy DLL ]`**.
-- **Linux / Steam Deck**: Double-click `isiMotor-RawUDP-Manager-x86_64.AppImage` -> Open the **`[ 📦 Install ]`** tab and click **`[ 📦 Copy DLL ]`**.
+Download the standalone executable from [GitHub Releases](https://github.com/marcgardent/isiMotor-Pulse-Plugin/releases) (no Python environment required):
+- **Windows**: Double-click `isiMotor_Pulse_Manager.exe` -> Open the **`[ 📦 Install ]`** tab and click **`[ 📦 Copy DLL ]`**.
+- **Linux / Steam Deck**: Double-click `isiMotor-Pulse-Manager-x86_64.AppImage` -> Open the **`[ 📦 Install ]`** tab and click **`[ 📦 Copy DLL ]`**.
 
 ### Option B — Developer Makefile
 If working within the cloned repository:
@@ -148,11 +148,11 @@ make install
 make uninstall
 ```
 
-### Option C — `isimotor-rawudp-client` Installer API / CLI
-Steam discovery, DLL install/uninstall and JSON configuration are a public API of the **`isimotor-rawudp-client`** pip package (which also bundles the compiled DLL) — no need to clone the repository:
+### Option C — `isimotor-pulse-client` Installer API / CLI
+Steam discovery, DLL install/uninstall and JSON configuration are a public API of the **`isimotor-pulse-client`** pip package (which also bundles the compiled DLL) — no need to clone the repository:
 
 ```bash
-pip install "git+https://github.com/marcgardent/isiMotor-RawUDP-Plugin.git#subdirectory=isimotor-rawudp-client"
+pip install "git+https://github.com/marcgardent/isiMotor-Pulse-Plugin.git#subdirectory=isimotor-pulse-client"
 
 isi-install --status      # List detected games and installation status
 isi-install               # Install the DLL + configure JSON on all detected games
@@ -162,13 +162,13 @@ isi-install --uninstall   # Remove the DLL from all detected games
 Or programmatically:
 
 ```python
-from isimotor_rawudp_client.install import detect_game_installations, copy_and_install_dll
+from isimotor_pulse_client.install import detect_game_installations, copy_and_install_dll
 
 games = detect_game_installations()
 success, message, installed_paths = copy_and_install_dll()
 ```
 
-> 📖 See [`isimotor-rawudp-client/README.md`](isimotor-rawudp-client/README.md#-installer-api-isimotor_rawudp_clientinstall) for the full Installer API reference.
+> 📖 See [`isimotor-pulse-client/README.md`](isimotor-pulse-client/README.md#-installer-api-isimotor_pulse_clientinstall) for the full Installer API reference.
 
 ---
 
@@ -178,7 +178,7 @@ The plugin uses the standard isiMotor plugin configuration system via `UserData/
 
 ```json
 {
-  "isiMotor_RawUDP": {
+  "isiMotor_Pulse": {
     " Enabled": 1,
     "EnableLogging": "Disabled",
     "TcpHost": "127.0.0.1",
@@ -289,7 +289,7 @@ This command automatically:
 
 ## ⚖️ Alternatives, PRO vs CON
 
-In the rFactor 2 / Le Mans Ultimate ecosystem, several IPC (Inter-Process Communication) and telemetry streaming approaches exist. Here is how **`isiMotor-RawUDP-Plugin`** compares against the main alternatives:
+In the rFactor 2 / Le Mans Ultimate ecosystem, several IPC (Inter-Process Communication) and telemetry streaming approaches exist. Here is how **`isiMotor-Pulse-Plugin`** compares against the main alternatives:
 
 ---
 
@@ -321,16 +321,16 @@ If you prefer human-readable textual payloads, check out [shin0bi's lmu-socket](
 
 ---
 
-### 3. Raw Binary over ZeroMQ (`isiMotor-RawUDP-Plugin`) — *This Project*
+### 3. Raw Binary over ZeroMQ (`isiMotor-Pulse-Plugin`) — *This Project*
 
 Direct native binary memory streaming over a ZeroMQ PUB/SUB transport (TCP).
 
 * **PROs:**
   * **Zero allocations & Sub-microsecond latency:** Direct binary struct transfer in `< 0.001 ms` per tick with 0 heap allocations, and a single pinned, statically-linked dependency (libzmq).
-  * **Universal Cross-Platform (Proton/Wine & Windows):** Single universal binary (`isiMotor_RawUDP.dll`) works out-of-the-box on both native Windows and Linux Proton without any helper bridge or background daemon.
+  * **Universal Cross-Platform (Proton/Wine & Windows):** Single universal binary (`isiMotor_Pulse.dll`) works out-of-the-box on both native Windows and Linux Proton without any helper bridge or background daemon.
   * **Multi-Consumer by Design:** PUB/SUB lets any number of local or remote consumers (tablets, smartphones, secondary rigs) connect to the same telemetry endpoint — no multicast/broadcast configuration to manage.
-  * **Frequency Limiters & Selective Streams:** Independent frequency rate limiters (`off`, `unlimited`, `100Hz`, `60Hz`, `30Hz`, `5Hz`) per channel via `isiMotor_RawUDP.ini` to save Wi-Fi airtime and CPU cycles.
-  * **Turnkey Ecosystem:** Complete with the [`isimotor-rawudp-client`](isimotor-rawudp-client) Python library (`pyzmq`-based) and the [`benchmark/`](benchmark) TUI dashboard.
+  * **Frequency Limiters & Selective Streams:** Independent frequency rate limiters (`off`, `unlimited`, `100Hz`, `60Hz`, `30Hz`, `5Hz`) per channel via `isiMotor_Pulse.ini` to save Wi-Fi airtime and CPU cycles.
+  * **Turnkey Ecosystem:** Complete with the [`isimotor-pulse-client`](isimotor-pulse-client) Python library (`pyzmq`-based) and the [`benchmark/`](benchmark) TUI dashboard.
 * **CONs:**
   * **Binary protocol:** Requires struct unpacking / memory mapping rather than parsing plain text (handled automatically by our Python client or a 1-line C struct cast).
   * **Schema coupling:** Packet binary layout is tied to the isiMotor SDK definitions (though versioned and strictly packed).

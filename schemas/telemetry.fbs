@@ -1,4 +1,4 @@
-// isiMotor RawUDP - TelemInfo (outbound, packet type 1, 60-100Hz+).
+// isiMotor Pulse - TelemInfo (outbound, packet type 1, 60-100Hz+).
 // Published on its own ZeroMQ PUB port (TcpBasePort + 1); the message on
 // that port IS this FlatBuffer, with no outer framing/header/chunking (a
 // ZeroMQ message is not limited by UDP's MTU, so the old chunk-slicing is

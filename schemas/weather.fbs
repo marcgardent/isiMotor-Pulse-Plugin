@@ -1,4 +1,4 @@
-// isiMotor RawUDP - WeatherControl (outbound, packet type 7).
+// isiMotor Pulse - WeatherControl (outbound, packet type 7).
 // Published on its own ZeroMQ PUB port (TcpBasePort + 7); the message on
 // that port IS this FlatBuffer, with no outer framing/header.
 namespace isimotor.fbs;

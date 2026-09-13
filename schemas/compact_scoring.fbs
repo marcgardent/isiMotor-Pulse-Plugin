@@ -1,4 +1,4 @@
-// isiMotor RawUDP - CompactScoring (outbound, packet type 2).
+// isiMotor Pulse - CompactScoring (outbound, packet type 2).
 // Published on its own ZeroMQ PUB port (TcpBasePort + 2); the message on
 // that port IS this FlatBuffer, with no outer framing/header.
 namespace isimotor.fbs;

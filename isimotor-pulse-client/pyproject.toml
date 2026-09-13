@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "isimotor-pulse-client"
+version = "0.6.2"
+description = "High-performance Python client and binary decoder for isiMotor / Le Mans Ultimate / rFactor 2 raw UDP telemetry"
+readme = "README.md"
+authors = [{ name = "Marc GARDENT" }]
+license = "Apache-2.0"
+requires-python = ">=3.8"
+keywords = ["telemetry", "simracing", "lemansultimate", "rfactor2", "isimotor", "udp"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Games/Entertainment :: Simulation",
+]
+dependencies = [
+    "isimotor-pulse-types",
+    "pyzmq>=25.0",
+]
+
+[project.scripts]
+isi-install = "isimotor_pulse_client.install.cli:main"
+isi-installer = "isimotor_pulse_client.install.cli:main"
+
+[tool.uv.sources]
+isimotor-pulse-types = { workspace = true }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["isimotor_pulse_client*"]
+
+[tool.setuptools.package-data]
+isimotor_pulse_client = ["resources/*"]

@@ -1,4 +1,4 @@
-// isiMotor RawUDP - Graphics (outbound, packet type 10).
+// isiMotor Pulse - Graphics (outbound, packet type 10).
 // Published on its own ZeroMQ PUB port (TcpBasePort + 10); the message on
 // that port IS this FlatBuffer, with no outer framing/header.
 namespace isimotor.fbs;
