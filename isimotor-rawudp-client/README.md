@@ -43,6 +43,16 @@ pip install -e .
 
 ## 🐍 Quick Start
 
+> [!NOTE]
+> **Ports:** each outbound packet type is published on its own port,
+> `base_port + packet_type` (packet types `1,2,3,4,7,8,9,10` — so with
+> `base_port=5000` that's `5001-5004` and `5007-5010`; there is no
+> collision at `5005`/`5006`, they're just unused). `inbound_port` (for
+> `send_hw_control`/`send_weather_override`) is a *separate* single port,
+> defaulting to `5101` specifically to stay clear of that range — don't
+> set it to a value inside `base_port + {1,2,3,4,7,8,9,10}` or it will
+> collide with an outbound stream.
+
 ### 1. Callback-Based Multi-Stream Event Handling
 ```python
 from isimotor_rawudp_client import (
@@ -58,7 +68,7 @@ from isimotor_rawudp_client import (
     PitAction,
 )
 
-client = IsiMotorClient(host="0.0.0.0", port=5000, inbound_port=5001)
+client = IsiMotorClient(host="0.0.0.0", base_port=5000)  # inbound_port defaults to 5101
 
 # High-Rate 60-100Hz Vehicle Telemetry
 client.on_telemetry = lambda t: print(
@@ -156,7 +166,7 @@ client.send_weather_override(ambient_temp=30.0, raining=0.75, min_path_wetness=0
 
 ### 4. Synchronous Polling / Context Manager
 ```python
-with IsiMotorClient(port=5000) as client:
+with IsiMotorClient(base_port=5000) as client:
     while True:
         telem = client.get_latest_telemetry()
         rules = client.get_latest_track_rules()

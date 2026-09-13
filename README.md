@@ -78,7 +78,7 @@ pip install -e .
 ```python
 from isimotor_rawudp_client import IsiMotorClient, TelemInfo, FullScoringSession
 
-client = IsiMotorClient(host="127.0.0.1", port=5000)
+client = IsiMotorClient(host="127.0.0.1", base_port=5000)
 
 
 @client.on_telemetry
