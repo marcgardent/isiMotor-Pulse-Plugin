@@ -1,6 +1,6 @@
 [package]
 name = "isimotor-pulse-schemas"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 description = "Rust FlatBuffers bindings for the isiMotor Pulse wire protocol, generated at build time from schemas/*.fbs"
 readme = "README.md"
