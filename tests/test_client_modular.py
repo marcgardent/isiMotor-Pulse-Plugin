@@ -17,8 +17,8 @@ from isimotor_rawudp_client import (
     TelemVect3,
     TelemWheel,
 )
-from isimotor_rawudp_client.dispatcher import EventDispatcher
-from isimotor_rawudp_client.state import StateStore
+from isimotor_rawudp_client._internal.dispatcher import EventDispatcher
+from isimotor_rawudp_client._internal.state import StateStore
 
 
 class TestModularArchitecture(unittest.TestCase):

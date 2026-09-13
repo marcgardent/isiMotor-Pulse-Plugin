@@ -7,7 +7,7 @@ import json
 import os
 import unittest
 
-from isimotor_rawudp_client.decoder import (
+from isimotor_rawudp_client._internal.decoder import (
     decode_compact_scoring,
     decode_extended_state,
     decode_force_feedback,

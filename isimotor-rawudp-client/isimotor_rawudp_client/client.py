@@ -23,17 +23,17 @@ from isimotor_rawudp_types import (
     WeatherControlCommand,
 )
 
-from .decoder.events import decode_system_event
-from .decoder.feedback import decode_force_feedback
-from .decoder.graphics import decode_graphics
-from .decoder.packet_decoder import AnyPacket
-from .decoder.physics import decode_extended_state
-from .decoder.scoring import decode_compact_scoring, decode_full_scoring
-from .decoder.telemetry import decode_telemetry
-from .decoder.weather import decode_weather
-from .dispatcher import EventDispatcher, PacketCallback
-from .state import StateStore
-from .transport import ZmqPublisher, ZmqSubscriber
+from ._internal.decoder.events import decode_system_event
+from ._internal.decoder.feedback import decode_force_feedback
+from ._internal.decoder.graphics import decode_graphics
+from ._internal.decoder.packet_decoder import AnyPacket
+from ._internal.decoder.physics import decode_extended_state
+from ._internal.decoder.scoring import decode_compact_scoring, decode_full_scoring
+from ._internal.decoder.telemetry import decode_telemetry
+from ._internal.decoder.weather import decode_weather
+from ._internal.dispatcher import EventDispatcher, PacketCallback
+from ._internal.state import StateStore
+from ._internal.transport import ZmqPublisher, ZmqSubscriber
 
 
 class IsiMotorClient:

@@ -3,11 +3,11 @@ Factory building a `RawSinglePacketClient` pinned to one domain packet type.
 
 Each method below pins its packet_type once, here, at the call site that
 names the type - never inferred or re-decided at runtime. Unlike
-`SinglePacketClientFactory`, no decoder is involved: the caller gets the raw
+`DomainSinglePacketClientFactory`, no decoder is involved: the caller gets the raw
 message bytes for that one type.
 """
 
-from .constants import (
+from ._internal.constants import (
     PKT_TYPE_COMPACT_SCORING,
     PKT_TYPE_EXTENDED_STATE,
     PKT_TYPE_FORCE_FEEDBACK,
@@ -17,7 +17,7 @@ from .constants import (
     PKT_TYPE_TELEMETRY,
     PKT_TYPE_WEATHER,
 )
-from .raw_single_packet_client import RawSinglePacketClient
+from ._internal.raw_single_packet_client import RawSinglePacketClient
 
 
 class RawSinglePacketClientFactory:

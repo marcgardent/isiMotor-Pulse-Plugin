@@ -1,12 +1,14 @@
 """
-FlatBuffer single-packet-type ZeroMQ client.
+Single-packet-type ZeroMQ client, decoded.
 
-One level up from `RawSinglePacketClient`: instead of handing out raw
-undecoded message bytes, it hands out the parsed FlatBuffer root accessor
-for exactly one packet type - zero-copy, lazy field access, but not yet
-converted into this package's friendly domain dataclass (that conversion is
-`SinglePacketClient[T]`, one level further up). Which root parser to apply
-is pinned once, at construction (by the factory that built it).
+Where `IsiMotorClient` fans in every outbound packet type into one shared
+StateStore/EventDispatcher, `DomainSinglePacketClient[T]` is the "I only care
+about this one stream" counterpart: which packet type and decoder it uses
+are pinned once, at construction (by the factory that built it), so there
+is no packet_type dispatch table, no isinstance, no per-message "which
+packet is this" decision anywhere in this class - it only ever sees one
+type. It is a thin decoding layer on top of `RawSinglePacketClient`, which
+owns the actual ZeroMQ transport.
 """
 
 import threading
@@ -15,39 +17,37 @@ from typing import Any, Generic, TypeVar
 
 from .raw_single_packet_client import RawSinglePacketClient
 
-F = TypeVar("F")
+T = TypeVar("T")
 
 
-class FlatBufferSinglePacketClient(Generic[F]):
+class DomainSinglePacketClient(Generic[T]):
     """
-    Ultra-low latency ZeroMQ client dedicated to exactly one outbound packet
-    type, exposing its parsed FlatBuffer root accessor (no dataclass
-    conversion).
+    Ultra-low latency ZeroMQ client dedicated to exactly one outbound packet type.
 
     Not meant to be constructed directly - use one of the `*_client()`
-    factory functions in `flatbuffer_single_packet_client_factory.py`, each
-    of which pins the packet_type and root parser for one domain type.
+    factory functions in `domain_single_packet_client_factory.py`, each of which
+    pins the packet_type and decoder for one domain type.
     """
 
     def __init__(
         self,
         packet_type: int,
-        root_parser: Callable[[bytes], F],
+        decoder: Callable[[bytes], T | None],
         host: str = "127.0.0.1",
         base_port: int = 5000,
     ) -> None:
-        self._root_parser = root_parser
+        self._decoder = decoder
         self._raw = RawSinglePacketClient(packet_type=packet_type, host=host, base_port=base_port)
         self._raw.on_packet = self._on_raw_packet
         self._lock = threading.Lock()
-        self._latest: F | None = None
+        self._latest: T | None = None
         self._packet_count = 0
         self._last_packet_time = 0.0
-        self.on_packet: Callable[[F], None] | None = None
+        self.on_packet: Callable[[T], None] | None = None
 
     # ── Context Manager Protocol ───────────────────────────────────────────────
 
-    def __enter__(self) -> "FlatBufferSinglePacketClient[F]":
+    def __enter__(self) -> "DomainSinglePacketClient[T]":
         self.start()
         return self
 
@@ -56,7 +56,7 @@ class FlatBufferSinglePacketClient(Generic[F]):
 
     # ── Lifecycle Orchestration ─────────────────────────────────────────────────
 
-    def start(self) -> "FlatBufferSinglePacketClient[F]":
+    def start(self) -> "DomainSinglePacketClient[T]":
         """Starts the background ZeroMQ SUB receiver thread."""
         self._raw.start()
         return self
@@ -73,26 +73,26 @@ class FlatBufferSinglePacketClient(Generic[F]):
     # ── Internal Ingestion Pipeline ─────────────────────────────────────────────
 
     def _on_raw_packet(self, data: bytes) -> None:
-        """Parses one raw message handed up by the underlying RawSinglePacketClient into its FlatBuffer root."""
-        if not data:
+        """Decodes one raw message handed up by the underlying RawSinglePacketClient."""
+        packet = self._decoder(data)
+        if packet is None:
             return
-        root = self._root_parser(data)
 
         with self._lock:
-            self._latest = root
+            self._latest = packet
             self._packet_count += 1
             self._last_packet_time = self._raw.last_packet_time
 
         if self.on_packet:
             try:
-                self.on_packet(root)
+                self.on_packet(packet)
             except Exception:
                 pass
 
     # ── State Accessors (Thread-Safe) ──────────────────────────────────────────
 
-    def get_latest(self) -> F | None:
-        """Returns the most recently received FlatBuffer root accessor thread-safely."""
+    def get_latest(self) -> T | None:
+        """Returns the most recently decoded packet thread-safely."""
         with self._lock:
             return self._latest
 

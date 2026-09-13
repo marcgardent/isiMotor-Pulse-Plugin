@@ -5,7 +5,7 @@ The lowest level of the single-packet-type client family: it hands out the
 raw ZeroMQ message bytes for exactly one packet type, undecoded. Which
 packet type it listens to is pinned once, at construction, so there is no
 packet_type dispatch table and no decoder involved at all here.
-`SinglePacketClient[T]` builds on top of this by adding a decoder; use this
+`DomainSinglePacketClient[T]` builds on top of this by adding a decoder; use this
 class directly when you want the bytes themselves - e.g. to record/replay a
 stream, or to decode with something other than this package's codecs.
 """

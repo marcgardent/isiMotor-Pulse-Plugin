@@ -18,6 +18,8 @@ from isimotor_rawudp_client import (
     LMUTelemetryExtension,
     LMUVehicleScoringExtension,
     LMUWheelExtension,
+)
+from isimotor_rawudp_client._internal.decoder import (
     decode_lmu_scoring_extension,
     decode_lmu_telemetry_extension,
     decode_lmu_vehicle_scoring_extension,

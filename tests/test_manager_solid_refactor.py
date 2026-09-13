@@ -4,7 +4,7 @@ Unit and SOLID architecture tests for isimotor_rawudp_manager modular refactor.
 
 import unittest
 
-from isimotor_rawudp_client.constants import TELEMINFO_SIZE
+from isimotor_rawudp_client._internal.constants import TELEMINFO_SIZE
 from isimotor_rawudp_manager.constants import (
     PKT_RAW_TELEMETRY,
 )

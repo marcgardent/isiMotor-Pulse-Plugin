@@ -5,6 +5,14 @@ High-performance, zero-overhead telemetry & scoring reader for Le Mans Ultimate 
 Installation, Steam detection & JSON configuration helpers live in the
 `isimotor_rawudp_client.install` subpackage (see its `__all__`), and are not
 re-exported here to keep the top-level namespace focused on the telemetry API.
+
+The `decode_*`/`encode_*` codec functions are intentionally NOT re-exported
+here: the public client types (`IsiMotorClient`, `DomainSinglePacketClient`,
+`DtoSinglePacketClient`) already decode for you, and `RawSinglePacketClient`
+hands out undecoded bytes precisely for callers who want to plug in their own
+codec. A caller who really wants this package's own codecs reaches into
+`isimotor_rawudp_client._internal.decoder` explicitly - no compatibility
+guarantee is made for anything imported from there.
 """
 
 from isimotor_rawudp_types import (
@@ -30,40 +38,23 @@ from isimotor_rawudp_types import (
     WeatherControlCommand,
 )
 
+from ._internal.domain_single_packet_client import DomainSinglePacketClient
+from ._internal.dto_single_packet_client import DtoSinglePacketClient
+from ._internal.raw_single_packet_client import RawSinglePacketClient
 from .client import IsiMotorClient
-from .decoder import (
-    decode_compact_scoring,
-    decode_ecu_state,
-    decode_extended_state,
-    decode_force_feedback,
-    decode_full_scoring,
-    decode_graphics,
-    decode_hw_control,
-    decode_lmu_scoring_extension,
-    decode_lmu_telemetry_extension,
-    decode_lmu_vehicle_scoring_extension,
-    decode_lmu_wheel_extension,
-    decode_system_event,
-    decode_telemetry,
-    decode_weather,
-    decode_weather_control,
-    encode_hw_control,
-    encode_weather_control,
-)
-from .flatbuffer_single_packet_client import FlatBufferSinglePacketClient
-from .flatbuffer_single_packet_client_factory import FlatBufferSinglePacketClientFactory
-from .raw_single_packet_client import RawSinglePacketClient
+from .domain_single_packet_client_factory import DomainSinglePacketClientFactory
+from .dto_single_packet_client_factory import DtoSinglePacketClientFactory
 from .raw_single_packet_client_factory import RawSinglePacketClientFactory
-from .single_packet_client import SinglePacketClient
-from .single_packet_client_factory import SinglePacketClientFactory
 
 __version__ = "0.6.2"
 __all__ = [
     "CompactScoring",
+    "DomainSinglePacketClient",
+    "DomainSinglePacketClientFactory",
+    "DtoSinglePacketClient",
+    "DtoSinglePacketClientFactory",
     "EcuState",
     "ExtendedState",
-    "FlatBufferSinglePacketClient",
-    "FlatBufferSinglePacketClientFactory",
     "ForceFeedback",
     "FullScoringSession",
     "Graphics",
@@ -77,8 +68,6 @@ __all__ = [
     "PhysicsOptions",
     "RawSinglePacketClient",
     "RawSinglePacketClientFactory",
-    "SinglePacketClient",
-    "SinglePacketClientFactory",
     "SystemEvent",
     "TelemInfo",
     "TelemVect3",
@@ -86,21 +75,4 @@ __all__ = [
     "VehicleScoring",
     "WeatherControl",
     "WeatherControlCommand",
-    "decode_compact_scoring",
-    "decode_ecu_state",
-    "decode_extended_state",
-    "decode_force_feedback",
-    "decode_full_scoring",
-    "decode_graphics",
-    "decode_hw_control",
-    "decode_lmu_scoring_extension",
-    "decode_lmu_telemetry_extension",
-    "decode_lmu_vehicle_scoring_extension",
-    "decode_lmu_wheel_extension",
-    "decode_system_event",
-    "decode_telemetry",
-    "decode_weather",
-    "decode_weather_control",
-    "encode_hw_control",
-    "encode_weather_control",
 ]

@@ -1,5 +1,5 @@
 """
-Unit tests for the single-packet-type client family (Raw / SinglePacketClient / FlatBuffer).
+Unit tests for the single-packet-type client family (Raw / Domain / Dto).
 
 Mirrors the style of test_client_modular.py: no ZeroMQ mocking, the internal
 ingestion pipeline is exercised directly (bypassing the network thread) to
@@ -10,16 +10,16 @@ import time
 import unittest
 
 from isimotor_rawudp_client import (
-    FlatBufferSinglePacketClient,
-    FlatBufferSinglePacketClientFactory,
+    DomainSinglePacketClient,
+    DomainSinglePacketClientFactory,
+    DtoSinglePacketClient,
+    DtoSinglePacketClientFactory,
     RawSinglePacketClient,
     RawSinglePacketClientFactory,
-    SinglePacketClient,
-    SinglePacketClientFactory,
     TelemInfo,
-    decode_telemetry,
 )
-from isimotor_rawudp_client.constants import PKT_TYPE_COMPACT_SCORING, PKT_TYPE_TELEMETRY
+from isimotor_rawudp_client._internal.constants import PKT_TYPE_COMPACT_SCORING, PKT_TYPE_TELEMETRY
+from isimotor_rawudp_client._internal.decoder import decode_telemetry
 
 
 class TestRawSinglePacketClient(unittest.TestCase):
@@ -58,11 +58,11 @@ class TestRawSinglePacketClient(unittest.TestCase):
         self.assertEqual(scoring_client.packet_type, PKT_TYPE_COMPACT_SCORING)
 
 
-class TestSinglePacketClient(unittest.TestCase):
+class TestDomainSinglePacketClient(unittest.TestCase):
     def test_decodes_via_injected_decoder_and_dispatches(self):
         """A fake decoder stands in for decode_telemetry to avoid building real FlatBuffer bytes."""
         decoded = TelemInfo(slot_id=42)
-        client = SinglePacketClient(packet_type=PKT_TYPE_TELEMETRY, decoder=lambda data: decoded, base_port=5999)
+        client = DomainSinglePacketClient(packet_type=PKT_TYPE_TELEMETRY, decoder=lambda data: decoded, base_port=5999)
         received = []
         client.on_packet = lambda t: received.append(t)
 
@@ -74,7 +74,7 @@ class TestSinglePacketClient(unittest.TestCase):
 
     def test_decoder_returning_none_is_ignored(self):
         """A malformed/undecodable message must not update state or fire the callback."""
-        client = SinglePacketClient(packet_type=PKT_TYPE_TELEMETRY, decoder=lambda data: None, base_port=5999)
+        client = DomainSinglePacketClient(packet_type=PKT_TYPE_TELEMETRY, decoder=lambda data: None, base_port=5999)
         received = []
         client.on_packet = lambda t: received.append(t)
 
@@ -85,21 +85,21 @@ class TestSinglePacketClient(unittest.TestCase):
         self.assertEqual(received, [])
 
     def test_factory_builds_telemetry_client_with_real_decoder(self):
-        client = SinglePacketClientFactory.telemetry(base_port=5999)
+        client = DomainSinglePacketClientFactory.telemetry(base_port=5999)
         self.assertEqual(client._raw.packet_type, PKT_TYPE_TELEMETRY)
         self.assertIs(client._decoder, decode_telemetry)
 
     def test_context_manager_lifecycle(self):
-        with SinglePacketClientFactory.telemetry(base_port=5999) as client:
+        with DomainSinglePacketClientFactory.telemetry(base_port=5999) as client:
             self.assertTrue(client.is_running)
         self.assertFalse(client.is_running)
 
 
-class TestFlatBufferSinglePacketClient(unittest.TestCase):
+class TestDtoSinglePacketClient(unittest.TestCase):
     def test_parses_via_injected_root_parser_and_dispatches(self):
         """A fake root_parser stands in for the real FlatBuffer GetRootAs accessor."""
         parsed_root = object()
-        client = FlatBufferSinglePacketClient(
+        client = DtoSinglePacketClient(
             packet_type=PKT_TYPE_TELEMETRY, root_parser=lambda data: parsed_root, base_port=5999
         )
         received = []
@@ -112,7 +112,7 @@ class TestFlatBufferSinglePacketClient(unittest.TestCase):
         self.assertEqual(received, [parsed_root])
 
     def test_empty_payload_is_ignored(self):
-        client = FlatBufferSinglePacketClient(
+        client = DtoSinglePacketClient(
             packet_type=PKT_TYPE_TELEMETRY, root_parser=lambda data: object(), base_port=5999
         )
         client._on_raw_packet(b"")
@@ -120,11 +120,11 @@ class TestFlatBufferSinglePacketClient(unittest.TestCase):
         self.assertEqual(client.packet_count, 0)
 
     def test_factory_builds_telemetry_client(self):
-        client = FlatBufferSinglePacketClientFactory.telemetry(base_port=5999)
+        client = DtoSinglePacketClientFactory.telemetry(base_port=5999)
         self.assertEqual(client._raw.packet_type, PKT_TYPE_TELEMETRY)
 
     def test_context_manager_lifecycle(self):
-        with FlatBufferSinglePacketClientFactory.telemetry(base_port=5999) as client:
+        with DtoSinglePacketClientFactory.telemetry(base_port=5999) as client:
             self.assertTrue(client.is_running)
         self.assertFalse(client.is_running)
 

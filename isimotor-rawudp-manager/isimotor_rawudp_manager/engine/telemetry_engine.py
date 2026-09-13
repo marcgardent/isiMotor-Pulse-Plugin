@@ -4,7 +4,7 @@ Non-blocking ZeroMQ SUB receiver, chunk reassembly and packet ingestion engine.
 
 import time
 
-from isimotor_rawudp_client.decoder import (
+from isimotor_rawudp_client._internal.decoder import (
     decode_compact_scoring,
     decode_extended_state,
     decode_force_feedback,
@@ -16,7 +16,7 @@ from isimotor_rawudp_client.decoder import (
     encode_hw_control,
     encode_weather_control,
 )
-from isimotor_rawudp_client.transport import ZmqPublisher, ZmqSubscriber
+from isimotor_rawudp_client._internal.transport import ZmqPublisher, ZmqSubscriber
 from isimotor_rawudp_types import (
     CompactScoring,
     ExtendedState,
