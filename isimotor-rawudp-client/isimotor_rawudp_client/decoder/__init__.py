@@ -11,8 +11,6 @@ from ..constants import (
     FULL_SCORING_SESSION_SIZE,
     GRAPHICS_SIZE,
     GRAPHICS_STRUCT,
-    HEADER_SIZE,
-    HEADER_STRUCT,
     HW_CONTROL_COMMAND_SIZE,
     HW_CONTROL_COMMAND_STRUCT,
     PKT_TYPE_COMPACT_SCORING,
@@ -45,18 +43,13 @@ from .ecu import decode_ecu_state
 from .events import decode_system_event
 from .feedback import decode_force_feedback
 from .graphics import decode_graphics
-from .header import decode_header, encode_header
 from .lmu import (
     decode_lmu_scoring_extension,
     decode_lmu_telemetry_extension,
     decode_lmu_vehicle_scoring_extension,
     decode_lmu_wheel_extension,
 )
-from .packet_decoder import (
-    AnyPacket,
-    PacketDecoderRegistry,
-    decode_packet,
-)
+from .packet_decoder import AnyPacket
 from .physics import decode_extended_state
 from .scoring import (
     decode_compact_scoring,
@@ -74,8 +67,6 @@ __all__ = [
     "FULL_SCORING_SESSION_SIZE",
     "GRAPHICS_SIZE",
     "GRAPHICS_STRUCT",
-    "HEADER_SIZE",
-    "HEADER_STRUCT",
     "HW_CONTROL_COMMAND_SIZE",
     "HW_CONTROL_COMMAND_STRUCT",
     "PKT_TYPE_COMPACT_SCORING",
@@ -97,7 +88,6 @@ __all__ = [
     "WEATHER_SIZE",
     "WEATHER_STRUCT",
     "AnyPacket",
-    "PacketDecoderRegistry",
     "_decode_string",
     "decode_compact_scoring",
     "decode_ecu_state",
@@ -105,18 +95,15 @@ __all__ = [
     "decode_force_feedback",
     "decode_full_scoring",
     "decode_graphics",
-    "decode_header",
     "decode_hw_control",
     "decode_lmu_scoring_extension",
     "decode_lmu_telemetry_extension",
     "decode_lmu_vehicle_scoring_extension",
     "decode_lmu_wheel_extension",
-    "decode_packet",
     "decode_system_event",
     "decode_telemetry",
     "decode_weather",
     "decode_weather_control",
-    "encode_header",
     "encode_hw_control",
     "encode_weather_control",
 ]

@@ -3,8 +3,6 @@ Protocol and struct layout constants for isiMotor-RawUDP-Plugin.
 """
 
 # ── Packet Size & Struct Constants ─────────────────────────────────────────────
-HEADER_SIZE = 24
-HEADER_STRUCT = "<4sBBHIdBBH"
 SYSTEM_EVENT_SIZE = 2
 SYSTEM_EVENT_STRUCT = "<BB"
 

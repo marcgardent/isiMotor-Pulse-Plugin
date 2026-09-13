@@ -5,17 +5,14 @@ Validates Python decoder against ground-truth datasets dumped by native C++ isi_
 
 import json
 import os
-import struct
 import unittest
 
 from isimotor_rawudp_client.decoder import (
-    HEADER_SIZE,
     decode_compact_scoring,
     decode_extended_state,
     decode_force_feedback,
     decode_full_scoring,
     decode_graphics,
-    decode_header,
     decode_hw_control,
     decode_system_event,
     decode_telemetry,
@@ -42,7 +39,7 @@ class TestGoldenTruth(unittest.TestCase):
             truth = json.load(f)
 
         # TelemInfo (Type 1) is a FlatBuffer with no header/framing: the
-        # message IS the FlatBuffer, decoded directly (no decode_packet).
+        # message IS the FlatBuffer, decoded directly.
         t = decode_telemetry(data)
         self.assertIsNotNone(t, "Telemetry decode returned None")
 
@@ -109,7 +106,7 @@ class TestGoldenTruth(unittest.TestCase):
             truth = json.load(f)
 
         # CompactScoring (Type 2) is a FlatBuffer with no header/framing: the
-        # message IS the FlatBuffer, decoded directly (no decode_packet).
+        # message IS the FlatBuffer, decoded directly.
         s = decode_compact_scoring(data)
         self.assertIsNotNone(s)
 
@@ -138,7 +135,7 @@ class TestGoldenTruth(unittest.TestCase):
 
         # FullScoringSession (Type 4) is a FlatBuffer with no header/framing,
         # including all its embedded vehicles: the message IS the FlatBuffer,
-        # decoded directly (no decode_packet).
+        # decoded directly.
         fs = decode_full_scoring(data)
         self.assertIsNotNone(fs, "Full scoring decode returned None")
 
@@ -200,7 +197,7 @@ class TestGoldenTruth(unittest.TestCase):
             truth = json.load(f)
 
         # WeatherControl (Type 7) is a FlatBuffer with no header/framing: the
-        # message IS the FlatBuffer, decoded directly (no decode_packet).
+        # message IS the FlatBuffer, decoded directly.
         w = decode_weather(data)
         self.assertIsNotNone(w)
         self.assertAlmostEqual(w.et, truth["et"], places=3)
@@ -222,7 +219,7 @@ class TestGoldenTruth(unittest.TestCase):
             truth = json.load(f)
 
         # ExtendedState (Type 8) is a FlatBuffer with no header/framing: the
-        # message IS the FlatBuffer, decoded directly (no decode_packet).
+        # message IS the FlatBuffer, decoded directly.
         ext = decode_extended_state(data)
         self.assertIsNotNone(ext)
         self.assertEqual(ext.physics.traction_control, truth["traction_control"])
@@ -254,7 +251,7 @@ class TestGoldenTruth(unittest.TestCase):
             truth = json.load(f)
 
         # ForceFeedback (Type 9) is a FlatBuffer with no header/framing: the
-        # message IS the FlatBuffer, decoded directly (no decode_packet).
+        # message IS the FlatBuffer, decoded directly.
         ffb = decode_force_feedback(data)
         self.assertIsNotNone(ffb)
         self.assertAlmostEqual(ffb.force_value, truth["force_value"], places=4)
@@ -273,7 +270,7 @@ class TestGoldenTruth(unittest.TestCase):
             truth = json.load(f)
 
         # Graphics (Type 10) is a FlatBuffer with no header/framing: the
-        # message IS the FlatBuffer, decoded directly (no decode_packet).
+        # message IS the FlatBuffer, decoded directly.
         gfx = decode_graphics(data)
         self.assertIsNotNone(gfx)
         self.assertAlmostEqual(gfx.cam_pos.x, truth["cam_pos"][0], places=2)
@@ -287,30 +284,13 @@ class TestGoldenTruth(unittest.TestCase):
         self.assertEqual(gfx.camera_type_str, "Cockpit")
         self.assertTrue(gfx.is_cockpit_view)
 
-    def test_header_decoding(self):
-        # Pack sample 24-byte header
-        hdr_bytes = struct.pack("<4sBBHIdBBH", b"SIMP", 1, 4, 1200, 105, 1250.5, 0, 2, 3)
-        self.assertEqual(len(hdr_bytes), HEADER_SIZE)
-
-        hdr = decode_header(hdr_bytes)
-        self.assertIsNotNone(hdr)
-        self.assertEqual(hdr.magic, b"SIMP")
-        self.assertEqual(hdr.protocol_version, 1)
-        self.assertEqual(hdr.packet_type, 4)
-        self.assertEqual(hdr.payload_size, 1200)
-        self.assertEqual(hdr.sequence_number, 105)
-        self.assertAlmostEqual(hdr.session_et, 1250.5, places=1)
-        self.assertEqual(hdr.chunk_index, 0)
-        self.assertEqual(hdr.total_chunks, 2)
-        self.assertEqual(hdr.sub_type_or_id, 3)
-
     def test_event_golden_decoding(self):
         bin_path = os.path.join(GOLDEN_DIR, "event_golden.bin")
         with open(bin_path, "rb") as f:
             data = f.read()
 
         # SystemEvent (Type 3) is a FlatBuffer with no header/framing: the
-        # message IS the FlatBuffer, decoded directly (no decode_packet).
+        # message IS the FlatBuffer, decoded directly.
         ev = decode_system_event(data)
         self.assertIsNotNone(ev)
         self.assertEqual(ev.event_id, 1)

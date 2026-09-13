@@ -1,9 +1,8 @@
 """
 Unit Tests for Modular Python Client Architecture (SOLID, SRP, SLAP).
-Tests decoupled components: Codecs, Reassembler, StateStore, EventDispatcher, Transport, and Facade.
+Tests decoupled components: Codecs, StateStore, EventDispatcher, Transport, and Facade.
 """
 
-import struct
 import time
 import unittest
 
@@ -17,11 +16,6 @@ from isimotor_rawudp_client import (
     TelemInfo,
     TelemVect3,
     TelemWheel,
-)
-from isimotor_rawudp_client.decoder import (
-    PacketDecoderRegistry,
-    decode_packet,
-    encode_header,
 )
 from isimotor_rawudp_client.dispatcher import EventDispatcher
 from isimotor_rawudp_client.state import StateStore
@@ -127,31 +121,6 @@ class TestModularArchitecture(unittest.TestCase):
         self.assertEqual(len(received_telemetry), 1)
         self.assertEqual(len(received_any), 2)
         self.assertEqual(len(bus_telemetry), 1)
-
-    def test_packet_decoder_registry_extension(self):
-        """Tests Open/Closed capability of PacketDecoderRegistry for adding new custom decoders."""
-        registry = PacketDecoderRegistry()
-
-        # Define custom dummy packet and decoder
-        custom_pkt_type = 200
-
-        class CustomPacket:
-            def __init__(self, val: int):
-                self.val = val
-
-        def custom_decoder(payload: bytes):
-            val = struct.unpack("<i", payload[:4])[0]
-            return CustomPacket(val)
-
-        registry.register(custom_pkt_type, custom_decoder)
-
-        # Encode standard SIMP packet with custom type
-        hdr = encode_header(packet_type=custom_pkt_type, payload_size=4)
-        data = hdr + struct.pack("<i", 12345)
-
-        res = decode_packet(data, registry=registry)
-        self.assertIsInstance(res, CustomPacket)
-        self.assertEqual(res.val, 12345)
 
     def test_client_facade_composition(self):
         """Tests IsiMotorClient facade high-level composition and getters."""

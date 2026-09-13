@@ -2,9 +2,9 @@
 High-level ZeroMQ Client for receiving isiMotor telemetry, scoring, track rules, pit menu, and weather packets.
 
 Architectural Design:
-- SOLID & SRP: Single-responsibility decoupled sub-components (Transport, Codec, Reassembly, StateStore, EventDispatcher).
+- SOLID & SRP: Single-responsibility decoupled sub-components (Transport, Codec, StateStore, EventDispatcher).
 - SLAP: High-level methods orchestrating workflow at a uniform abstraction level.
-- OCP: Extensible packet decoder registry and event subscription bus.
+- OCP: Extensible event subscription bus.
 """
 
 from collections.abc import Callable
@@ -26,13 +26,12 @@ from isimotor_rawudp_types import (
 from .decoder.events import decode_system_event
 from .decoder.feedback import decode_force_feedback
 from .decoder.graphics import decode_graphics
-from .decoder.packet_decoder import AnyPacket, PacketDecoderRegistry
+from .decoder.packet_decoder import AnyPacket
 from .decoder.physics import decode_extended_state
 from .decoder.scoring import decode_compact_scoring, decode_full_scoring
 from .decoder.telemetry import decode_telemetry
 from .decoder.weather import decode_weather
 from .dispatcher import EventDispatcher, PacketCallback
-from .reassembly import ChunkReassembler
 from .state import StateStore
 from .transport import ZmqPublisher, ZmqSubscriber
 
@@ -93,7 +92,6 @@ class IsiMotorClient:
         base_port: int = 5000,
         inbound_host: str = "127.0.0.1",
         inbound_port: int = 5101,
-        reassembly_timeout: float = 1.0,
     ) -> None:
         self.host = host
         self.base_port = base_port
@@ -106,8 +104,6 @@ class IsiMotorClient:
         # grouped inbound commands SUB socket, so the client connects as PUB.
         self._receiver = ZmqSubscriber(host=self.host, port=self.base_port)
         self._sender = ZmqPublisher(default_host=self.inbound_host, default_port=self.inbound_port)
-        self._decoder_registry = PacketDecoderRegistry()
-        self._reassembler = ChunkReassembler(registry=self._decoder_registry, timeout_seconds=reassembly_timeout)
         self._state = StateStore()
         self._dispatcher = EventDispatcher()
 
@@ -137,31 +133,26 @@ class IsiMotorClient:
         """True if the ZeroMQ background listener thread is active."""
         return self._receiver.is_running
 
-    @property
-    def reassembler(self) -> ChunkReassembler:
-        """Multipart packet chunk reassembler."""
-        return self._reassembler
-
     # ── Internal Ingestion Pipeline (SLAP) ─────────────────────────────────────
 
     def _on_datagram_received(self, packet_type: int, data: bytes, timestamp: float) -> None:
         """
         Coordinates datagram processing at a single level of abstraction:
-        1. Decode a FlatBuffer directly, or reassemble/decode a legacy chunked frame
+        1. Decode the FlatBuffer message
         2. Store latest packet into thread-safe state cache
         3. Dispatch event to registered callbacks
         """
-        packet = self._decode_or_reassemble(packet_type, data, timestamp)
+        packet = self._decode(packet_type, data)
         if packet is not None:
             self._state.update(packet, timestamp)
             self._dispatcher.dispatch(packet)
 
-    def _decode_or_reassemble(self, packet_type: int, data: bytes, timestamp: float) -> AnyPacket | None:
-        """Decodes header-less FlatBuffer types directly; reassembles/decodes legacy chunked frames otherwise."""
+    def _decode(self, packet_type: int, data: bytes) -> AnyPacket | None:
+        """Decodes a header-less FlatBuffer message; returns None for an unregistered packet type."""
         fbs_decoder = _FBS_DECODERS.get(packet_type)
         if fbs_decoder is not None:
             return fbs_decoder(data)
-        return self._reassembler.process(data, timestamp)
+        return None
 
     # ── State Accessors (Thread-Safe) ──────────────────────────────────────────
 
@@ -291,10 +282,6 @@ class IsiMotorClient:
     def unsubscribe(self, packet_cls: type, callback: PacketCallback) -> None:
         """Unsubscribes a callback from a specific packet type."""
         self._dispatcher.unsubscribe(packet_cls, callback)
-
-    def register_decoder(self, packet_type: int, decoder: Callable[[bytes], AnyPacket | None]) -> None:
-        """Registers or overrides a payload decoder for a given packet type."""
-        self._decoder_registry.register(packet_type, decoder)
 
     # ── Property Delegations for Direct Callbacks ──────────────────────────────
 
