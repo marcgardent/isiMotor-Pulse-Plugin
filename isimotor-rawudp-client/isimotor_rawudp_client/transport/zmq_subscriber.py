@@ -15,7 +15,7 @@ the payload.
 
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 import zmq
 
@@ -31,13 +31,20 @@ class ZmqSubscriber:
     """
     Low-latency non-blocking ZeroMQ SUB receiver managing background thread and socket lifecycle.
 
-    Opens one SUB socket per outbound packet type, each connected to
-    ``tcp://{host}:{base_port + packet_type}``.
+    Opens one SUB socket per requested packet type (every outbound type by
+    default, or a smaller fixed set - e.g. just one - passed as
+    `packet_types`), each connected to ``tcp://{host}:{base_port + packet_type}``.
     """
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 5000) -> None:
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 5000,
+        packet_types: Iterable[int] = OUTBOUND_PACKET_TYPES,
+    ) -> None:
         self.host = host
         self.port = port  # Base port; per-type endpoints are base_port + packet_type.
+        self.packet_types = tuple(packet_types)
         self._context: zmq.Context | None = None
         self._sockets: list[tuple[int, zmq.Socket]] = []
         self._poller: zmq.Poller | None = None
@@ -64,7 +71,7 @@ class ZmqSubscriber:
         self._poller = zmq.Poller()
         self._sockets = []
 
-        for packet_type in OUTBOUND_PACKET_TYPES:
+        for packet_type in self.packet_types:
             sock = self._context.socket(zmq.SUB)
             sock.setsockopt(zmq.SUBSCRIBE, b"")
             sock.setsockopt(zmq.LINGER, 0)

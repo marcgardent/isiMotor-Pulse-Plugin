@@ -76,7 +76,7 @@ class TestModularArchitecture(unittest.TestCase):
 
         t = TelemInfo(slot_id=7, engine_rpm=6500.0)
         now = time.time()
-        store.update(t, now)
+        store.update_telemetry(t, now)
 
         self.assertEqual(store.packet_count, 1)
         self.assertEqual(store.last_packet_time, now)
@@ -87,7 +87,7 @@ class TestModularArchitecture(unittest.TestCase):
 
         # Update scoring
         s = CompactScoring(track_name="Spa")
-        store.update(s, now + 0.1)
+        store.update_scoring(s, now + 0.1)
         self.assertEqual(store.packet_count, 2)
         self.assertEqual(store.get_scoring().track_name, "Spa")
         self.assertEqual(store.get_telemetry().slot_id, 7)
@@ -112,12 +112,12 @@ class TestModularArchitecture(unittest.TestCase):
         telem = TelemInfo(slot_id=42)
         scoring = CompactScoring(track_name="Monza")
 
-        dispatcher.dispatch(telem)
+        dispatcher.dispatch_telemetry(telem)
         self.assertEqual(len(received_telemetry), 1)
         self.assertEqual(len(received_any), 1)
         self.assertEqual(len(bus_telemetry), 1)
 
-        dispatcher.dispatch(scoring)
+        dispatcher.dispatch_scoring(scoring)
         self.assertEqual(len(received_telemetry), 1)
         self.assertEqual(len(received_any), 2)
         self.assertEqual(len(bus_telemetry), 1)
@@ -131,8 +131,8 @@ class TestModularArchitecture(unittest.TestCase):
 
         # Simulate receiving a datagram via internal ingestion pipeline (SLAP)
         t = TelemInfo(slot_id=99, engine_rpm=7200.0)
-        client._state.update(t, time.time())
-        client._dispatcher.dispatch(t)
+        client._state.update_telemetry(t, time.time())
+        client._dispatcher.dispatch_telemetry(t)
 
         self.assertEqual(client.get_latest_telemetry().slot_id, 99)
         self.assertEqual(len(received_packets), 1)

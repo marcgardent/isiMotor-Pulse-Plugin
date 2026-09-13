@@ -50,6 +50,8 @@ from .decoder import (
     encode_hw_control,
     encode_weather_control,
 )
+from .single_packet_client import SinglePacketClient
+from .single_packet_client_factory import SinglePacketClientFactory
 
 __version__ = "0.6.2"
 __all__ = [
@@ -67,6 +69,8 @@ __all__ = [
     "LMUVehicleScoringExtension",
     "LMUWheelExtension",
     "PhysicsOptions",
+    "SinglePacketClient",
+    "SinglePacketClientFactory",
     "SystemEvent",
     "TelemInfo",
     "TelemVect3",

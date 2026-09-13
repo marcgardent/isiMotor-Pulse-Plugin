@@ -35,20 +35,6 @@ from .dispatcher import EventDispatcher, PacketCallback
 from .state import StateStore
 from .transport import ZmqPublisher, ZmqSubscriber
 
-# All outbound packet types are published as header-less FlatBuffers,
-# dispatched directly by packet type/socket rather than through the
-# header-based decoder registry (see decoder/fbs_codec.py).
-_FBS_DECODERS: dict[int, Callable[[bytes], AnyPacket | None]] = {
-    1: decode_telemetry,
-    2: decode_compact_scoring,
-    3: decode_system_event,
-    4: decode_full_scoring,
-    7: decode_weather,
-    8: decode_extended_state,
-    9: decode_force_feedback,
-    10: decode_graphics,
-}
-
 
 class IsiMotorClient:
     """
@@ -107,6 +93,21 @@ class IsiMotorClient:
         self._state = StateStore()
         self._dispatcher = EventDispatcher()
 
+        # Which packet type a message is gets decided exactly once, by the
+        # socket it arrived on (see ZmqSubscriber): that same packet_type
+        # then picks one fixed, type-specific handler below - decode, store,
+        # dispatch - with no further inspection of the decoded packet itself.
+        self._handlers: dict[int, Callable[[bytes, float], None]] = {
+            1: self._handle_telemetry,
+            2: self._handle_scoring,
+            3: self._handle_system_event,
+            4: self._handle_full_scoring,
+            7: self._handle_weather,
+            8: self._handle_extended_state,
+            9: self._handle_force_feedback,
+            10: self._handle_graphics,
+        }
+
     # ── Context Manager Protocol ───────────────────────────────────────────────
 
     def __enter__(self) -> "IsiMotorClient":
@@ -136,23 +137,58 @@ class IsiMotorClient:
     # ── Internal Ingestion Pipeline (SLAP) ─────────────────────────────────────
 
     def _on_datagram_received(self, packet_type: int, data: bytes, timestamp: float) -> None:
-        """
-        Coordinates datagram processing at a single level of abstraction:
-        1. Decode the FlatBuffer message
-        2. Store latest packet into thread-safe state cache
-        3. Dispatch event to registered callbacks
-        """
-        packet = self._decode(packet_type, data)
-        if packet is not None:
-            self._state.update(packet, timestamp)
-            self._dispatcher.dispatch(packet)
+        """Looks up the one handler for this packet_type and lets it decode, store and dispatch."""
+        handler = self._handlers.get(packet_type)
+        if handler is not None:
+            handler(data, timestamp)
 
-    def _decode(self, packet_type: int, data: bytes) -> AnyPacket | None:
-        """Decodes a header-less FlatBuffer message; returns None for an unregistered packet type."""
-        fbs_decoder = _FBS_DECODERS.get(packet_type)
-        if fbs_decoder is not None:
-            return fbs_decoder(data)
-        return None
+    def _handle_telemetry(self, data: bytes, timestamp: float) -> None:
+        packet = decode_telemetry(data)
+        if packet is not None:
+            self._state.update_telemetry(packet, timestamp)
+            self._dispatcher.dispatch_telemetry(packet)
+
+    def _handle_scoring(self, data: bytes, timestamp: float) -> None:
+        packet = decode_compact_scoring(data)
+        if packet is not None:
+            self._state.update_scoring(packet, timestamp)
+            self._dispatcher.dispatch_scoring(packet)
+
+    def _handle_full_scoring(self, data: bytes, timestamp: float) -> None:
+        packet = decode_full_scoring(data)
+        if packet is not None:
+            self._state.update_full_scoring(packet, timestamp)
+            self._dispatcher.dispatch_full_scoring(packet)
+
+    def _handle_weather(self, data: bytes, timestamp: float) -> None:
+        packet = decode_weather(data)
+        if packet is not None:
+            self._state.update_weather(packet, timestamp)
+            self._dispatcher.dispatch_weather(packet)
+
+    def _handle_extended_state(self, data: bytes, timestamp: float) -> None:
+        packet = decode_extended_state(data)
+        if packet is not None:
+            self._state.update_extended_state(packet, timestamp)
+            self._dispatcher.dispatch_extended_state(packet)
+
+    def _handle_force_feedback(self, data: bytes, timestamp: float) -> None:
+        packet = decode_force_feedback(data)
+        if packet is not None:
+            self._state.update_force_feedback(packet, timestamp)
+            self._dispatcher.dispatch_force_feedback(packet)
+
+    def _handle_graphics(self, data: bytes, timestamp: float) -> None:
+        packet = decode_graphics(data)
+        if packet is not None:
+            self._state.update_graphics(packet, timestamp)
+            self._dispatcher.dispatch_graphics(packet)
+
+    def _handle_system_event(self, data: bytes, timestamp: float) -> None:
+        packet = decode_system_event(data)
+        if packet is not None:
+            self._state.update_system_event(packet, timestamp)
+            self._dispatcher.dispatch_system_event(packet)
 
     # ── State Accessors (Thread-Safe) ──────────────────────────────────────────
 

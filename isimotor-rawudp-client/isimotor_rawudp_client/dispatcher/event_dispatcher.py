@@ -24,6 +24,11 @@ PacketCallback = Callable[[Any], None]
 class EventDispatcher:
     """
     Manages callback subscriptions and dispatches decoded packets.
+
+    One `dispatch_*` method per domain type: the caller already knows which
+    packet it just decoded, so it is told here once, directly, by calling
+    the matching method - the attribute callback to invoke is never
+    re-decided via an isinstance ladder.
     """
 
     def __init__(self) -> None:
@@ -54,75 +59,65 @@ class EventDispatcher:
         if packet_cls in self._listeners and callback in self._listeners[packet_cls]:
             self._listeners[packet_cls].remove(callback)
 
-    def dispatch(self, packet: Any) -> None:
-        """Dispatches packet to all matching listeners and attribute callbacks."""
+    def _dispatch(self, packet: Any, attribute_callback: PacketCallback | None) -> None:
+        """Shared plumbing: global listener, the one matching attribute callback, dynamic listeners."""
         if packet is None:
             return
 
-        # 1. Global packet listener
         if self.on_packet:
             try:
                 self.on_packet(packet)
             except Exception:
                 pass
 
-        # 2. Attribute-based callbacks
-        if isinstance(packet, TelemInfo) and self.on_telemetry:
+        if attribute_callback:
             try:
-                self.on_telemetry(packet)
-            except Exception:
-                pass
-        elif isinstance(packet, CompactScoring) and self.on_scoring:
-            try:
-                self.on_scoring(packet)
-            except Exception:
-                pass
-        elif isinstance(packet, FullScoringSession) and self.on_full_scoring:
-            try:
-                self.on_full_scoring(packet)
-            except Exception:
-                pass
-        elif isinstance(packet, WeatherControl) and self.on_weather:
-            try:
-                self.on_weather(packet)
-            except Exception:
-                pass
-        elif isinstance(packet, ExtendedState) and self.on_extended_state:
-            try:
-                self.on_extended_state(packet)
-            except Exception:
-                pass
-        elif isinstance(packet, ForceFeedback) and self.on_force_feedback:
-            try:
-                self.on_force_feedback(packet)
-            except Exception:
-                pass
-        elif isinstance(packet, Graphics) and self.on_graphics:
-            try:
-                self.on_graphics(packet)
-            except Exception:
-                pass
-        elif isinstance(packet, SystemEvent) and self.on_system_event:
-            try:
-                self.on_system_event(packet)
-            except Exception:
-                pass
-        elif isinstance(packet, HWControlCommand) and self.on_hw_control:
-            try:
-                self.on_hw_control(packet)
-            except Exception:
-                pass
-        elif isinstance(packet, WeatherControlCommand) and self.on_weather_control:
-            try:
-                self.on_weather_control(packet)
+                attribute_callback(packet)
             except Exception:
                 pass
 
-        # 3. Dynamic type-based listeners
-        pkt_type = type(packet)
-        if pkt_type in self._listeners:
-            for cb in self._listeners[pkt_type]:
-                try:
-                    cb(packet)
-                except Exception:
-                    pass
+        for cb in self._listeners.get(type(packet), ()):
+            try:
+                cb(packet)
+            except Exception:
+                pass
+
+    def dispatch_telemetry(self, packet: TelemInfo) -> None:
+        """Dispatches a decoded TelemInfo frame to its matching listeners."""
+        self._dispatch(packet, self.on_telemetry)
+
+    def dispatch_scoring(self, packet: CompactScoring) -> None:
+        """Dispatches a decoded CompactScoring frame to its matching listeners."""
+        self._dispatch(packet, self.on_scoring)
+
+    def dispatch_full_scoring(self, packet: FullScoringSession) -> None:
+        """Dispatches a decoded FullScoringSession frame to its matching listeners."""
+        self._dispatch(packet, self.on_full_scoring)
+
+    def dispatch_weather(self, packet: WeatherControl) -> None:
+        """Dispatches a decoded WeatherControl frame to its matching listeners."""
+        self._dispatch(packet, self.on_weather)
+
+    def dispatch_extended_state(self, packet: ExtendedState) -> None:
+        """Dispatches a decoded ExtendedState frame to its matching listeners."""
+        self._dispatch(packet, self.on_extended_state)
+
+    def dispatch_force_feedback(self, packet: ForceFeedback) -> None:
+        """Dispatches a decoded ForceFeedback frame to its matching listeners."""
+        self._dispatch(packet, self.on_force_feedback)
+
+    def dispatch_graphics(self, packet: Graphics) -> None:
+        """Dispatches a decoded Graphics frame to its matching listeners."""
+        self._dispatch(packet, self.on_graphics)
+
+    def dispatch_system_event(self, packet: SystemEvent) -> None:
+        """Dispatches a decoded SystemEvent to its matching listeners."""
+        self._dispatch(packet, self.on_system_event)
+
+    def dispatch_hw_control(self, packet: HWControlCommand) -> None:
+        """Dispatches a decoded HWControlCommand to its matching listeners."""
+        self._dispatch(packet, self.on_hw_control)
+
+    def dispatch_weather_control(self, packet: WeatherControlCommand) -> None:
+        """Dispatches a decoded WeatherControlCommand to its matching listeners."""
+        self._dispatch(packet, self.on_weather_control)

@@ -3,7 +3,6 @@ Thread-safe client state and latest telemetry / scoring cache store.
 """
 
 import threading
-from typing import Any
 
 from isimotor_rawudp_types import (
     CompactScoring,
@@ -22,6 +21,11 @@ from isimotor_rawudp_types import (
 class StateStore:
     """
     Thread-safe storage holding the most recently received packet of each domain type.
+
+    One `update_*` method per domain type: the caller already knows which
+    packet it just decoded (that's how it picked the decoder in the first
+    place), so it is told here once, directly, by calling the matching
+    method - never re-inspected or re-decided via isinstance/type lookups.
     """
 
     def __init__(self) -> None:
@@ -39,32 +43,70 @@ class StateStore:
         self._last_packet_time: float = 0.0
         self._packet_count: int = 0
 
-    def update(self, packet: Any, timestamp: float) -> None:
-        """Updates internal cache with a new decoded packet under lock."""
-        with self._lock:
-            self._last_packet_time = timestamp
-            self._packet_count += 1
+    def _touch(self, timestamp: float) -> None:
+        """Bumps the shared bookkeeping fields. Callers hold `self._lock`."""
+        self._last_packet_time = timestamp
+        self._packet_count += 1
 
-            if isinstance(packet, TelemInfo):
-                self._latest_telemetry = packet
-            elif isinstance(packet, CompactScoring):
-                self._latest_scoring = packet
-            elif isinstance(packet, FullScoringSession):
-                self._latest_full_scoring = packet
-            elif isinstance(packet, WeatherControl):
-                self._latest_weather = packet
-            elif isinstance(packet, ExtendedState):
-                self._latest_extended_state = packet
-            elif isinstance(packet, ForceFeedback):
-                self._latest_force_feedback = packet
-            elif isinstance(packet, Graphics):
-                self._latest_graphics = packet
-            elif isinstance(packet, SystemEvent):
-                self._latest_system_event = packet
-            elif isinstance(packet, HWControlCommand):
-                self._latest_hw_control = packet
-            elif isinstance(packet, WeatherControlCommand):
-                self._latest_weather_control = packet
+    def update_telemetry(self, packet: TelemInfo, timestamp: float) -> None:
+        """Records a newly decoded TelemInfo frame thread-safely."""
+        with self._lock:
+            self._latest_telemetry = packet
+            self._touch(timestamp)
+
+    def update_scoring(self, packet: CompactScoring, timestamp: float) -> None:
+        """Records a newly decoded CompactScoring frame thread-safely."""
+        with self._lock:
+            self._latest_scoring = packet
+            self._touch(timestamp)
+
+    def update_full_scoring(self, packet: FullScoringSession, timestamp: float) -> None:
+        """Records a newly decoded FullScoringSession frame thread-safely."""
+        with self._lock:
+            self._latest_full_scoring = packet
+            self._touch(timestamp)
+
+    def update_weather(self, packet: WeatherControl, timestamp: float) -> None:
+        """Records a newly decoded WeatherControl frame thread-safely."""
+        with self._lock:
+            self._latest_weather = packet
+            self._touch(timestamp)
+
+    def update_extended_state(self, packet: ExtendedState, timestamp: float) -> None:
+        """Records a newly decoded ExtendedState frame thread-safely."""
+        with self._lock:
+            self._latest_extended_state = packet
+            self._touch(timestamp)
+
+    def update_force_feedback(self, packet: ForceFeedback, timestamp: float) -> None:
+        """Records a newly decoded ForceFeedback frame thread-safely."""
+        with self._lock:
+            self._latest_force_feedback = packet
+            self._touch(timestamp)
+
+    def update_graphics(self, packet: Graphics, timestamp: float) -> None:
+        """Records a newly decoded Graphics frame thread-safely."""
+        with self._lock:
+            self._latest_graphics = packet
+            self._touch(timestamp)
+
+    def update_system_event(self, packet: SystemEvent, timestamp: float) -> None:
+        """Records a newly decoded SystemEvent thread-safely."""
+        with self._lock:
+            self._latest_system_event = packet
+            self._touch(timestamp)
+
+    def update_hw_control(self, packet: HWControlCommand, timestamp: float) -> None:
+        """Records a newly decoded HWControlCommand thread-safely."""
+        with self._lock:
+            self._latest_hw_control = packet
+            self._touch(timestamp)
+
+    def update_weather_control(self, packet: WeatherControlCommand, timestamp: float) -> None:
+        """Records a newly decoded WeatherControlCommand thread-safely."""
+        with self._lock:
+            self._latest_weather_control = packet
+            self._touch(timestamp)
 
     def get_telemetry(self) -> TelemInfo | None:
         """Returns the most recently received TelemInfo frame thread-safely."""
@@ -132,8 +174,6 @@ class StateStore:
             self._latest_telemetry = None
             self._latest_scoring = None
             self._latest_full_scoring = None
-            self._latest_track_rules = None
-            self._latest_pit_menu = None
             self._latest_weather = None
             self._latest_extended_state = None
             self._latest_force_feedback = None
