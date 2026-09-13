@@ -3,25 +3,46 @@
 // that port IS this FlatBuffer, with no outer framing/header.
 namespace isimotor.fbs;
 
+/// Compact scoring and timing update, updated at 1-5 Hz.
 table CompactScoring {
   track_name: string;
-  session: int32;          // 0=testday, 1-4=practice, 5-8=qual, 9=warmup, 10-13=race
+  /// SessionType: 0=TestDay, 1-4=Practice1-4, 5-8=Qualifying1-4, 9=Warmup,
+  /// 10-13=Race1-4.
+  session: int32;
+  /// Current session elapsed time in seconds.
   current_et: double;
+  /// Total lap/track distance in meters (constant for the session, not the
+  /// player's live progress).
   total_lap_dist: double;
+  /// Session maximum laps.
   max_laps: int32;
+  /// True if currently in active driving mode.
   in_realtime: bool;
+  /// Player completed laps.
   total_laps: int16;
-  sector: int8;             // 0=Sector 3, 1=Sector 1, 2=Sector 2
+  /// SectorId: 0=Sector3, 1=Sector1, 2=Sector2.
+  sector: int8;
+  /// True if inside pit garage.
   in_garage_stall: bool;
-  count_lap_flag: ubyte;    // 0=invalid, 1=lap count only, 2=valid lap & time
+  /// CountLapFlag: 0=Invalid, 1=LapCountOnly, 2=ValidLapAndTime.
+  count_lap_flag: ubyte;
+  /// Current lap sector 1 time (seconds).
   cur_sector1: double;
+  /// Current lap sector 2 cumulative time (S1 + S2).
   cur_sector2: double;
+  /// Last lap sector 1 time.
   last_sector1: double;
+  /// Last lap sector 2 cumulative time.
   last_sector2: double;
+  /// Last lap total time.
   last_lap_time: double;
+  /// Personal best sector 1 time.
   best_sector1: double;
+  /// Personal best sector 2 cumulative time.
   best_sector2: double;
+  /// Personal best lap time.
   best_lap_time: double;
 }
 
 root_type CompactScoring;
+file_identifier "CSCR";

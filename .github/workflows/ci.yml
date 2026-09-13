@@ -71,6 +71,20 @@ jobs:
           test -f build/isiMotor_Pulse.dll
           ls -lh build/isiMotor_Pulse.dll
 
+  schemas-crate-check:
+    name: Rust Schemas Crate Build (isimotor-pulse-schemas)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build isimotor-pulse-schemas (codegen via build.rs)
+        run: |
+          make cargo-check
+
   package-check:
     name: Python Packages Validation
     runs-on: ubuntu-latest
@@ -88,8 +102,8 @@ jobs:
 
       - name: Build Python packages & validate with twine
         run: |
-          uv run --with build python -m build isimotor-pulse-types
+          uv run --with build python -m build binding/python/isimotor-pulse-types
           uv run --with build python -m build isimotor-pulse-client
           uv run --with build python -m build isimotor-pulse-manager
-          uv run --with twine twine check isimotor-pulse-types/dist/* isimotor-pulse-client/dist/* isimotor-pulse-manager/dist/*
+          uv run --with twine twine check binding/python/isimotor-pulse-types/dist/* isimotor-pulse-client/dist/* isimotor-pulse-manager/dist/*
 

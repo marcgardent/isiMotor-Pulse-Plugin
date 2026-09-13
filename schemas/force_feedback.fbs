@@ -3,9 +3,12 @@
 // that port IS this FlatBuffer, with no outer framing/header.
 namespace isimotor.fbs;
 
+/// Ultra-high frequency steering shaft force feedback torque.
 table ForceFeedback {
-  // Steering shaft torque value.
+  /// Steering shaft FFB torque: -1.0 to +1.0 normalized, or raw N.m depending
+  /// on the sim; multiply by 100.0 for a -100% to +100% output percentage.
   force_value: double;
 }
 
 root_type ForceFeedback;
+file_identifier "FFBK";

@@ -1,0 +1,24 @@
+[package]
+name = "isimotor-pulse-schemas"
+version = "0.6.2"
+edition = "2021"
+description = "Rust FlatBuffers bindings for the isiMotor Pulse wire protocol, generated at build time from schemas/*.fbs"
+readme = "README.md"
+license = "Apache-2.0"
+authors = ["Marc GARDENT"]
+repository = "https://github.com/marcgardent/isiMotor-RawUDP-Plugin"
+keywords = ["telemetry", "simracing", "flatbuffers", "isimotor"]
+# Not published to crates.io: consume via a Git dependency (see README.md).
+publish = false
+
+[dependencies]
+# Runtime support for the generated table/union readers & builders.
+planus = "1"
+# The generated code derives serde on some types regardless of feature flags.
+serde = { version = "1", features = ["derive"] }
+
+[build-dependencies]
+# Pure-Rust FlatBuffers schema parser/codegen - no external `flatc` binary
+# needed, so this crate builds out of the box on any machine with just cargo.
+planus-translation = "1"
+planus-codegen = "1"

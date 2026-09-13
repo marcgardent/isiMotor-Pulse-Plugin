@@ -7,86 +7,164 @@ include "graphics.fbs";  // reuses isimotor.fbs.Vec3 (x, y, z doubles)
 
 namespace isimotor.fbs;
 
+/// Le Mans Ultimate-specific global session scoring extensions.
 table LmuScoringSession {
+  /// TrackGripLevel: 0=Default (0.0 grip fraction), 1=Green (0.25), 2=Fast
+  /// (0.50), 3=Optimum (0.75), 4=Rubbered (0.90).
   track_grip_level: ubyte;
+  /// Infraction steps required per penalty point.
   track_limits_steps_per_point: ubyte;
+  /// Step threshold triggering a drive-through / stop-and-go penalty.
   track_limits_steps_per_penalty: ubyte;
+  /// Exact solar simulation time in seconds since midnight (format as
+  /// HH:MM:SS via (t // 3600):((t % 3600) // 60):(t % 60)).
   time_of_day_seconds: float;
 }
 
+/// Le Mans Ultimate-specific per-vehicle scoring extensions.
 table LmuVehicleScoring {
-  fuel_fraction: float;      // 0.0-1.0 (already normalized, unlike the old packed-byte wire format)
+  /// 0.0-1.0 (already normalized, unlike the old packed-byte wire format)
+  fuel_fraction: float;
+  /// Vehicle cumulative track limits cut count.
   track_limits_steps: ubyte;
 }
 
+/// Individual vehicle scoring & timing entry.
 table VehicleScoring {
+  /// Slot ID.
   id: int32;
+  /// Driver name (up to 32 chars).
   driver_name: string;
+  /// Vehicle / livery name (up to 64 chars).
   vehicle_name: string;
+  /// Completed laps.
   total_laps: int16;
+  /// SectorId: 0=Sector3, 1=Sector1, 2=Sector2.
   sector: int8;
+  /// FinishStatus: 0=Running, 1=Finished, 2=DNF, 3=DQ.
   finish_status: int8;
+  /// Distance traveled by this vehicle along the current lap (meters);
+  /// differs per vehicle, unlike FullScoringSession.total_lap_dist.
   vehicle_lap_dist: double;
+  /// Lateral distance from path center (+left, -right).
   path_lateral: double;
+  /// Distance to track edge.
   track_edge: double;
+  /// Personal best sector 1 time.
   best_sector1: double;
+  /// Personal best sector 2 time (cumulative S1+S2).
   best_sector2: double;
+  /// Personal best lap time.
   best_lap_time: double;
+  /// Last lap sector 1 time.
   last_sector1: double;
+  /// Last lap sector 2 time (cumulative S1+S2).
   last_sector2: double;
+  /// Last lap time.
   last_lap_time: double;
+  /// Current lap sector 1 time.
   cur_sector1: double;
+  /// Current lap sector 2 time (cumulative S1+S2).
   cur_sector2: double;
+  /// Pit stop count.
   num_pitstops: int16;
+  /// Outstanding penalties count.
   num_penalties: int16;
+  /// True if local player car.
   is_player: bool;
+  /// VehicleControl: -1=Nobody, 0=Player, 1=AI, 2=Remote, 3=Replay.
   control: int8;
+  /// Pitting / in pit lane.
   in_pits: bool;
+  /// Overall position (1-based).
   place: ubyte;
+  /// Car class (e.g. "Hypercar", "LMP2", "LMGT3").
   vehicle_class: string;
+  /// Time behind the car in the next higher place.
   time_behind_next: double;
+  /// Laps behind the car in the next higher place.
   laps_behind_next: int32;
+  /// Time behind the race leader.
   time_behind_leader: double;
+  /// Laps behind the race leader.
   laps_behind_leader: int32;
+  /// ET when this lap was started.
   lap_start_et: double;
+  /// World position (meters).
   pos: Vec3;
+  /// Local velocity (m/s).
   local_vel: Vec3;
+  /// Local acceleration (m/s^2).
   local_accel: Vec3;
+  /// 3x3 orientation matrix row 0.
   ori_0: Vec3;
+  /// 3x3 orientation matrix row 1.
   ori_1: Vec3;
+  /// 3x3 orientation matrix row 2.
   ori_2: Vec3;
+  /// Rotation (rad/s).
   local_rot: Vec3;
+  /// Rotational acceleration (rad/s^2).
   local_rot_accel: Vec3;
+  /// Headlights state (0=off, 1=on).
   headlights: ubyte;
+  /// PitState: 0=None, 1=Request, 2=Entering, 3=Stopped, 4=Exiting.
   pit_state: ubyte;
   server_scored: ubyte;
   individual_phase: ubyte;
+  /// Qualifying position (1-based).
   qualification: int32;
+  /// Estimated time elapsed in current lap.
   time_into_lap: double;
+  /// Estimated full lap time.
   estimated_lap_time: double;
+  /// Pit stall / team group.
   pit_group: string;
+  /// Flag: 0=Green, 6=Blue (primary flag shown to the vehicle).
   flag: ubyte;
+  /// Taken caution flag.
   under_yellow: bool;
+  /// CountLapFlag: 0=Invalid, 1=LapCountOnly, 2=ValidLapAndTime.
   count_lap_flag: ubyte;
   in_garage_stall: bool;
+  /// Distance of pit stall along lap.
   pit_lap_dist: float;
+  /// Sector 1 time from best overall lap.
   best_lap_sector1: float;
+  /// Sector 2 time from best overall lap.
   best_lap_sector2: float;
   lmu: LmuVehicleScoring;
 }
 
+/// Full multi-car scoring & session timing update: session weather overview,
+/// track conditions, and all active grid vehicles.
 table FullScoringSession {
   track_name: string;
+  /// SessionType: 0=TestDay, 1-4=Practice1-4, 5-8=Qualifying1-4, 9=Warmup,
+  /// 10-13=Race1-4.
   session: int32;
+  /// Current session elapsed time in seconds.
   current_et: double;
+  /// End session time (seconds).
   end_et: double;
+  /// Max session laps.
   max_laps: int32;
+  /// Total lap/track distance in meters (constant for the session, not a
+  /// vehicle's live progress).
   total_lap_dist: double;
+  /// Number of active vehicles in grid.
   num_vehicles: int32;
+  /// GamePhase: 0=Garage, 1=Warmup, 2=GridWalk, 3=Formation, 4=Countdown,
+  /// 5=GreenFlag, 6=FullCourseYellow, 7=SessionStopped, 8=SessionOver.
   game_phase: ubyte;
+  /// YellowFlagState: -1=Invalid, 0=None, 1=Pending, 2=PitClosed,
+  /// 3=PitLeadLap, 4=PitOpen, 5=LastLap, 6=Resume.
   yellow_flag_state: int8;
+  /// Local yellow flag in Sector 3.
   sector_flag_0: int8;
+  /// Local yellow flag in Sector 1.
   sector_flag_1: int8;
+  /// Local yellow flag in Sector 2.
   sector_flag_2: int8;
   start_light: ubyte;
   num_red_lights: ubyte;
@@ -95,7 +173,9 @@ table FullScoringSession {
   plr_file_name: string;
   dark_cloud: double;
   raining: double;
+  /// Celsius.
   ambient_temp: double;
+  /// Celsius.
   track_temp: double;
   wind: Vec3;
   min_path_wetness: double;
@@ -106,3 +186,4 @@ table FullScoringSession {
 }
 
 root_type FullScoringSession;
+file_identifier "FSCR";

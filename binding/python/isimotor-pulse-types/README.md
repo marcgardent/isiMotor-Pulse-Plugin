@@ -5,8 +5,8 @@ Shared, dependency-free dataclasses describing the isiMotor Pulse packet formats
 system events, and the common packet header/vector types).
 
 This package exists so that both
-[`isimotor-pulse-client`](../isimotor-pulse-client) (binary decoder, transport, state
-store) and [`isimotor-pulse-manager`](../isimotor-pulse-manager) (Textual UI, telemetry
+[`isimotor-pulse-client`](../../../isimotor-pulse-client) (binary decoder, transport, state
+store) and [`isimotor-pulse-manager`](../../../isimotor-pulse-manager) (Textual UI, telemetry
 extractors) can depend on the same packet type definitions without either one pulling in
 the other's runtime dependencies.
 

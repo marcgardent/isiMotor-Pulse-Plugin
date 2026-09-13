@@ -41,9 +41,9 @@ class TestVerifyVersion(unittest.TestCase):
         (client_dir / "__init__.py").write_text(f'__version__ = "{version}"\n', encoding="utf-8")
 
         # 2b. Types
-        types_dir = tmp_root / "isimotor-pulse-types" / "isimotor_pulse_types"
+        types_dir = tmp_root / "binding" / "python" / "isimotor-pulse-types" / "isimotor_pulse_types"
         types_dir.mkdir(parents=True, exist_ok=True)
-        (tmp_root / "isimotor-pulse-types" / "pyproject.toml").write_text(
+        (tmp_root / "binding" / "python" / "isimotor-pulse-types" / "pyproject.toml").write_text(
             f'[project]\nname = "types"\nversion = "{version}"\n', encoding="utf-8"
         )
         (types_dir / "__init__.py").write_text(f'__version__ = "{version}"\n', encoding="utf-8")

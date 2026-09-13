@@ -3,9 +3,12 @@
 // that port IS this FlatBuffer, with no outer framing/header.
 namespace isimotor.fbs;
 
+/// System state transition event.
 table SystemEvent {
-  // 1 = EnterRealtime, 2 = ExitRealtime, 3 = StartSession, 4 = EndSession
+  /// SystemEventType: 1=EnterRealtime (entered cockpit/track), 2=ExitRealtime
+  /// (left cockpit/track to UI/monitor), 3=StartSession, 4=EndSession.
   event_type: ubyte;
 }
 
 root_type SystemEvent;
+file_identifier "SEVT";

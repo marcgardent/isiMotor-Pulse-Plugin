@@ -58,7 +58,7 @@ def encode_system_event_fbs(event_type: int) -> bytes:
     _SystemEventFB.Start(builder)
     _SystemEventFB.AddEventType(builder, event_type)
     root = _SystemEventFB.End(builder)
-    builder.Finish(root)
+    builder.Finish(root, b"SEVT")
     return bytes(builder.Output())
 
 
@@ -76,7 +76,7 @@ def encode_force_feedback_fbs(force_value: float) -> bytes:
     _ForceFeedbackFB.Start(builder)
     _ForceFeedbackFB.AddForceValue(builder, force_value)
     root = _ForceFeedbackFB.End(builder)
-    builder.Finish(root)
+    builder.Finish(root, b"FFBK")
     return bytes(builder.Output())
 
 
@@ -94,7 +94,7 @@ def encode_hw_control_fbs(control_name: str, control_value: float = 1.0, duratio
     _InboundCommandFB.AddPayloadType(builder, _CommandPayload.CommandPayload.HWControlCommand)
     _InboundCommandFB.AddPayload(builder, hw_offset)
     root = _InboundCommandFB.End(builder)
-    builder.Finish(root)
+    builder.Finish(root, b"ICMD")
     return bytes(builder.Output())
 
 
@@ -125,7 +125,7 @@ def encode_weather_control_fbs(
     _InboundCommandFB.AddPayloadType(builder, _CommandPayload.CommandPayload.WeatherControlCommand)
     _InboundCommandFB.AddPayload(builder, wc_offset)
     root = _InboundCommandFB.End(builder)
-    builder.Finish(root)
+    builder.Finish(root, b"ICMD")
     return bytes(builder.Output())
 
 
@@ -217,7 +217,7 @@ def encode_compact_scoring_fbs(fields: dict) -> bytes:
     _CompactScoringFB.AddBestSector2(builder, fields["best_sector2"])
     _CompactScoringFB.AddBestLapTime(builder, fields["best_lap_time"])
     root = _CompactScoringFB.End(builder)
-    builder.Finish(root)
+    builder.Finish(root, b"CSCR")
     return bytes(builder.Output())
 
 
@@ -260,7 +260,7 @@ def encode_weather_fbs(fields: dict) -> bytes:
     _WeatherControlFB.AddWindMaxSpeed(builder, fields["wind_max_speed"])
     _WeatherControlFB.AddApplyCloudinessInstantly(builder, fields["apply_cloudiness_instantly"])
     root = _WeatherControlFB.End(builder)
-    builder.Finish(root)
+    builder.Finish(root, b"WTHR")
     return bytes(builder.Output())
 
 
@@ -351,7 +351,7 @@ def encode_extended_state_fbs(fields: dict) -> bytes:
     _ExtendedStateFB.AddSession(builder, fields["session"])
     _ExtendedStateFB.AddCurrentPitSpeedLimit(builder, fields["current_pit_speed_limit"])
     root = _ExtendedStateFB.End(builder)
-    builder.Finish(root)
+    builder.Finish(root, b"EXST")
     return bytes(builder.Output())
 
 
@@ -400,7 +400,7 @@ def encode_graphics_fbs(fields: dict) -> bytes:
     _GraphicsFB.AddSlotId(builder, fields["slot_id"])
     _GraphicsFB.AddCameraType(builder, fields["camera_type"])
     root = _GraphicsFB.End(builder)
-    builder.Finish(root)
+    builder.Finish(root, b"GRFX")
     return bytes(builder.Output())
 
 

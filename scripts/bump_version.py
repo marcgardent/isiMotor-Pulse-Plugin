@@ -96,13 +96,13 @@ def bump_all_files(root: Path, new_version: str) -> list[Path]:
     if update_file(client_init, r'(?m)^__version__\s*=\s*"[^"]+"', f'__version__ = "{new_version}"'):
         updated_files.append(client_init)
 
-    # 3b. isimotor-pulse-types/pyproject.toml
-    types_pyproject = root / "isimotor-pulse-types" / "pyproject.toml"
+    # 3b. binding/python/isimotor-pulse-types/pyproject.toml
+    types_pyproject = root / "binding" / "python" / "isimotor-pulse-types" / "pyproject.toml"
     if update_file(types_pyproject, r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"', count=1):
         updated_files.append(types_pyproject)
 
-    # 3c. isimotor-pulse-types/isimotor_pulse_types/__init__.py
-    types_init = root / "isimotor-pulse-types" / "isimotor_pulse_types" / "__init__.py"
+    # 3c. binding/python/isimotor-pulse-types/isimotor_pulse_types/__init__.py
+    types_init = root / "binding" / "python" / "isimotor-pulse-types" / "isimotor_pulse_types" / "__init__.py"
     if update_file(types_init, r'(?m)^__version__\s*=\s*"[^"]+"', f'__version__ = "{new_version}"'):
         updated_files.append(types_init)
 

@@ -789,7 +789,7 @@ public:
         if (!initialized || !config.enableSystemEvents || !pubBound[3]) return;
         fbSystemEventBuilder.Clear();
         auto root = isimotor::fbs::CreateSystemEvent(fbSystemEventBuilder, eventType);
-        fbSystemEventBuilder.Finish(root);
+        fbSystemEventBuilder.Finish(root, "SEVT");
         SendFlatBuffer(3, fbSystemEventBuilder);
     }
 
@@ -991,7 +991,7 @@ public:
         auto root = isimotor::fbs::CreateExtendedState(
             fbExtendedStateBuilder, physics, maxImpactMagnitude, accumulatedImpactMagnitude,
             inRealtimeFC, sessionStarted, currentSession, currentPitSpeedLimit);
-        fbExtendedStateBuilder.Finish(root);
+        fbExtendedStateBuilder.Finish(root, "EXST");
         SendFlatBuffer(8, fbExtendedStateBuilder);
     }
 
@@ -1152,7 +1152,7 @@ public:
             p2gOffset, info.mPhysicalSteeringWheelRange, info.mBatteryChargeFraction,
             info.mElectricBoostMotorTorque, info.mElectricBoostMotorRPM, info.mElectricBoostMotorTemperature,
             info.mElectricBoostWaterTemperature, info.mElectricBoostMotorState, lmu, wheelsVec);
-        b.Finish(root);
+        b.Finish(root, "TELE");
         SendFlatBuffer(1, b);
     }
 
@@ -1279,7 +1279,7 @@ public:
                 info.mMaxLaps, info.mInRealtime, static_cast<int16_t>(totalLaps), sector, inGarageStall,
                 countLapFlag, curSector1, curSector2, lastSector1, lastSector2, lastLapTime,
                 bestSector1, bestSector2, bestLapTime);
-            fbCompactScoringBuilder.Finish(root);
+            fbCompactScoringBuilder.Finish(root, "CSCR");
             SendFlatBuffer(2, fbCompactScoringBuilder);
         }
 
@@ -1317,7 +1317,7 @@ public:
                 info.mNumRedLights, info.mInRealtime, playerName, plrFileName, info.mDarkCloud, info.mRaining,
                 info.mAmbientTemp, info.mTrackTemp, &wind, info.mMinPathWetness, info.mMaxPathWetness,
                 info.mAvgPathWetness, lmu, vehiclesVec);
-            b.Finish(root);
+            b.Finish(root, "FSCR");
             SendFlatBuffer(4, b);
         }
     }
@@ -1380,7 +1380,7 @@ public:
         auto root = isimotor::fbs::CreateWeatherControl(
             fbWeatherBuilder, info.mET, rainingOffset, info.mCloudiness,
             info.mAmbientTempK, info.mWindMaxSpeed, info.mApplyCloudinessInstantly);
-        fbWeatherBuilder.Finish(root);
+        fbWeatherBuilder.Finish(root, "WTHR");
         SendFlatBuffer(7, fbWeatherBuilder);
     }
 
@@ -1421,7 +1421,7 @@ public:
 
         fbForceFeedbackBuilder.Clear();
         auto root = isimotor::fbs::CreateForceFeedback(fbForceFeedbackBuilder, forceValue);
-        fbForceFeedbackBuilder.Finish(root);
+        fbForceFeedbackBuilder.Finish(root, "FFBK");
         SendFlatBuffer(9, fbForceFeedbackBuilder);
         return false; // Return false so game's native FFB calculation is not overridden
     }
@@ -1441,7 +1441,7 @@ public:
         auto root = isimotor::fbs::CreateGraphics(
             fbGraphicsBuilder, &camPos, &camOri0, &camOri1, &camOri2,
             info.mAmbientRed, info.mAmbientGreen, info.mAmbientBlue, info.mID, info.mCameraType);
-        fbGraphicsBuilder.Finish(root);
+        fbGraphicsBuilder.Finish(root, "GRFX");
         SendFlatBuffer(10, fbGraphicsBuilder);
     }
 };

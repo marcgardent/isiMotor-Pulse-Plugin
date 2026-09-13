@@ -12,7 +12,7 @@ dependencies = []
 members = [
     "isimotor-pulse-client",
     "isimotor-pulse-manager",
-    "isimotor-pulse-types",
+    "binding/python/isimotor-pulse-types",
 ]
 
 [tool.ruff]
@@ -26,7 +26,7 @@ exclude = [
     "bin",
     "isimotor-pulse-plugin",
     "tests/cpp_mock",
-    "isimotor-pulse-types/isimotor_pulse_types/fbs_generated",
+    "binding/python/isimotor-pulse-types/isimotor_pulse_types/fbs_generated",
     "__pycache__",
     "*.egg-info",
     "*.dist-info",
@@ -59,11 +59,11 @@ known-first-party = ["isimotor_pulse_client", "isimotor_pulse_manager", "isimoto
 
 [tool.mypy]
 python_version = "3.10"
-mypy_path = "isimotor-pulse-client:isimotor-pulse-types"
+mypy_path = "isimotor-pulse-client:binding/python/isimotor-pulse-types"
 files = [
     "isimotor-pulse-client/isimotor_pulse_client",
     "isimotor-pulse-manager/isimotor_pulse_manager",
-    "isimotor-pulse-types/isimotor_pulse_types",
+    "binding/python/isimotor-pulse-types/isimotor_pulse_types",
     "scripts/bump_version.py",
     "scripts/french_drift.py",
     "scripts/verify_version.py",
@@ -90,6 +90,6 @@ disallow_untyped_defs = true
 check_untyped_defs = true
 
 [tool.pytest.ini_options]
-pythonpath = ["isimotor-pulse-client", "isimotor-pulse-manager", "isimotor-pulse-types"]
+pythonpath = ["isimotor-pulse-client", "isimotor-pulse-manager", "binding/python/isimotor-pulse-types"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

@@ -38,3 +38,7 @@ htmlcov/
 *.swp
 *~
 .DS_Store
+
+# Rust (binding/rust/isimotor-pulse-schemas)
+binding/rust/isimotor-pulse-schemas/target/
+binding/rust/isimotor-pulse-schemas/Cargo.lock

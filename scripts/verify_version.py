@@ -54,13 +54,13 @@ def collect_file_versions(root: Path) -> dict[str, str | None]:
     )
 
     # 3b. Types pyproject.toml
-    types_pyproject = root / "isimotor-pulse-types" / "pyproject.toml"
-    versions["isimotor-pulse-types/pyproject.toml"] = extract_regex_first_group(
+    types_pyproject = root / "binding" / "python" / "isimotor-pulse-types" / "pyproject.toml"
+    versions["binding/python/isimotor-pulse-types/pyproject.toml"] = extract_regex_first_group(
         types_pyproject, r'(?m)^version\s*=\s*"([^"]+)"'
     )
 
     # 3c. Types __init__.py
-    types_init = root / "isimotor-pulse-types" / "isimotor_pulse_types" / "__init__.py"
+    types_init = root / "binding" / "python" / "isimotor-pulse-types" / "isimotor_pulse_types" / "__init__.py"
     versions["isimotor_pulse_types/__init__.py"] = extract_regex_first_group(
         types_init, r'(?m)^__version__\s*=\s*"([^"]+)"'
     )

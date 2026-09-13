@@ -1,4 +1,4 @@
-.PHONY: help all build cross test benchmark install uninstall status info clean lint format format-check typecheck check version bump verify-version check-version french-drift drift generate-schemas briefcase-wheels
+.PHONY: help all build cross test benchmark install uninstall status info clean lint format format-check typecheck check version bump verify-version check-version french-drift drift generate-schemas package-schemas cargo-check briefcase-wheels
 
 BUILD_DIR = build
 BIN_DIR   = bin
@@ -40,6 +40,8 @@ help:
 	@echo "  make french-drift   - Scan codebase for French language drift keywords"
 	@echo "  make drift          - Alias for 'make french-drift'"
 	@echo "  make generate-schemas - Regenerate C++/Python code from schemas/*.fbs (requires flatc)"
+	@echo "  make package-schemas - Package raw schemas/*.fbs into build/isimotor-pulse-schemas.tar.gz"
+	@echo "  make cargo-check    - Build isimotor-pulse-schemas (Rust crate, codegen via build.rs)"
 	@echo "  make clean          - Remove build and bin directories"
 	@echo "=================================================================="
 
@@ -69,9 +71,9 @@ test:
 	@make -C tests/cpp_mock --silent
 	@./tests/cpp_mock/isi_mock_host --dump-truth tests/golden
 	@if command -v $(UV) >/dev/null 2>&1; then \
-		PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:isimotor-pulse-types $(UV) run --with textual --with rich python -m unittest discover -s tests -p "test_*.py" -v; \
+		PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --with textual --with rich python -m unittest discover -s tests -p "test_*.py" -v; \
 	else \
-		PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:isimotor-pulse-types $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v; \
+		PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v; \
 	fi
 
 cross:
@@ -133,20 +135,20 @@ briefcase-build: sync-resources briefcase-wheels
 
 standalone-linux: sync-resources
 	@echo "==> Building standalone Linux manager binary with PyInstaller..."
-	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:isimotor-pulse-types $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-Pulse-Manager-x86_64" --add-data "isimotor-pulse-client/isimotor_pulse_client/resources:isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
+	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor-Pulse-Manager-x86_64" --add-data "isimotor-pulse-client/isimotor_pulse_client/resources:isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
 
 standalone-windows: sync-resources
 	@echo "==> Building standalone Windows manager binary with PyInstaller..."
-	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:isimotor-pulse-types $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_Pulse_Manager" --add-data "isimotor-pulse-client/isimotor_pulse_client/resources;isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
+	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --with pyinstaller --with textual --with rich pyinstaller --onefile --clean --name "isiMotor_Pulse_Manager" --add-data "isimotor-pulse-client/isimotor_pulse_client/resources;isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
 
 install:
-	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli
+	@PYTHONPATH=isimotor-pulse-client:binding/python/isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli
 
 uninstall:
-	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli --uninstall
+	@PYTHONPATH=isimotor-pulse-client:binding/python/isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli --uninstall
 
 status:
-	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli --status
+	@PYTHONPATH=isimotor-pulse-client:binding/python/isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli --status
 
 info:
 	@echo "=================================================================="
@@ -203,19 +205,30 @@ generate-schemas:
 		echo "" && \
 		exit 1 \
 	)
-	@echo "==> Generating C++ bindings into isimotor-pulse-plugin/include/generated/..."
-	@flatc --cpp --gen-object-api -o isimotor-pulse-plugin/include/generated schemas/*.fbs
-	@echo "==> Generating Python bindings into isimotor-pulse-types/isimotor_pulse_types/fbs_generated/..."
-	@rm -rf isimotor-pulse-types/isimotor_pulse_types/fbs_generated/isimotor
-	@flatc --python -o isimotor-pulse-types/isimotor_pulse_types/fbs_generated schemas/*.fbs
-	@touch isimotor-pulse-types/isimotor_pulse_types/fbs_generated/__init__.py
-	@touch isimotor-pulse-types/isimotor_pulse_types/fbs_generated/isimotor/__init__.py
+	@echo "==> Generating C++ bindings into binding/cpp/isimotor-pulse-schemas/include/..."
+	@flatc --cpp --gen-object-api -o binding/cpp/isimotor-pulse-schemas/include schemas/*.fbs
+	@echo "==> Generating Python bindings into binding/python/isimotor-pulse-types/isimotor_pulse_types/fbs_generated/..."
+	@rm -rf binding/python/isimotor-pulse-types/isimotor_pulse_types/fbs_generated/isimotor
+	@flatc --python -o binding/python/isimotor-pulse-types/isimotor_pulse_types/fbs_generated schemas/*.fbs
+	@touch binding/python/isimotor-pulse-types/isimotor_pulse_types/fbs_generated/__init__.py
+	@touch binding/python/isimotor-pulse-types/isimotor_pulse_types/fbs_generated/isimotor/__init__.py
 	@echo "==> Fixing cross-file imports (flatc emits 'from isimotor.fbs.X import X', which"
 	@echo "    only resolves if isimotor_pulse_types/fbs_generated/ is put on sys.path;"
 	@echo "    rewrite to the fully-qualified package path instead)..."
-	@grep -rl "from isimotor\.fbs\." isimotor-pulse-types/isimotor_pulse_types/fbs_generated/ 2>/dev/null | \
+	@grep -rl "from isimotor\.fbs\." binding/python/isimotor-pulse-types/isimotor_pulse_types/fbs_generated/ 2>/dev/null | \
 		xargs -r sed -i 's/from isimotor\.fbs\./from isimotor_pulse_types.fbs_generated.isimotor.fbs./'
 	@echo "==> Schema generation complete. Review the diff before committing."
+	@echo "    (binding/{rust,cpp}/isimotor-pulse-schemas/fbs/*.fbs are symlinks into schemas/ - nothing to sync there)"
+
+package-schemas:
+	@echo "==> Packaging raw schemas/*.fbs into $(BUILD_DIR)/isimotor-pulse-schemas.tar.gz..."
+	@mkdir -p $(BUILD_DIR)
+	@tar -czf $(BUILD_DIR)/isimotor-pulse-schemas.tar.gz -C schemas .
+	@echo "==> Wrote $(BUILD_DIR)/isimotor-pulse-schemas.tar.gz"
+
+cargo-check:
+	@echo "==> Building isimotor-pulse-schemas (Rust crate, codegen via build.rs)..."
+	@cd binding/rust/isimotor-pulse-schemas && cargo build
 
 clean:
 	@echo "==> Cleaning build artifacts..."

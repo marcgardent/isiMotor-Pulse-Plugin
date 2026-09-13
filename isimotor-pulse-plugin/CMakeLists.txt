@@ -68,9 +68,9 @@ FetchContent_MakeAvailable(libzmq cppzmq)
 
 # --- FlatBuffers (message payload serialization) ---
 # Header-only C++ runtime; the flatc compiler is NOT needed at build time,
-# since the *_generated.h headers in include/generated/ are already checked
-# into the repo (regenerate them with `make generate-schemas` after editing
-# a .fbs file under schemas/).
+# since the *_generated.h headers are already checked into the repo under
+# ../binding/cpp/isimotor-pulse-schemas/include/ (regenerate them with
+# `make generate-schemas` after editing a .fbs file under schemas/).
 set(FLATBUFFERS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(FLATBUFFERS_BUILD_FLATC OFF CACHE BOOL "" FORCE)
 set(FLATBUFFERS_BUILD_FLATHASH OFF CACHE BOOL "" FORCE)
@@ -95,7 +95,7 @@ set(SOURCES
 # --- Shared Library (DLL) ---
 add_library(isiMotor_Pulse SHARED ${SOURCES})
 
-target_include_directories(isiMotor_Pulse PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/include/generated)
+target_include_directories(isiMotor_Pulse PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../binding/cpp/isimotor-pulse-schemas/include)
 target_link_libraries(isiMotor_Pulse PRIVATE libzmq-static cppzmq flatbuffers)
 
 if(WIN32)
