@@ -1,0 +1,22 @@
+[package]
+name = "zmq-bench"
+version = "0.1.0"
+edition = "2021"
+description = "Standalone Rust benchmark measuring Hz and jitter per ZeroMQ PUB port for the isiMotor Pulse transport."
+
+[[bin]]
+name = "zmq-bench"
+path = "src/main.rs"
+
+[dependencies]
+# Pure-Rust ZeroMQ implementation: no libzmq system dependency needed, so
+# this tool builds out of the box on any machine with just cargo (same
+# rationale as isimotor-pulse-schemas using planus instead of flatc).
+zeromq = { version = "0.6", default-features = false, features = ["tokio-runtime", "tcp-transport"] }
+tokio = { version = "1", features = ["rt", "macros", "time", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
