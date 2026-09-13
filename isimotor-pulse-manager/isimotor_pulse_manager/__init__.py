@@ -2,7 +2,7 @@
 isiMotor-Pulse-Manager — Telemetry Diagnostics, Stream Inspector & Plugin Installer.
 """
 
-__version__ = "0.6.2"
+__version__ = "1.0.0"
 
 from isimotor_pulse_client.install import (
     DEFAULT_PLUGIN_VARIABLES,
