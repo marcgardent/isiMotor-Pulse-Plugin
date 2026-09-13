@@ -50,6 +50,10 @@ from .decoder import (
     encode_hw_control,
     encode_weather_control,
 )
+from .flatbuffer_single_packet_client import FlatBufferSinglePacketClient
+from .flatbuffer_single_packet_client_factory import FlatBufferSinglePacketClientFactory
+from .raw_single_packet_client import RawSinglePacketClient
+from .raw_single_packet_client_factory import RawSinglePacketClientFactory
 from .single_packet_client import SinglePacketClient
 from .single_packet_client_factory import SinglePacketClientFactory
 
@@ -58,6 +62,8 @@ __all__ = [
     "CompactScoring",
     "EcuState",
     "ExtendedState",
+    "FlatBufferSinglePacketClient",
+    "FlatBufferSinglePacketClientFactory",
     "ForceFeedback",
     "FullScoringSession",
     "Graphics",
@@ -69,6 +75,8 @@ __all__ = [
     "LMUVehicleScoringExtension",
     "LMUWheelExtension",
     "PhysicsOptions",
+    "RawSinglePacketClient",
+    "RawSinglePacketClientFactory",
     "SinglePacketClient",
     "SinglePacketClientFactory",
     "SystemEvent",
