@@ -327,7 +327,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "isimotor-pulse-types", editable = "isimotor-pulse-types" },
+    { name = "isimotor-pulse-types", editable = "binding/python/isimotor-pulse-types" },
     { name = "pyzmq", specifier = ">=25.0" },
 ]
 
@@ -352,7 +352,7 @@ dependencies = [
 requires-dist = [
     { name = "flatbuffers", specifier = ">=23.5.26" },
     { name = "isimotor-pulse-client", editable = "isimotor-pulse-client" },
-    { name = "isimotor-pulse-types", editable = "isimotor-pulse-types" },
+    { name = "isimotor-pulse-types", editable = "binding/python/isimotor-pulse-types" },
     { name = "pyzmq", specifier = ">=25.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "textual", specifier = ">=0.50.0" },
@@ -361,7 +361,7 @@ requires-dist = [
 [[package]]
 name = "isimotor-pulse-types"
 version = "0.6.2"
-source = { editable = "isimotor-pulse-types" }
+source = { editable = "binding/python/isimotor-pulse-types" }
 dependencies = [
     { name = "flatbuffers" },
 ]
