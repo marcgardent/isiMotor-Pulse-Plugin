@@ -1,6 +1,6 @@
 [project]
 name = "isimotor-pulse-workspace"
-version = "1.0.2"
+version = "1.0.3"
 description = "High-performance zero-overhead UDP telemetry & scoring plugin for isiMotor (Le Mans Ultimate & rFactor 2) with Python SDK and Textual Manager"
 readme = "README.md"
 authors = [{ name = "Marc GARDENT" }]
