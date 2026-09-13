@@ -186,6 +186,23 @@ jobs:
             echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Download Built DLL
+        uses: actions/download-artifact@v4
+        with:
+          name: release-universal-dll
+          path: staging/
+
+      - name: Sync DLL into Client Package Resources
+        # isimotor_pulse_client.install.cli deploys this DLL into the game's Plugins
+        # folder, and isimotor-pulse-client/pyproject.toml's package-data packages
+        # whatever is under resources/* into the wheel - without this step the
+        # published wheel silently ships with no DLL at all (pre-existing bug,
+        # present since the very first release: package-python never synced it,
+        # unlike build-manager-windows/linux which always have).
+        run: |
+          mkdir -p isimotor-pulse-client/isimotor_pulse_client/resources
+          cp staging/isiMotor_Pulse.dll isimotor-pulse-client/isimotor_pulse_client/resources/
+
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:
