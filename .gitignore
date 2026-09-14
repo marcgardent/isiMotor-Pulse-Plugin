@@ -42,3 +42,11 @@ htmlcov/
 # Rust (binding/rust/isimotor-pulse-schemas)
 binding/rust/isimotor-pulse-schemas/target/
 binding/rust/isimotor-pulse-schemas/Cargo.lock
+
+# Rust (binding/rust/isimotor-pulse-installer)
+binding/rust/isimotor-pulse-installer/target/
+binding/rust/isimotor-pulse-installer/Cargo.lock
+
+# Rust (binding/rust/isimotor-pulse-client)
+binding/rust/isimotor-pulse-client/target/
+binding/rust/isimotor-pulse-client/Cargo.lock

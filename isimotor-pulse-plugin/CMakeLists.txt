@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(isiMotor_Pulse VERSION 1.0.3 LANGUAGES CXX)
+project(isiMotor_Pulse VERSION 1.1.0 LANGUAGES CXX)
 
 # libzmq's own CMakeLists still declares an old cmake_minimum_required();
 # newer CMake refuses that outright unless a policy floor is set here.

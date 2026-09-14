@@ -135,6 +135,15 @@ def bump_all_files(root: Path, new_version: str) -> list[Path]:
     if update_file(rust_schemas_cargo, r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"', count=1):
         updated_files.append(rust_schemas_cargo)
 
+    # 7c. binding/rust/isimotor-pulse-installer/Cargo.toml
+    #
+    # This crate's version doubles as the plugin release tag it downloads
+    # by default (COMPATIBLE_PLUGIN_TAG = "v<version>" in src/release.rs),
+    # so it MUST be bumped in lockstep with every plugin release tag.
+    rust_installer_cargo = root / "binding" / "rust" / "isimotor-pulse-installer" / "Cargo.toml"
+    if update_file(rust_installer_cargo, r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"', count=1):
+        updated_files.append(rust_installer_cargo)
+
     # 8. Update uv.lock if uv is available
     uv_bin = shutil.which("uv")
     if uv_bin:

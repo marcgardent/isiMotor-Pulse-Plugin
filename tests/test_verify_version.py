@@ -75,6 +75,13 @@ class TestVerifyVersion(unittest.TestCase):
             f'[package]\nname = "isimotor-pulse-schemas"\nversion = "{version}"\n', encoding="utf-8"
         )
 
+        # 7. binding/rust/isimotor-pulse-installer/Cargo.toml
+        rust_installer_dir = tmp_root / "binding" / "rust" / "isimotor-pulse-installer"
+        rust_installer_dir.mkdir(parents=True, exist_ok=True)
+        (rust_installer_dir / "Cargo.toml").write_text(
+            f'[package]\nname = "isimotor-pulse-installer"\nversion = "{version}"\n', encoding="utf-8"
+        )
+
     def test_verify_synchronized_workspace(self) -> None:
         """Tests that a fully synchronized workspace passes verification."""
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -84,7 +91,7 @@ class TestVerifyVersion(unittest.TestCase):
             is_valid, resolved, file_versions = verify_versions(tmp_root)
             self.assertTrue(is_valid)
             self.assertEqual(resolved, "1.5.0")
-            self.assertEqual(len(file_versions), 11)
+            self.assertEqual(len(file_versions), 12)
             for v in file_versions.values():
                 self.assertIn(v, ["1.5.0", "1.5.0"])
 

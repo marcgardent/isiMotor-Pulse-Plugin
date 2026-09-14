@@ -88,10 +88,28 @@ cross:
 		echo "" && \
 		exit 1 \
 	)
+	@which ninja >/dev/null 2>&1 || ( \
+		echo "" && \
+		echo "❌ Error: Ninja build tool not found." && \
+		echo "   Install it for a much faster build:" && \
+		echo "     • Ubuntu / Debian : sudo apt update && sudo apt install -y ninja-build" && \
+		echo "     • Fedora          : sudo dnf install ninja-build" && \
+		echo "     • Arch Linux      : sudo pacman -S ninja" && \
+		echo "" && \
+		exit 1 \
+	)
 	@echo "==> Cross-compiling standard isiMotor_Pulse.dll with MinGW..."
 	@mkdir -p $(BUILD_DIR)
-	cmake -S isimotor-pulse-plugin -B $(BUILD_DIR) -DCMAKE_TOOLCHAIN_FILE=$(CURDIR)/isimotor-pulse-plugin/toolchain.cmake -DCMAKE_BUILD_TYPE=Release
-	cmake --build $(BUILD_DIR) --config Release
+	@if [ -f $(BUILD_DIR)/CMakeCache.txt ] && ! grep -q '^CMAKE_GENERATOR:INTERNAL=Ninja$$' $(BUILD_DIR)/CMakeCache.txt; then \
+		echo "==> Existing $(BUILD_DIR) was configured with a different generator; wiping it to switch to Ninja..."; \
+		rm -rf $(BUILD_DIR); \
+		mkdir -p $(BUILD_DIR); \
+	fi
+	cmake -S isimotor-pulse-plugin -B $(BUILD_DIR) -G Ninja \
+		-DCMAKE_TOOLCHAIN_FILE=$(CURDIR)/isimotor-pulse-plugin/toolchain.cmake \
+		-DCMAKE_BUILD_TYPE=Release \
+		$(if $(shell command -v ccache 2>/dev/null),-DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache,)
+	cmake --build $(BUILD_DIR) --config Release --parallel
 	@echo "==> Build complete: $(BUILD_DIR)/isiMotor_Pulse.dll"
 
 build: cross

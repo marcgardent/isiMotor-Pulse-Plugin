@@ -103,6 +103,12 @@ def collect_file_versions(root: Path) -> dict[str, str | None]:
         rust_schemas_cargo, r'(?m)^version\s*=\s*"([^"]+)"'
     )
 
+    # 10. binding/rust/isimotor-pulse-installer/Cargo.toml
+    rust_installer_cargo = root / "binding" / "rust" / "isimotor-pulse-installer" / "Cargo.toml"
+    versions["binding/rust/isimotor-pulse-installer/Cargo.toml"] = extract_regex_first_group(
+        rust_installer_cargo, r'(?m)^version\s*=\s*"([^"]+)"'
+    )
+
     return versions
 
 

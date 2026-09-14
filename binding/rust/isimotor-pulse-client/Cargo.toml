@@ -1,0 +1,29 @@
+[package]
+name = "isimotor-pulse-client"
+version = "0.1.0"
+edition = "2021"
+description = "Typed ZeroMQ clients for the isiMotor Pulse wire protocol - one dedicated client per outbound packet type, decoding straight into the isimotor-pulse-schemas FlatBuffer types."
+readme = "README.md"
+license = "Apache-2.0"
+authors = ["Marc GARDENT"]
+repository = "https://github.com/marcgardent/isiMotor-RawUDP-Plugin"
+keywords = ["telemetry", "simracing", "flatbuffers", "isimotor", "zeromq"]
+# Not published to crates.io: consume via a Git dependency, same as isimotor-pulse-schemas.
+publish = false
+
+[dependencies]
+# Same-repo dependency on the generated FlatBuffer bindings. When consuming
+# this crate standalone (out-of-tree, via a Git dependency on this repo),
+# this path resolves relative to the checked-out repo, so it keeps working.
+isimotor-pulse-schemas = { path = "../isimotor-pulse-schemas" }
+# Runtime support for decoding into the generated table/union readers
+# (ReadAsRoot, Builder, etc.) - same version as isimotor-pulse-schemas.
+planus = "1"
+# Pure-Rust ZeroMQ implementation, matching tools/zmq-bench: no libzmq
+# system dependency needed.
+zeromq = { version = "0.6", default-features = false, features = ["tokio-runtime", "tcp-transport"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time"] }
+thiserror = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time", "test-util"] }

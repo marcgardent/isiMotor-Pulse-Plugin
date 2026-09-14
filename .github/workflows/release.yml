@@ -60,11 +60,22 @@ jobs:
       - name: Install MinGW-w64 Toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y mingw-w64 cmake ninja-build
+          sudo apt-get install -y mingw-w64 cmake ninja-build ccache
+
+      # See ci.yml's equivalent step: libzmq + flatbuffers are vendored via
+      # FetchContent and rebuilt from source on every clean checkout.
+      - name: Cache ccache (libzmq/flatbuffers compiled objects)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-mingw-${{ hashFiles('isimotor-pulse-plugin/CMakeLists.txt') }}
+          restore-keys: |
+            ccache-mingw-
 
       - name: Build Universal isiMotor_Pulse.dll
         run: |
           make cross
+          ccache -s
 
       - name: Verify Built DLL
         run: |
@@ -426,6 +437,37 @@ jobs:
           ```
 
           👉 **Crate Source & Usage**: [binding/rust/isimotor-pulse-schemas/README.md](${REPO_URL}/blob/${TAG}/binding/rust/isimotor-pulse-schemas/README.md)
+
+          ---
+
+          #### 🦀 Rust Installer (`isimotor-pulse-installer`)
+
+          Steam game detection (Le Mans Ultimate / rFactor 2), `CustomPluginVariables.JSON` /
+          `Settings.JSON` writer, and a GitHub Releases-based installer/uninstaller for the
+          plugin DLL. Not published as a release asset - consumed as a Git dependency pinned
+          to this tag:
+
+          ```toml
+          [dependencies]
+          isimotor-pulse-installer = { git = "${REPO_URL}", tag = "${TAG}" }
+          ```
+
+          👉 **Crate Source & Usage**: [binding/rust/isimotor-pulse-installer/README.md](${REPO_URL}/blob/${TAG}/binding/rust/isimotor-pulse-installer/README.md)
+
+          ---
+
+          #### 🦀 Rust ZeroMQ Client (`isimotor-pulse-client`)
+
+          One dedicated, typed client per outbound packet (`TelemInfoClient`, `SystemEventClient`,
+          `ForceFeedbackClient`, ...), decoding FlatBuffer payloads via `isimotor-pulse-schemas`.
+          Not published as a release asset - consumed as a Git dependency pinned to this tag:
+
+          ```toml
+          [dependencies]
+          isimotor-pulse-client = { git = "${REPO_URL}", tag = "${TAG}" }
+          ```
+
+          👉 **Crate Source & Usage**: [binding/rust/isimotor-pulse-client/README.md](${REPO_URL}/blob/${TAG}/binding/rust/isimotor-pulse-client/README.md)
 
           ---
 

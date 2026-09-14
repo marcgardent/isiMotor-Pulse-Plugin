@@ -1,0 +1,27 @@
+[package]
+name = "isimotor-pulse-installer"
+version = "1.1.0"
+edition = "2021"
+description = "Steam game detection, plugin config (JSON) writer, and GitHub Releases-based DLL installer for isiMotor Pulse"
+readme = "README.md"
+license = "Apache-2.0"
+authors = ["Marc GARDENT"]
+repository = "https://github.com/marcgardent/isiMotor-RawUDP-Plugin"
+keywords = ["telemetry", "simracing", "installer", "isimotor"]
+# Not published to crates.io: consume via a Git dependency (see README.md).
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+zip = "2"
+dirs = "5"
+thiserror = "1"
+regex = "1"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
+
+[dev-dependencies]
+tempfile = "3"

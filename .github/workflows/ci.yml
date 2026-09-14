@@ -58,11 +58,25 @@ jobs:
       - name: Install MinGW-w64 Toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y mingw-w64 cmake ninja-build
+          sudo apt-get install -y mingw-w64 cmake ninja-build ccache
+
+      # libzmq + flatbuffers are vendored via CMake FetchContent and built
+      # from source on every clean checkout - by far the slowest part of
+      # this job. Cache ccache's compiled objects across runs, keyed on the
+      # CMakeLists.txt that pins their versions, so only a version bump
+      # (or nothing, on a cache miss) triggers a full rebuild of them.
+      - name: Cache ccache (libzmq/flatbuffers compiled objects)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-mingw-${{ hashFiles('isimotor-pulse-plugin/CMakeLists.txt') }}
+          restore-keys: |
+            ccache-mingw-
 
       - name: Cross-Compile isiMotor_Pulse.dll
         run: |
           make cross
+          ccache -s
 
       - name: Verify Built DLL
         run: |

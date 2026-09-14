@@ -317,7 +317,7 @@ wheels = [
 
 [[package]]
 name = "isimotor-pulse-client"
-version = "1.0.3"
+version = "1.1.0"
 source = { editable = "isimotor-pulse-client" }
 dependencies = [
     { name = "isimotor-pulse-types" },
@@ -333,7 +333,7 @@ requires-dist = [
 
 [[package]]
 name = "isimotor-pulse-manager"
-version = "1.0.3"
+version = "1.1.0"
 source = { editable = "isimotor-pulse-manager" }
 dependencies = [
     { name = "flatbuffers" },
@@ -360,7 +360,7 @@ requires-dist = [
 
 [[package]]
 name = "isimotor-pulse-types"
-version = "1.0.3"
+version = "1.1.0"
 source = { editable = "binding/python/isimotor-pulse-types" }
 dependencies = [
     { name = "flatbuffers" },
@@ -371,7 +371,7 @@ requires-dist = [{ name = "flatbuffers", specifier = ">=23.5.26" }]
 
 [[package]]
 name = "isimotor-pulse-workspace"
-version = "1.0.3"
+version = "1.1.0"
 source = { virtual = "." }
 
 [[package]]

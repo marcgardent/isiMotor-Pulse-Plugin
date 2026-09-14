@@ -1,6 +1,6 @@
 # 🏎️ isiMotor Pulse Manager — User Guide
 
-> **Version**: 1.0.3  
+> **Version**: 1.1.0  
 > **Supported Simulators**: Le Mans Ultimate (LMU), rFactor 2 (rF2)  
 > **Platforms**: Windows 10/11 (x64), Linux & Steam Deck (SteamOS)  
 
