@@ -27,10 +27,14 @@ def get_project_root() -> Path:
         current.parent.parent,
         current.parent.parent.parent,
         current.parent.parent.parent.parent,
+        current.parent.parent.parent.parent.parent,
+        current.parent.parent.parent.parent.parent.parent,
     ]:
-        if (parent / "isimotor-pulse-plugin").exists() or (parent / "isimotor-pulse-client").exists():
+        if (parent / "isimotor-pulse-plugin").exists() or (
+            parent / "binding" / "python" / "isimotor-pulse-client"
+        ).exists():
             return parent
-    return current.parent.parent.parent.parent
+    return current.parent.parent.parent.parent.parent.parent
 
 
 def find_source_dll(project_root: Path | None = None, custom_dll_path: Path | None = None) -> Path | None:

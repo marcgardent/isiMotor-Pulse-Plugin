@@ -86,13 +86,13 @@ def bump_all_files(root: Path, new_version: str) -> list[Path]:
     if update_file(root_pyproject, r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"', count=1):
         updated_files.append(root_pyproject)
 
-    # 2. isimotor-pulse-client/pyproject.toml
-    client_pyproject = root / "isimotor-pulse-client" / "pyproject.toml"
+    # 2. binding/python/isimotor-pulse-client/pyproject.toml
+    client_pyproject = root / "binding" / "python" / "isimotor-pulse-client" / "pyproject.toml"
     if update_file(client_pyproject, r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"', count=1):
         updated_files.append(client_pyproject)
 
-    # 3. isimotor-pulse-client/isimotor_pulse_client/__init__.py
-    client_init = root / "isimotor-pulse-client" / "isimotor_pulse_client" / "__init__.py"
+    # 3. binding/python/isimotor-pulse-client/isimotor_pulse_client/__init__.py
+    client_init = root / "binding" / "python" / "isimotor-pulse-client" / "isimotor_pulse_client" / "__init__.py"
     if update_file(client_init, r'(?m)^__version__\s*=\s*"[^"]+"', f'__version__ = "{new_version}"'):
         updated_files.append(client_init)
 
@@ -106,13 +106,13 @@ def bump_all_files(root: Path, new_version: str) -> list[Path]:
     if update_file(types_init, r'(?m)^__version__\s*=\s*"[^"]+"', f'__version__ = "{new_version}"'):
         updated_files.append(types_init)
 
-    # 4. isimotor-pulse-manager/pyproject.toml (under [project] and [tool.briefcase])
-    manager_pyproject = root / "isimotor-pulse-manager" / "pyproject.toml"
+    # 4. binding/python/isimotor-pulse-manager/pyproject.toml (under [project] and [tool.briefcase])
+    manager_pyproject = root / "binding" / "python" / "isimotor-pulse-manager" / "pyproject.toml"
     if update_file(manager_pyproject, r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"'):
         updated_files.append(manager_pyproject)
 
-    # 5. isimotor-pulse-manager/isimotor_pulse_manager/__init__.py
-    manager_init = root / "isimotor-pulse-manager" / "isimotor_pulse_manager" / "__init__.py"
+    # 5. binding/python/isimotor-pulse-manager/isimotor_pulse_manager/__init__.py
+    manager_init = root / "binding" / "python" / "isimotor-pulse-manager" / "isimotor_pulse_manager" / "__init__.py"
     if update_file(manager_init, r'(?m)^__version__\s*=\s*"[^"]+"', f'__version__ = "{new_version}"'):
         updated_files.append(manager_init)
 

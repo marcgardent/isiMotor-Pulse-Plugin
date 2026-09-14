@@ -27,7 +27,7 @@ isiMotor-Pulse-Plugin/
 │   └── include/                # isiMotor Internals SDK headers (V07) + LMU Extensions
 │       ├── InternalsPlugin.hpp
 │       └── PluginObjects.hpp
-├── isimotor-pulse-client/     # 🐍 Dedicated Python client subproject
+├── binding/python/isimotor-pulse-client/     # 🐍 Dedicated Python client subproject
 │   ├── pyproject.toml          # PEP 517/621 Python package configuration
 │   ├── README.md               # Python client documentation
 │   └── isimotor_pulse_client/ # Package source (models, decoders, client)
@@ -36,7 +36,7 @@ isiMotor-Pulse-Plugin/
 │       ├── install/            # Public installer API: Steam discovery, DLL install, JSON config
 │       ├── resources/          # Bundled isiMotor_Pulse.dll shipped with the pip package
 │       └── client.py           # High-level client facade
-└── isimotor-pulse-manager/    # 📊 Manager & Telemetry Diagnostics (Textual TUI / Briefcase)
+└── binding/python/isimotor-pulse-manager/    # 📊 Manager & Telemetry Diagnostics (Textual TUI / Briefcase)
     ├── pyproject.toml          # Package and Briefcase configuration
     ├── README.md
     └── isimotor_pulse_manager/
@@ -49,7 +49,7 @@ isiMotor-Pulse-Plugin/
 
 ## 📊 Raw Telemetry Explorer & Manager (`Textual` TUI)
 
-An interactive terminal raw data inspector & management app is provided in [`isimotor-pulse-manager/`](isimotor-pulse-manager) to explore raw binary packets (`Key`, `Value`, `Description`), filter fields in real-time, copy data to clipboard (JSON/TSV), install DLLs in 1-click, and benchmark stream frequencies (Hz):
+An interactive terminal raw data inspector & management app is provided in [`isimotor-pulse-manager/`](binding/python/isimotor-pulse-manager) to explore raw binary packets (`Key`, `Value`, `Description`), filter fields in real-time, copy data to clipboard (JSON/TSV), install DLLs in 1-click, and benchmark stream frequencies (Hz):
 
 ```bash
 # Launch live manager / telemetry explorer on default UDP port 5000:
@@ -66,10 +66,10 @@ The Python subproject can be installed directly from GitHub:
 
 ```bash
 # Install directly via Git URL:
-pip install "git+https://github.com/<username>/isiMotor-Pulse-Plugin.git#subdirectory=isimotor-pulse-client"
+pip install "git+https://github.com/<username>/isiMotor-Pulse-Plugin.git#subdirectory=binding/python/isimotor-pulse-client"
 
 # Or install locally in editable mode:
-cd isiMotor-Pulse-Plugin/isimotor-pulse-client
+cd isiMotor-Pulse-Plugin/binding/python/isimotor-pulse-client
 pip install -e .
 ```
 
@@ -152,7 +152,7 @@ make uninstall
 Steam discovery, DLL install/uninstall and JSON configuration are a public API of the **`isimotor-pulse-client`** pip package (which also bundles the compiled DLL) — no need to clone the repository:
 
 ```bash
-pip install "git+https://github.com/marcgardent/isiMotor-Pulse-Plugin.git#subdirectory=isimotor-pulse-client"
+pip install "git+https://github.com/marcgardent/isiMotor-Pulse-Plugin.git#subdirectory=binding/python/isimotor-pulse-client"
 
 isi-install --status      # List detected games and installation status
 isi-install               # Install the DLL + configure JSON on all detected games
@@ -168,7 +168,7 @@ games = detect_game_installations()
 success, message, installed_paths = copy_and_install_dll()
 ```
 
-> 📖 See [`isimotor-pulse-client/README.md`](isimotor-pulse-client/README.md#-installer-api-isimotor_pulse_clientinstall) for the full Installer API reference.
+> 📖 See [`isimotor-pulse-client/README.md`](binding/python/isimotor-pulse-client/README.md#-installer-api-isimotor_pulse_clientinstall) for the full Installer API reference.
 
 ---
 
@@ -330,7 +330,7 @@ Direct native binary memory streaming over a ZeroMQ PUB/SUB transport (TCP).
   * **Universal Cross-Platform (Proton/Wine & Windows):** Single universal binary (`isiMotor_Pulse.dll`) works out-of-the-box on both native Windows and Linux Proton without any helper bridge or background daemon.
   * **Multi-Consumer by Design:** PUB/SUB lets any number of local or remote consumers (tablets, smartphones, secondary rigs) connect to the same telemetry endpoint — no multicast/broadcast configuration to manage.
   * **Frequency Limiters & Selective Streams:** Independent frequency rate limiters (`off`, `unlimited`, `100Hz`, `60Hz`, `30Hz`, `5Hz`) per channel via `isiMotor_Pulse.ini` to save Wi-Fi airtime and CPU cycles.
-  * **Turnkey Ecosystem:** Complete with the [`isimotor-pulse-client`](isimotor-pulse-client) Python library (`pyzmq`-based) and the [`benchmark/`](benchmark) TUI dashboard.
+  * **Turnkey Ecosystem:** Complete with the [`isimotor-pulse-client`](binding/python/isimotor-pulse-client) Python library (`pyzmq`-based) and the [`benchmark/`](benchmark) TUI dashboard.
 * **CONs:**
   * **Binary protocol:** Requires struct unpacking / memory mapping rather than parsing plain text (handled automatically by our Python client or a 1-line C struct cast).
   * **Schema coupling:** Packet binary layout is tied to the isiMotor SDK definitions (though versioned and strictly packed).

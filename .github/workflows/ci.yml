@@ -115,7 +115,7 @@ jobs:
       - name: Build Python packages & validate with twine
         run: |
           uv run --with build python -m build binding/python/isimotor-pulse-types
-          uv run --with build python -m build isimotor-pulse-client
-          uv run --with build python -m build isimotor-pulse-manager
-          uv run --with twine twine check binding/python/isimotor-pulse-types/dist/* isimotor-pulse-client/dist/* isimotor-pulse-manager/dist/*
+          uv run --with build python -m build binding/python/isimotor-pulse-client
+          uv run --with build python -m build binding/python/isimotor-pulse-manager
+          uv run --with twine twine check binding/python/isimotor-pulse-types/dist/* binding/python/isimotor-pulse-client/dist/* binding/python/isimotor-pulse-manager/dist/*
 

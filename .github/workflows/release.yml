@@ -106,9 +106,9 @@ jobs:
       - name: Sync DLL into Manager Package Resources
         shell: bash
         run: |
-          mkdir -p isimotor-pulse-manager/isimotor_pulse_manager/resources isimotor-pulse-manager/resources
-          cp staging/isiMotor_Pulse.dll isimotor-pulse-manager/isimotor_pulse_manager/resources/
-          cp staging/isiMotor_Pulse.dll isimotor-pulse-manager/resources/
+          mkdir -p binding/python/isimotor-pulse-manager/isimotor_pulse_manager/resources binding/python/isimotor-pulse-manager/resources
+          cp staging/isiMotor_Pulse.dll binding/python/isimotor-pulse-manager/isimotor_pulse_manager/resources/
+          cp staging/isiMotor_Pulse.dll binding/python/isimotor-pulse-manager/resources/
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
@@ -128,7 +128,7 @@ jobs:
           # isimotor_pulse_manager/isimotor_pulse_types instead of just warning
           # and silently producing a broken executable.
           uv sync --all-packages --quiet
-          PYTHONPATH="isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types" uv run --no-sync --with pyinstaller pyinstaller --onefile --clean --name "isiMotor_Pulse_Manager" --add-data "isimotor-pulse-manager/isimotor_pulse_manager/resources;isimotor_pulse_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
+          PYTHONPATH="binding/python/isimotor-pulse-client:binding/python/isimotor-pulse-manager:binding/python/isimotor-pulse-types" uv run --no-sync --with pyinstaller pyinstaller --onefile --clean --name "isiMotor_Pulse_Manager" --add-data "binding/python/isimotor-pulse-manager/isimotor_pulse_manager/resources;isimotor_pulse_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
 
       - name: Upload Windows Manager Executable
         uses: actions/upload-artifact@v4
@@ -153,9 +153,9 @@ jobs:
 
       - name: Sync DLL into Manager Package Resources
         run: |
-          mkdir -p isimotor-pulse-manager/isimotor_pulse_manager/resources isimotor-pulse-manager/resources
-          cp staging/isiMotor_Pulse.dll isimotor-pulse-manager/isimotor_pulse_manager/resources/
-          cp staging/isiMotor_Pulse.dll isimotor-pulse-manager/resources/
+          mkdir -p binding/python/isimotor-pulse-manager/isimotor_pulse_manager/resources binding/python/isimotor-pulse-manager/resources
+          cp staging/isiMotor_Pulse.dll binding/python/isimotor-pulse-manager/isimotor_pulse_manager/resources/
+          cp staging/isiMotor_Pulse.dll binding/python/isimotor-pulse-manager/resources/
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
@@ -171,7 +171,7 @@ jobs:
           # is required first (otherwise pyzmq/flatbuffers never get installed and
           # --collect-all silently produces a broken executable).
           uv sync --all-packages --quiet
-          PYTHONPATH="isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types" uv run --no-sync --with pyinstaller pyinstaller --onefile --clean --name "isiMotor-Pulse-Manager-x86_64" --add-data "isimotor-pulse-manager/isimotor_pulse_manager/resources:isimotor_pulse_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
+          PYTHONPATH="binding/python/isimotor-pulse-client:binding/python/isimotor-pulse-manager:binding/python/isimotor-pulse-types" uv run --no-sync --with pyinstaller pyinstaller --onefile --clean --name "isiMotor-Pulse-Manager-x86_64" --add-data "binding/python/isimotor-pulse-manager/isimotor_pulse_manager/resources:isimotor_pulse_manager/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
 
       - name: Upload Linux Manager Executable
         uses: actions/upload-artifact@v4
@@ -205,14 +205,14 @@ jobs:
 
       - name: Sync DLL into Client Package Resources
         # isimotor_pulse_client.install.cli deploys this DLL into the game's Plugins
-        # folder, and isimotor-pulse-client/pyproject.toml's package-data packages
+        # folder, and binding/python/isimotor-pulse-client/pyproject.toml's package-data packages
         # whatever is under resources/* into the wheel - without this step the
         # published wheel silently ships with no DLL at all (pre-existing bug,
         # present since the very first release: package-python never synced it,
         # unlike build-manager-windows/linux which always have).
         run: |
-          mkdir -p isimotor-pulse-client/isimotor_pulse_client/resources
-          cp staging/isiMotor_Pulse.dll isimotor-pulse-client/isimotor_pulse_client/resources/
+          mkdir -p binding/python/isimotor-pulse-client/isimotor_pulse_client/resources
+          cp staging/isiMotor_Pulse.dll binding/python/isimotor-pulse-client/isimotor_pulse_client/resources/
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
@@ -224,7 +224,7 @@ jobs:
 
       - name: Build Types Package
         run: |
-          uv run --with build python -m build binding/python/isimotor-pulse-types
+          uv run --with build python -m build --wheel binding/python/isimotor-pulse-types
 
       - name: Point Client Dependency at the Release Wheel URL
         # The client depends on isimotor-pulse-types, which isn't published to any
@@ -240,17 +240,17 @@ jobs:
           TYPES_WHEEL_URL="${REPO_URL}/releases/download/${TAG}/isimotor_pulse_types-${VERSION}-py3-none-any.whl"
 
           sed -i "s|\"isimotor-pulse-types\",|\"isimotor-pulse-types @ ${TYPES_WHEEL_URL}\",|" \
-            isimotor-pulse-client/pyproject.toml
+            binding/python/isimotor-pulse-client/pyproject.toml
 
-          grep -n "isimotor-pulse-types" isimotor-pulse-client/pyproject.toml
+          grep -n "isimotor-pulse-types" binding/python/isimotor-pulse-client/pyproject.toml
 
       - name: Build Client Package
         run: |
-          uv run --with build python -m build isimotor-pulse-client
+          uv run --with build python -m build --wheel binding/python/isimotor-pulse-client
 
       - name: Validate Distributions
         run: |
-          uv run --with twine twine check binding/python/isimotor-pulse-types/dist/* isimotor-pulse-client/dist/*
+          uv run --with twine twine check binding/python/isimotor-pulse-types/dist/* binding/python/isimotor-pulse-client/dist/*
 
       - name: Upload Python Dists
         uses: actions/upload-artifact@v4
@@ -258,7 +258,7 @@ jobs:
           name: release-python-dist
           path: |
             binding/python/isimotor-pulse-types/dist/*
-            isimotor-pulse-client/dist/*
+            binding/python/isimotor-pulse-client/dist/*
 
   # --- 6. Package Raw FlatBuffers Schemas ---
   package-schemas:
@@ -412,7 +412,7 @@ jobs:
           pip install "${REPO_URL}/releases/download/${TAG}/isimotor_pulse_types-${VERSION}-py3-none-any.whl"
           ```
 
-          👉 **Client README & Examples**: [isimotor-pulse-client/README.md](${REPO_URL}/blob/${TAG}/isimotor-pulse-client/README.md)
+          👉 **Client README & Examples**: [isimotor-pulse-client/README.md](${REPO_URL}/blob/${TAG}/binding/python/isimotor-pulse-client/README.md)
 
           ---
 

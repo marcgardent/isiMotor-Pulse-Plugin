@@ -7,12 +7,12 @@ Official Python client and high-performance binary decoder for **isiMotor-Pulse-
 
 ### Via GitHub URL:
 ```bash
-pip install "git+https://github.com/<username>/isiMotor-Pulse-Plugin.git#subdirectory=isimotor-pulse-client"
+pip install "git+https://github.com/<username>/isiMotor-Pulse-Plugin.git#subdirectory=binding/python/isimotor-pulse-client"
 ```
 
 ### Local Editable Install:
 ```bash
-cd isiMotor-Pulse-Plugin/isimotor-pulse-client
+cd isiMotor-Pulse-Plugin/binding/python/isimotor-pulse-client
 pip install -e .
 ```
 

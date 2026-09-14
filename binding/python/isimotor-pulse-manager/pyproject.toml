@@ -54,7 +54,7 @@ console_app = true
 sources = [
     "isimotor_pulse_manager",
     "../isimotor-pulse-client/isimotor_pulse_client",
-    "../binding/python/isimotor-pulse-types/isimotor_pulse_types",
+    "../isimotor-pulse-types/isimotor_pulse_types",
 ]
 test_sources = []
 # isimotor-pulse-client/isimotor-pulse-types are uv workspace members: they

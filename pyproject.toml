@@ -10,8 +10,8 @@ dependencies = []
 
 [tool.uv.workspace]
 members = [
-    "isimotor-pulse-client",
-    "isimotor-pulse-manager",
+    "binding/python/isimotor-pulse-client",
+    "binding/python/isimotor-pulse-manager",
     "binding/python/isimotor-pulse-types",
 ]
 
@@ -59,10 +59,10 @@ known-first-party = ["isimotor_pulse_client", "isimotor_pulse_manager", "isimoto
 
 [tool.mypy]
 python_version = "3.10"
-mypy_path = "isimotor-pulse-client:binding/python/isimotor-pulse-types"
+mypy_path = "binding/python/isimotor-pulse-client:binding/python/isimotor-pulse-types"
 files = [
-    "isimotor-pulse-client/isimotor_pulse_client",
-    "isimotor-pulse-manager/isimotor_pulse_manager",
+    "binding/python/isimotor-pulse-client/isimotor_pulse_client",
+    "binding/python/isimotor-pulse-manager/isimotor_pulse_manager",
     "binding/python/isimotor-pulse-types/isimotor_pulse_types",
     "scripts/bump_version.py",
     "scripts/french_drift.py",
@@ -90,6 +90,6 @@ disallow_untyped_defs = true
 check_untyped_defs = true
 
 [tool.pytest.ini_options]
-pythonpath = ["isimotor-pulse-client", "isimotor-pulse-manager", "binding/python/isimotor-pulse-types"]
+pythonpath = ["binding/python/isimotor-pulse-client", "binding/python/isimotor-pulse-manager", "binding/python/isimotor-pulse-types"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

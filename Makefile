@@ -4,7 +4,7 @@ BUILD_DIR = build
 BIN_DIR   = bin
 
 # Autonomous Python & UV resolution
-VENV_PYTHON = $(shell if [ -x isimotor-pulse-manager/.venv/bin/python ]; then echo "isimotor-pulse-manager/.venv/bin/python"; \
+VENV_PYTHON = $(shell if [ -x binding/python/isimotor-pulse-manager/.venv/bin/python ]; then echo "binding/python/isimotor-pulse-manager/.venv/bin/python"; \
                elif [ -x .venv/bin/python ]; then echo ".venv/bin/python"; \
                elif command -v python >/dev/null 2>&1; then echo "python"; \
                else echo "python3"; fi)
@@ -72,9 +72,9 @@ test:
 	@./tests/cpp_mock/isi_mock_host --dump-truth tests/golden
 	@if command -v $(UV) >/dev/null 2>&1; then \
 		$(UV) sync --all-packages --quiet && \
-		PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --no-sync python -m unittest discover -s tests -p "test_*.py" -v; \
+		PYTHONPATH=binding/python/isimotor-pulse-client:binding/python/isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --no-sync python -m unittest discover -s tests -p "test_*.py" -v; \
 	else \
-		PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v; \
+		PYTHONPATH=binding/python/isimotor-pulse-client:binding/python/isimotor-pulse-manager:binding/python/isimotor-pulse-types $(PYTHON) -m unittest discover -s tests -p "test_*.py" -v; \
 	fi
 
 cross:
@@ -116,60 +116,60 @@ build: cross
 
 manager:
 	@echo "==> Launching isiMotor-Pulse-Manager on UDP port 5000..."
-	@$(PYTHON) isimotor-pulse-manager/sniffer.py
+	@$(PYTHON) binding/python/isimotor-pulse-manager/sniffer.py
 
 benchmark: manager
 
 sync-resources:
 	@echo "==> Syncing compiled DLL and resources into Client package..."
-	@mkdir -p isimotor-pulse-client/isimotor_pulse_client/resources
+	@mkdir -p binding/python/isimotor-pulse-client/isimotor_pulse_client/resources
 	@if [ -f $(BUILD_DIR)/isiMotor_Pulse.dll ]; then \
-		cp $(BUILD_DIR)/isiMotor_Pulse.dll isimotor-pulse-client/isimotor_pulse_client/resources/; \
+		cp $(BUILD_DIR)/isiMotor_Pulse.dll binding/python/isimotor-pulse-client/isimotor_pulse_client/resources/; \
 		echo "  ✓ Copied $(BUILD_DIR)/isiMotor_Pulse.dll to client resources"; \
 	elif [ -f $(BIN_DIR)/isiMotor_Pulse.dll ]; then \
-		cp $(BIN_DIR)/isiMotor_Pulse.dll isimotor-pulse-client/isimotor_pulse_client/resources/; \
+		cp $(BIN_DIR)/isiMotor_Pulse.dll binding/python/isimotor-pulse-client/isimotor_pulse_client/resources/; \
 		echo "  ✓ Copied $(BIN_DIR)/isiMotor_Pulse.dll to client resources"; \
 	elif [ -f isiMotor_Pulse.dll ]; then \
-		cp isiMotor_Pulse.dll isimotor-pulse-client/isimotor_pulse_client/resources/; \
+		cp isiMotor_Pulse.dll binding/python/isimotor-pulse-client/isimotor_pulse_client/resources/; \
 		echo "  ✓ Copied isiMotor_Pulse.dll to client resources"; \
 	fi
 
 briefcase-wheels:
-	@echo "==> Building local wheels for Briefcase (isimotor-pulse-client/types aren't on PyPI)..."
-	@rm -rf isimotor-pulse-manager/.briefcase-wheels
-	@$(UV) build --package isimotor-pulse-types --wheel -o isimotor-pulse-manager/.briefcase-wheels --clear
-	@$(UV) build --package isimotor-pulse-client --wheel -o isimotor-pulse-manager/.briefcase-wheels
+	@echo "==> Building local wheels for Briefcase (binding/python/isimotor-pulse-client/types aren't on PyPI)..."
+	@rm -rf binding/python/isimotor-pulse-manager/.briefcase-wheels
+	@$(UV) build --package isimotor-pulse-types --wheel -o binding/python/isimotor-pulse-manager/.briefcase-wheels --clear
+	@$(UV) build --package isimotor-pulse-client --wheel -o binding/python/isimotor-pulse-manager/.briefcase-wheels
 
 package: sync-resources briefcase-wheels
 	@echo "==> Packaging isiMotor-Pulse-Manager with Briefcase..."
-	@cd isimotor-pulse-manager && $(UV) run --with briefcase briefcase package --no-input
+	@cd binding/python/isimotor-pulse-manager && $(UV) run --with briefcase briefcase package --no-input
 
 briefcase-dev: briefcase-wheels
 	@echo "==> Running isiMotor-Pulse-Manager in Briefcase dev mode..."
-	@cd isimotor-pulse-manager && $(UV) run --with briefcase briefcase dev
+	@cd binding/python/isimotor-pulse-manager && $(UV) run --with briefcase briefcase dev
 
 briefcase-build: sync-resources briefcase-wheels
 	@echo "==> Building isiMotor-Pulse-Manager with Briefcase..."
-	@cd isimotor-pulse-manager && $(UV) run --with briefcase briefcase build --no-input
+	@cd binding/python/isimotor-pulse-manager && $(UV) run --with briefcase briefcase build --no-input
 
 standalone-linux: sync-resources
 	@echo "==> Building standalone Linux manager binary with PyInstaller..."
 	@$(UV) sync --all-packages --quiet
-	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --no-sync --with pyinstaller pyinstaller --onefile --clean --name "isiMotor-Pulse-Manager-x86_64" --add-data "isimotor-pulse-client/isimotor_pulse_client/resources:isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
+	@PYTHONPATH=binding/python/isimotor-pulse-client:binding/python/isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --no-sync --with pyinstaller pyinstaller --onefile --clean --name "isiMotor-Pulse-Manager-x86_64" --add-data "binding/python/isimotor-pulse-client/isimotor_pulse_client/resources:isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
 
 standalone-windows: sync-resources
 	@echo "==> Building standalone Windows manager binary with PyInstaller..."
 	@$(UV) sync --all-packages --quiet
-	@PYTHONPATH=isimotor-pulse-client:isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --no-sync --with pyinstaller pyinstaller --onefile --clean --name "isiMotor_Pulse_Manager" --add-data "isimotor-pulse-client/isimotor_pulse_client/resources;isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
+	@PYTHONPATH=binding/python/isimotor-pulse-client:binding/python/isimotor-pulse-manager:binding/python/isimotor-pulse-types $(UV) run --no-sync --with pyinstaller pyinstaller --onefile --clean --name "isiMotor_Pulse_Manager" --add-data "binding/python/isimotor-pulse-client/isimotor_pulse_client/resources;isimotor_pulse_client/resources" --collect-all textual --collect-all rich --collect-all isimotor_pulse_manager --collect-all isimotor_pulse_client --collect-all isimotor_pulse_types scripts/entrypoint_manager.py
 
 install:
-	@PYTHONPATH=isimotor-pulse-client:binding/python/isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli
+	@PYTHONPATH=binding/python/isimotor-pulse-client:binding/python/isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli
 
 uninstall:
-	@PYTHONPATH=isimotor-pulse-client:binding/python/isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli --uninstall
+	@PYTHONPATH=binding/python/isimotor-pulse-client:binding/python/isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli --uninstall
 
 status:
-	@PYTHONPATH=isimotor-pulse-client:binding/python/isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli --status
+	@PYTHONPATH=binding/python/isimotor-pulse-client:binding/python/isimotor-pulse-types $(PYTHON) -m isimotor_pulse_client.install.cli --status
 
 info:
 	@echo "=================================================================="

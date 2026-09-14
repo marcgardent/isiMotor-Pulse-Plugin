@@ -42,13 +42,13 @@ def collect_file_versions(root: Path) -> dict[str, str | None]:
     versions["pyproject.toml (workspace)"] = extract_regex_first_group(root_pyproject, r'(?m)^version\s*=\s*"([^"]+)"')
 
     # 2. Client pyproject.toml
-    client_pyproject = root / "isimotor-pulse-client" / "pyproject.toml"
-    versions["isimotor-pulse-client/pyproject.toml"] = extract_regex_first_group(
+    client_pyproject = root / "binding" / "python" / "isimotor-pulse-client" / "pyproject.toml"
+    versions["binding/python/isimotor-pulse-client/pyproject.toml"] = extract_regex_first_group(
         client_pyproject, r'(?m)^version\s*=\s*"([^"]+)"'
     )
 
     # 3. Client __init__.py
-    client_init = root / "isimotor-pulse-client" / "isimotor_pulse_client" / "__init__.py"
+    client_init = root / "binding" / "python" / "isimotor-pulse-client" / "isimotor_pulse_client" / "__init__.py"
     versions["isimotor_pulse_client/__init__.py"] = extract_regex_first_group(
         client_init, r'(?m)^__version__\s*=\s*"([^"]+)"'
     )
@@ -66,8 +66,8 @@ def collect_file_versions(root: Path) -> dict[str, str | None]:
     )
 
     # 4. Manager pyproject.toml (project.version)
-    manager_pyproject = root / "isimotor-pulse-manager" / "pyproject.toml"
-    versions["isimotor-pulse-manager/pyproject.toml [project]"] = extract_regex_first_group(
+    manager_pyproject = root / "binding" / "python" / "isimotor-pulse-manager" / "pyproject.toml"
+    versions["binding/python/isimotor-pulse-manager/pyproject.toml [project]"] = extract_regex_first_group(
         manager_pyproject, r'(?m)^version\s*=\s*"([^"]+)"'
     )
 
@@ -75,14 +75,14 @@ def collect_file_versions(root: Path) -> dict[str, str | None]:
     if manager_pyproject.exists():
         content = manager_pyproject.read_text(encoding="utf-8")
         briefcase_match = re.search(r'(?s)\[tool\.briefcase\].*?version\s*=\s*"([^"]+)"', content)
-        versions["isimotor-pulse-manager/pyproject.toml [tool.briefcase]"] = (
+        versions["binding/python/isimotor-pulse-manager/pyproject.toml [tool.briefcase]"] = (
             briefcase_match.group(1).strip() if briefcase_match else None
         )
     else:
-        versions["isimotor-pulse-manager/pyproject.toml [tool.briefcase]"] = None
+        versions["binding/python/isimotor-pulse-manager/pyproject.toml [tool.briefcase]"] = None
 
     # 6. Manager __init__.py
-    manager_init = root / "isimotor-pulse-manager" / "isimotor_pulse_manager" / "__init__.py"
+    manager_init = root / "binding" / "python" / "isimotor-pulse-manager" / "isimotor_pulse_manager" / "__init__.py"
     versions["isimotor_pulse_manager/__init__.py"] = extract_regex_first_group(
         manager_init, r'(?m)^__version__\s*=\s*"([^"]+)"'
     )
