@@ -96,7 +96,7 @@ from .weather import (
     WeatherControl,
 )
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
 __all__ = [
     "KELVIN_TO_CELSIUS_OFFSET",

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "isimotor-pulse-manager"
-version = "1.1.0"
+version = "1.1.1"
 description = "Complete Manager, Telemetry Diagnostics & Automated Plugin Installer for Le Mans Ultimate and rFactor 2"
 readme = "README.md"
 authors = [{ name = "Marc GARDENT" }]
@@ -39,7 +39,7 @@ isimotor_pulse_manager = ["resources/*"]
 [tool.briefcase]
 project_name = "isiMotor Pulse Manager"
 bundle = "com.github.marcgardent"
-version = "1.1.0"
+version = "1.1.1"
 url = "https://github.com/marcgardent/isiMotor-Pulse-Plugin"
 license = "Apache-2.0"
 license_files = ["LICENSE"]

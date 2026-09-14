@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "isimotor-pulse-client"
-version = "1.1.0"
+version = "1.1.1"
 description = "High-performance Python client and binary decoder for isiMotor / Le Mans Ultimate / rFactor 2 raw UDP telemetry"
 readme = "README.md"
 authors = [{ name = "Marc GARDENT" }]

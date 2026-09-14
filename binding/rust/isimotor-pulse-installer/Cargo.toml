@@ -1,6 +1,6 @@
 [package]
 name = "isimotor-pulse-installer"
-version = "1.1.0"
+version = "1.1.1"
 edition = "2021"
 description = "Steam game detection, plugin config (JSON) writer, and GitHub Releases-based DLL installer for isiMotor Pulse"
 readme = "README.md"
