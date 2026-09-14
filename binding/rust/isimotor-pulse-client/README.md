@@ -28,7 +28,7 @@ magic port number.
 
 ```toml
 [dependencies]
-isimotor-pulse-client = { git = "https://github.com/marcgardent/isiMotor-RawUDP-Plugin", tag = "v0.6.2" }
+isimotor-pulse-client = { git = "https://github.com/marcgardent/isiMotor-Pulse-Plugin", tag = "v0.6.2" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 

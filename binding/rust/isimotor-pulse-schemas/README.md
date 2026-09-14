@@ -17,7 +17,7 @@ which is also this repo's version source of truth (`make bump`/`verify-version`)
 
 ```toml
 [dependencies]
-isimotor-pulse-schemas = { git = "https://github.com/marcgardent/isiMotor-RawUDP-Plugin", tag = "v0.6.2" }
+isimotor-pulse-schemas = { git = "https://github.com/marcgardent/isiMotor-Pulse-Plugin", tag = "v0.6.2" }
 ```
 
 ```rust

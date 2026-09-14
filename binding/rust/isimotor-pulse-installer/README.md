@@ -9,7 +9,7 @@ Not published to crates.io - add it as a **Git dependency** pinned to a release 
 
 ```toml
 [dependencies]
-isimotor-pulse-installer = { git = "https://github.com/marcgardent/isiMotor-RawUDP-Plugin", tag = "v0.6.2" }
+isimotor-pulse-installer = { git = "https://github.com/marcgardent/isiMotor-Pulse-Plugin", tag = "v0.6.2" }
 ```
 
 ## Usage

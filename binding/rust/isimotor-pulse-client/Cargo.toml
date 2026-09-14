@@ -6,7 +6,7 @@ description = "Typed ZeroMQ clients for the isiMotor Pulse wire protocol - one d
 readme = "README.md"
 license = "Apache-2.0"
 authors = ["Marc GARDENT"]
-repository = "https://github.com/marcgardent/isiMotor-RawUDP-Plugin"
+repository = "https://github.com/marcgardent/isiMotor-Pulse-Plugin"
 keywords = ["telemetry", "simracing", "flatbuffers", "isimotor", "zeromq"]
 # Not published to crates.io: consume via a Git dependency, same as isimotor-pulse-schemas.
 publish = false

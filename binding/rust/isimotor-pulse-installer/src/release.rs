@@ -11,7 +11,7 @@ use crate::InstallError;
 
 /// GitHub repository that publishes releases containing the plugin DLL.
 pub const GITHUB_OWNER: &str = "marcgardent";
-pub const GITHUB_REPO: &str = "isiMotor-RawUDP-Plugin";
+pub const GITHUB_REPO: &str = "isiMotor-Pulse-Plugin";
 
 /// Name of the DLL file inside the release zip, and the name written into
 /// game `Plugins/` directories.

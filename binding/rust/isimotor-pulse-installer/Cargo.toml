@@ -6,7 +6,7 @@ description = "Steam game detection, plugin config (JSON) writer, and GitHub Rel
 readme = "README.md"
 license = "Apache-2.0"
 authors = ["Marc GARDENT"]
-repository = "https://github.com/marcgardent/isiMotor-RawUDP-Plugin"
+repository = "https://github.com/marcgardent/isiMotor-Pulse-Plugin"
 keywords = ["telemetry", "simracing", "installer", "isimotor"]
 # Not published to crates.io: consume via a Git dependency (see README.md).
 publish = false
